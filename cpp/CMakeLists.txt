@@ -1351,6 +1351,7 @@ if(NOT BUILD_CPU_ONLY)
     src/neighbors/brute_force.cu
     src/neighbors/brute_force_serialize.cu
     src/neighbors/cagra.cpp
+    src/neighbors/cagra_favor_delta_d.cu
     ${cagra_build_inst_files}
     ${cagra_extend_inst_files}
     src/neighbors/cagra_optimize.cu

@@ -378,6 +378,13 @@ struct extend_params {
    * 0. */
   uint32_t max_chunk_size = 0;
 };
+
+/** Parameters for FAVOR-compatible intrinsic dimensionality estimation. */
+struct favor_delta_d_params {
+  uint32_t alpha     = 10;
+  uint32_t beta      = 127;
+  uint32_t bfs_depth = 2;
+};
 /**
  * @}
  */
@@ -893,6 +900,75 @@ struct CUVS_EXPORT index : cuvs::neighbors::index {
   size_t dim_          = 0;
   size_t graph_degree_ = 0;
 };
+
+/**
+ * Compute FAVOR's delta-d statistic from deterministic breadth-first neighborhoods of a
+ * prebuilt, dense CAGRA graph. Roots that yield fewer than `beta` unique candidates contribute
+ * zero to the average.
+ */
+CUVS_EXPORT float compute_favor_delta_d(raft::resources const& res,
+                                        favor_delta_d_params const& params,
+                                        cagra::index<float, uint32_t> const& index);
+CUVS_EXPORT float compute_favor_delta_d(raft::resources const& res,
+                                        favor_delta_d_params const& params,
+                                        cagra::index<half, uint32_t> const& index);
+CUVS_EXPORT float compute_favor_delta_d(raft::resources const& res,
+                                        favor_delta_d_params const& params,
+                                        cagra::index<int8_t, uint32_t> const& index);
+CUVS_EXPORT float compute_favor_delta_d(raft::resources const& res,
+                                        favor_delta_d_params const& params,
+                                        cagra::index<uint8_t, uint32_t> const& index);
+
+/**
+ * Save a computed FAVOR delta-d value in a versioned binary sidecar bound to the graph,
+ * logical dataset contents, index metadata, and calculation parameters.
+ *
+ * The index must have an attached dense device dataset and graph. Dataset row padding is not
+ * included in the content fingerprint. Fingerprints detect accidental incompatibility and are
+ * not a cryptographic security mechanism.
+ */
+CUVS_EXPORT void save_favor_delta_d(raft::resources const& res,
+                                    std::string const& filename,
+                                    favor_delta_d_params const& params,
+                                    cagra::index<float, uint32_t> const& index,
+                                    float delta_d);
+CUVS_EXPORT void save_favor_delta_d(raft::resources const& res,
+                                    std::string const& filename,
+                                    favor_delta_d_params const& params,
+                                    cagra::index<half, uint32_t> const& index,
+                                    float delta_d);
+CUVS_EXPORT void save_favor_delta_d(raft::resources const& res,
+                                    std::string const& filename,
+                                    favor_delta_d_params const& params,
+                                    cagra::index<int8_t, uint32_t> const& index,
+                                    float delta_d);
+CUVS_EXPORT void save_favor_delta_d(raft::resources const& res,
+                                    std::string const& filename,
+                                    favor_delta_d_params const& params,
+                                    cagra::index<uint8_t, uint32_t> const& index,
+                                    float delta_d);
+
+/**
+ * Load a FAVOR delta-d sidecar after the serialized graph's dense dataset has been attached.
+ * Incompatibility or corruption is reported as an error; this function never recomputes the
+ * value.
+ */
+CUVS_EXPORT float load_favor_delta_d(raft::resources const& res,
+                                     std::string const& filename,
+                                     favor_delta_d_params const& expected_params,
+                                     cagra::index<float, uint32_t> const& index);
+CUVS_EXPORT float load_favor_delta_d(raft::resources const& res,
+                                     std::string const& filename,
+                                     favor_delta_d_params const& expected_params,
+                                     cagra::index<half, uint32_t> const& index);
+CUVS_EXPORT float load_favor_delta_d(raft::resources const& res,
+                                     std::string const& filename,
+                                     favor_delta_d_params const& expected_params,
+                                     cagra::index<int8_t, uint32_t> const& index);
+CUVS_EXPORT float load_favor_delta_d(raft::resources const& res,
+                                     std::string const& filename,
+                                     favor_delta_d_params const& expected_params,
+                                     cagra::index<uint8_t, uint32_t> const& index);
 
 /**
  * @}
