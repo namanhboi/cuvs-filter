@@ -44,9 +44,12 @@ using cuvs::neighbors::detail::sample_filter;
 // are now shared in device_common_jit.cuh - use fully qualified names
 using cuvs::neighbors::cagra::detail::device::compute_distance_to_child_nodes_jit;
 using cuvs::neighbors::cagra::detail::device::compute_distance_to_random_nodes_jit;
+using cuvs::neighbors::cagra::detail::device::compute_favor_distance_to_child_nodes_jit;
+using cuvs::neighbors::cagra::detail::device::compute_favor_distance_to_random_nodes_jit;
 
 // JIT search_core - setup_workspace/compute_distance via function pointers
-template <bool TOPK_BY_BITONIC_SORT,
+template <bool FAVOR,
+          bool TOPK_BY_BITONIC_SORT,
           bool BITONIC_SORT_AND_MERGE_MULTI_WARPS,
           typename DataT,
           typename IndexT,
@@ -79,7 +82,9 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   const std::uint32_t query_id_offset,  // Offset to add to query_id when calling filter
   const dataset_descriptor_base_t<DataT, IndexT, DistanceT>* dataset_desc,
   cagra_sample_filter<SourceIndexT> filter_payload,
-  const IndexT graph_size = 0)  // Original number of bits
+  const float filtering_rate = 0.0f,
+  const float favor_delta_d  = 0.0f,
+  const IndexT graph_size    = 0)  // Original number of bits
 {
   using LOAD_T = device::LOAD_128BIT_T;
 
@@ -128,7 +133,14 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
     reinterpret_cast<IndexT*>(visited_hash_buffer + small_hash_size);
   auto* __restrict__ topk_ws = reinterpret_cast<std::uint32_t*>(parent_list_buffer + search_width);
   auto* terminate_flag       = reinterpret_cast<std::uint32_t*>(topk_ws + 3);
-  auto* __restrict__ smem_work_ptr = reinterpret_cast<std::uint32_t*>(terminate_flag + 1);
+  DistanceT* favor_penalty   = nullptr;
+  std::uint32_t* smem_work_ptr;
+  if constexpr (FAVOR) {
+    favor_penalty = reinterpret_cast<DistanceT*>(terminate_flag + 1);
+    smem_work_ptr = reinterpret_cast<std::uint32_t*>(favor_penalty + 1);
+  } else {
+    smem_work_ptr = reinterpret_cast<std::uint32_t*>(terminate_flag + 1);
+  }
 
   // A flag for filtering.
   auto filter_flag = terminate_flag;
@@ -136,6 +148,12 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   if (threadIdx.x == 0) {
     terminate_flag[0] = 0;
     topk_ws[0]        = ~0u;
+    if constexpr (FAVOR) {
+      const float selectivity = 1.0f - filtering_rate;
+      const float ef          = static_cast<float>(internal_topk);
+      favor_penalty[0]        = static_cast<DistanceT>(filtering_rate * (ef - selectivity) *
+                                                favor_delta_d / (2.0f * selectivity * ef));
+    }
   }
 
   // Init hashmap
@@ -154,21 +172,40 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   const IndexT* const local_seed_ptr = seed_ptr ? seed_ptr + (num_seeds * query_id) : nullptr;
   // Get dataset_size directly from base descriptor
   IndexT dataset_size = smem_desc->size;
-  compute_distance_to_random_nodes_jit<IndexT, DistanceT, DataT>(result_indices_buffer,
-                                                                 result_distances_buffer,
-                                                                 smem_desc,
-                                                                 result_buffer_size,
-                                                                 num_distilation,
-                                                                 rand_xor_mask,
-                                                                 local_seed_ptr,
-                                                                 num_seeds,
-                                                                 local_visited_hashmap_ptr,
-                                                                 hash_bitlen,
-                                                                 (IndexT*)nullptr,
-                                                                 0,
-                                                                 0,
-                                                                 1,
-                                                                 graph_size);
+  if constexpr (FAVOR) {
+    compute_favor_distance_to_random_nodes_jit<IndexT, DistanceT, DataT, SourceIndexT>(
+      result_indices_buffer,
+      result_distances_buffer,
+      smem_desc,
+      result_buffer_size,
+      num_distilation,
+      rand_xor_mask,
+      local_seed_ptr,
+      num_seeds,
+      local_visited_hashmap_ptr,
+      hash_bitlen,
+      graph_size,
+      source_indices_ptr,
+      query_id + query_id_offset,
+      filter_payload,
+      favor_penalty[0]);
+  } else {
+    compute_distance_to_random_nodes_jit<IndexT, DistanceT, DataT>(result_indices_buffer,
+                                                                   result_distances_buffer,
+                                                                   smem_desc,
+                                                                   result_buffer_size,
+                                                                   num_distilation,
+                                                                   rand_xor_mask,
+                                                                   local_seed_ptr,
+                                                                   num_seeds,
+                                                                   local_visited_hashmap_ptr,
+                                                                   hash_bitlen,
+                                                                   (IndexT*)nullptr,
+                                                                   0,
+                                                                   0,
+                                                                   1,
+                                                                   graph_size);
+  }
   __syncthreads();
   _CLK_REC(clk_compute_1st_distance);
 
@@ -204,14 +241,15 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
 
       // topk with bitonic sort
       _CLK_START();
-      // For JIT version, we always check filter_flag at runtime since sample_filter is extern
-      if (*filter_flag != 0) {
-        // Move the filtered out index to the end of the itopk list
-        for (unsigned i = 0; i < search_width; i++) {
-          move_invalid_to_end_of_list(
-            result_indices_buffer, result_distances_buffer, internal_topk);
+      if constexpr (!FAVOR) {
+        // Default filtering may invalidate expanded parents between top-k updates.
+        if (*filter_flag != 0) {
+          for (unsigned i = 0; i < search_width; i++) {
+            move_invalid_to_end_of_list(
+              result_indices_buffer, result_distances_buffer, internal_topk);
+          }
+          if (threadIdx.x == 0) { *terminate_flag = 0; }
         }
-        if (threadIdx.x == 0) { *terminate_flag = 0; }
       }
       topk_by_bitonic_sort_and_merge<BITONIC_SORT_AND_MERGE_MULTI_WARPS>(
         result_distances_buffer,
@@ -276,44 +314,64 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
     __syncthreads();
     // compute the norms between child nodes and query node using JIT version
     _CLK_START();
-    compute_distance_to_child_nodes_jit<IndexT, DistanceT, DataT>(
-      result_indices_buffer + internal_topk,
-      result_distances_buffer + internal_topk,
-      smem_desc,
-      knn_graph,
-      graph_degree,
-      local_visited_hashmap_ptr,
-      hash_bitlen,
-      (IndexT*)nullptr,
-      0u,
-      parent_list_buffer,
-      result_indices_buffer,
-      search_width);
+    if constexpr (FAVOR) {
+      compute_favor_distance_to_child_nodes_jit<IndexT, DistanceT, DataT, SourceIndexT>(
+        result_indices_buffer + internal_topk,
+        result_distances_buffer + internal_topk,
+        smem_desc,
+        knn_graph,
+        graph_degree,
+        local_visited_hashmap_ptr,
+        hash_bitlen,
+        parent_list_buffer,
+        result_indices_buffer,
+        search_width,
+        source_indices_ptr,
+        query_id + query_id_offset,
+        filter_payload,
+        favor_penalty[0]);
+    } else {
+      compute_distance_to_child_nodes_jit<IndexT, DistanceT, DataT>(
+        result_indices_buffer + internal_topk,
+        result_distances_buffer + internal_topk,
+        smem_desc,
+        knn_graph,
+        graph_degree,
+        local_visited_hashmap_ptr,
+        hash_bitlen,
+        (IndexT*)nullptr,
+        0u,
+        parent_list_buffer,
+        result_indices_buffer,
+        search_width);
+    }
     // Critical: __syncthreads() must be reached by ALL threads
     // If any thread is stuck in compute_distance_to_child_nodes_jit, this will hang
     __syncthreads();
     _CLK_REC(clk_compute_distance);
 
-    // Filtering - use extern sample_filter function
-    if (threadIdx.x == 0) { *filter_flag = 0; }
-    __syncthreads();
+    if constexpr (!FAVOR) {
+      // Default filtering invalidates expanded parents after their children have been scored.
+      if (threadIdx.x == 0) { *filter_flag = 0; }
+      __syncthreads();
 
-    constexpr IndexT index_msb_1_mask = utils::gen_index_msb_1_mask<IndexT>::value;
-    const IndexT invalid_index        = utils::get_max_value<IndexT>();
+      constexpr IndexT index_msb_1_mask = utils::gen_index_msb_1_mask<IndexT>::value;
+      const IndexT invalid_index        = utils::get_max_value<IndexT>();
 
-    for (unsigned p = threadIdx.x; p < search_width; p += blockDim.x) {
-      if (parent_list_buffer[p] != invalid_index) {
-        const auto parent_id = result_indices_buffer[parent_list_buffer[p]] & ~index_msb_1_mask;
-        if (!sample_filter<SourceIndexT>(query_id + query_id_offset,
-                                         to_source_index(parent_id),
-                                         filter_payload.sample_filter_data())) {
-          result_distances_buffer[parent_list_buffer[p]] = utils::get_max_value<DistanceT>();
-          result_indices_buffer[parent_list_buffer[p]]   = invalid_index;
-          *filter_flag                                   = 1;
+      for (unsigned p = threadIdx.x; p < search_width; p += blockDim.x) {
+        if (parent_list_buffer[p] != invalid_index) {
+          const auto parent_id = result_indices_buffer[parent_list_buffer[p]] & ~index_msb_1_mask;
+          if (!sample_filter<SourceIndexT>(query_id + query_id_offset,
+                                           to_source_index(parent_id),
+                                           filter_payload.sample_filter_data())) {
+            result_distances_buffer[parent_list_buffer[p]] = utils::get_max_value<DistanceT>();
+            result_indices_buffer[parent_list_buffer[p]]   = invalid_index;
+            *filter_flag                                   = 1;
+          }
         }
       }
+      __syncthreads();
     }
-    __syncthreads();
 
     iter++;
   }
@@ -345,7 +403,10 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
          buffer_offset += warp_size) {
       const auto src_position = buffer_offset + threadIdx.x;
       const std::uint32_t is_valid_index =
-        (result_indices_buffer[src_position] & (~index_msb_1_mask)) == invalid_index ? 0 : 1;
+        (result_indices_buffer[src_position] & (~index_msb_1_mask)) ==
+            (invalid_index & (~index_msb_1_mask))
+          ? 0
+          : 1;
       std::uint32_t new_position;
       scan_op_t(temp_storage).InclusiveSum(is_valid_index, new_position);
       if (is_valid_index) {
@@ -486,7 +547,8 @@ __device__ void search_kernel_jit(
   cagra_sample_filter<SourceIndexT> filter_payload)
 {
   const auto query_id = blockIdx.y;
-  search_core<TOPK_BY_BITONIC_SORT,
+  search_core<false,
+              TOPK_BY_BITONIC_SORT,
               BITONIC_SORT_AND_MERGE_MULTI_WARPS,
               DataT,
               IndexT,
@@ -517,6 +579,82 @@ __device__ void search_kernel_jit(
                             query_id_offset,
                             dataset_desc,
                             filter_payload,
+                            0.0f,
+                            0.0f,
+                            graph_size);
+}
+
+template <bool TOPK_BY_BITONIC_SORT,
+          bool BITONIC_SORT_AND_MERGE_MULTI_WARPS,
+          typename DataT,
+          typename IndexT,
+          typename DistanceT,
+          typename SourceIndexT>
+__device__ void search_favor_kernel_jit(
+  uintptr_t result_indices_ptr,
+  DistanceT* const result_distances_ptr,
+  const std::uint32_t top_k,
+  const DataT* const queries_ptr,
+  const IndexT* const knn_graph,
+  const std::uint32_t graph_degree,
+  const SourceIndexT* source_indices_ptr,
+  const unsigned num_distilation,
+  const uint64_t rand_xor_mask,
+  const IndexT* seed_ptr,
+  const uint32_t num_seeds,
+  IndexT* const visited_hashmap_ptr,
+  const std::uint32_t max_candidates,
+  const std::uint32_t max_itopk,
+  const std::uint32_t internal_topk,
+  const std::uint32_t search_width,
+  const std::uint32_t min_iteration,
+  const std::uint32_t max_iteration,
+  std::uint32_t* const num_executed_iterations,
+  const std::uint32_t hash_bitlen,
+  const std::uint32_t small_hash_bitlen,
+  const std::uint32_t small_hash_reset_interval,
+  const std::uint32_t query_id_offset,
+  const dataset_descriptor_base_t<DataT, IndexT, DistanceT>* dataset_desc,
+  const IndexT graph_size,
+  cagra_sample_filter<SourceIndexT> filter_payload,
+  const float filtering_rate,
+  const float favor_delta_d)
+{
+  const auto query_id = blockIdx.y;
+  search_core<true,
+              TOPK_BY_BITONIC_SORT,
+              BITONIC_SORT_AND_MERGE_MULTI_WARPS,
+              DataT,
+              IndexT,
+              DistanceT,
+              SourceIndexT>(result_indices_ptr,
+                            result_distances_ptr,
+                            top_k,
+                            queries_ptr,
+                            knn_graph,
+                            graph_degree,
+                            source_indices_ptr,
+                            num_distilation,
+                            rand_xor_mask,
+                            seed_ptr,
+                            num_seeds,
+                            visited_hashmap_ptr,
+                            max_candidates,
+                            max_itopk,
+                            internal_topk,
+                            search_width,
+                            min_iteration,
+                            max_iteration,
+                            num_executed_iterations,
+                            hash_bitlen,
+                            small_hash_bitlen,
+                            small_hash_reset_interval,
+                            query_id,
+                            query_id_offset,
+                            dataset_desc,
+                            filter_payload,
+                            filtering_rate,
+                            favor_delta_d,
                             graph_size);
 }
 
@@ -595,7 +733,8 @@ __device__ void search_single_cta_p_impl(
     auto query_id              = worker_data.value.query_id;
 
     // work phase - use JIT search_core
-    search_core<TOPK_BY_BITONIC_SORT,
+    search_core<false,
+                TOPK_BY_BITONIC_SORT,
                 BITONIC_SORT_AND_MERGE_MULTI_WARPS,
                 DataT,
                 IndexT,
@@ -625,7 +764,9 @@ __device__ void search_single_cta_p_impl(
                               query_id,
                               query_id_offset,
                               dataset_desc,
-                              filter_payload);
+                              filter_payload,
+                              0.0f,
+                              0.0f);
 
     // make sure all writes are visible even for the host
     //     (e.g. when result buffers are in pinned memory)

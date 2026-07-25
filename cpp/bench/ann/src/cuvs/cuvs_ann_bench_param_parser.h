@@ -478,6 +478,29 @@ void parse_search_param(const nlohmann::json& conf,
   if (conf.contains("itopk")) { param.p.itopk_size = conf.at("itopk"); }
   if (conf.contains("search_width")) { param.p.search_width = conf.at("search_width"); }
   if (conf.contains("max_iterations")) { param.p.max_iterations = conf.at("max_iterations"); }
+  if (conf.contains("filter_mode")) {
+    std::string mode = conf.at("filter_mode");
+    if (mode == "default") {
+      param.p.filter_mode = cuvs::neighbors::cagra::filtering_mode::DEFAULT;
+    } else if (mode == "favor") {
+      param.p.filter_mode = cuvs::neighbors::cagra::filtering_mode::FAVOR;
+    } else {
+      THROW("Invalid CAGRA filter_mode: %s", mode.c_str());
+    }
+  }
+  if (conf.contains("favor_delta_d")) { param.p.favor_delta_d = conf.at("favor_delta_d"); }
+  if (conf.contains("favor_delta_d_file")) {
+    param.favor_delta_d_file = conf.at("favor_delta_d_file").get<std::string>();
+  }
+  if (conf.contains("favor_delta_d_alpha")) {
+    param.favor_delta_d_params.alpha = conf.at("favor_delta_d_alpha");
+  }
+  if (conf.contains("favor_delta_d_beta")) {
+    param.favor_delta_d_params.beta = conf.at("favor_delta_d_beta");
+  }
+  if (conf.contains("favor_delta_d_bfs_depth")) {
+    param.favor_delta_d_params.bfs_depth = conf.at("favor_delta_d_bfs_depth");
+  }
   if (conf.contains("persistent")) { param.p.persistent = conf.at("persistent"); }
   if (conf.contains("persistent_lifetime")) {
     param.p.persistent_lifetime = conf.at("persistent_lifetime");

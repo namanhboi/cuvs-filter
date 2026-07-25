@@ -31,9 +31,12 @@ struct CagraSingleCtaSearchPlanner
                               bool /*is_vpq*/,
                               uint32_t /*pq_bits*/,
                               uint32_t /*pq_len*/,
-                              bool persistent = false)
+                              bool persistent = false,
+                              bool favor      = false)
     : CagraPlannerBase<DataTag, IndexTag, DistanceTag, QueryTag, CodebookTag, SampleFilterJitTag>(
-        persistent ? "search_single_cta_p" : "search_single_cta", launcher_jit_cache)
+        persistent ? "search_single_cta_p"
+                   : (favor ? "search_single_cta_favor" : "search_single_cta"),
+        launcher_jit_cache)
   {
   }
 
@@ -101,6 +104,40 @@ struct CagraSingleCtaSearchPlanner
                                                                           false,
                                                                           false>>();
       }
+    }
+  }
+
+  void add_favor_search_kernel_fragment(bool topk_by_bitonic_sort,
+                                        bool bitonic_sort_and_merge_multi_warps)
+  {
+    if (topk_by_bitonic_sort && bitonic_sort_and_merge_multi_warps) {
+      this->template add_static_fragment<fragment_tag_search_single_cta_favor<DataTag,
+                                                                              SourceIndexTag,
+                                                                              IndexTag,
+                                                                              DistanceTag,
+                                                                              true,
+                                                                              true>>();
+    } else if (topk_by_bitonic_sort && !bitonic_sort_and_merge_multi_warps) {
+      this->template add_static_fragment<fragment_tag_search_single_cta_favor<DataTag,
+                                                                              SourceIndexTag,
+                                                                              IndexTag,
+                                                                              DistanceTag,
+                                                                              true,
+                                                                              false>>();
+    } else if (!topk_by_bitonic_sort && bitonic_sort_and_merge_multi_warps) {
+      this->template add_static_fragment<fragment_tag_search_single_cta_favor<DataTag,
+                                                                              SourceIndexTag,
+                                                                              IndexTag,
+                                                                              DistanceTag,
+                                                                              false,
+                                                                              true>>();
+    } else {
+      this->template add_static_fragment<fragment_tag_search_single_cta_favor<DataTag,
+                                                                              SourceIndexTag,
+                                                                              IndexTag,
+                                                                              DistanceTag,
+                                                                              false,
+                                                                              false>>();
     }
   }
 };

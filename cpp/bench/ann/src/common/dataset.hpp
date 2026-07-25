@@ -179,13 +179,20 @@ struct dataset {
           std::string query_file,
           std::string distance,
           std::optional<std::string> groundtruth_neighbors_file,
-          std::optional<double> filtering_rate = std::nullopt)
+          std::optional<double> filtering_rate          = std::nullopt,
+          std::optional<std::string> filter_bitset_file = std::nullopt)
     : name_{std::move(name)},
       distance_{std::move(distance)},
       base_set_{base_file, subset_first_row, subset_size},
       query_set_{query_file}
   {
-    if (filtering_rate.has_value()) {
+    if (filter_bitset_file.has_value()) {
+      filter_bitset_.emplace(filter_bitset_file.value());
+      auto required_words = (base_set_size() - 1) / kBitsPerCarrierValue + 1;
+      if (filter_bitset_->n_rows() * filter_bitset_->n_cols() < required_words) {
+        throw std::runtime_error("Filter bitset file is smaller than the dataset");
+      }
+    } else if (filtering_rate.has_value()) {
       // Generate a random bitset for filtering
       auto n_rows = static_cast<size_t>(subset_size) + static_cast<size_t>(subset_first_row);
       if (subset_size == 0) {

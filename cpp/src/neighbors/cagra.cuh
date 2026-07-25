@@ -27,8 +27,65 @@
 #include <rmm/cuda_stream_view.hpp>
 
 #include <algorithm>
+#include <limits>
+
+#include <thrust/execution_policy.h>
+#include <thrust/fill.h>
+#include <thrust/functional.h>
+#include <thrust/iterator/counting_iterator.h>
+#include <thrust/transform_reduce.h>
 
 namespace cuvs::neighbors::cagra {
+
+namespace detail {
+
+template <typename T, typename IdxT>
+std::uint64_t count_favor_bitset_matches(
+  raft::resources const& res,
+  cagra::index<T, IdxT> const& index,
+  cuvs::neighbors::filtering::bitset_filter<uint32_t, int64_t> const& filter)
+{
+  if (!index.source_indices().has_value()) {
+    return static_cast<std::uint64_t>(filter.bitset_view_.count(res));
+  }
+
+  auto source_indices = index.source_indices().value();
+  auto const* source  = source_indices.data_handle();
+  auto bitset         = filter.bitset_view_;
+  auto const nbits    = bitset.get_original_nbits();
+  auto stream         = raft::resource::get_cuda_stream(res);
+  auto first          = thrust::make_counting_iterator<int64_t>(0);
+  return thrust::transform_reduce(
+    thrust::cuda::par.on(stream),
+    first,
+    first + static_cast<int64_t>(index.size()),
+    [source, bitset, nbits] __device__(int64_t row) -> std::uint64_t {
+      auto source_id = static_cast<int64_t>(source[row]);
+      return source_id >= 0 && source_id < nbits && bitset.test(source_id) ? 1u : 0u;
+    },
+    std::uint64_t{0},
+    thrust::plus<std::uint64_t>{});
+}
+
+template <typename OutputIdxT>
+void fill_empty_favor_results(
+  raft::resources const& res,
+  raft::device_matrix_view<OutputIdxT, int64_t, raft::row_major> neighbors,
+  raft::device_matrix_view<float, int64_t, raft::row_major> distances)
+{
+  auto stream = raft::resource::get_cuda_stream(res);
+  auto policy = thrust::cuda::par.on(stream);
+  thrust::fill(policy,
+               neighbors.data_handle(),
+               neighbors.data_handle() + neighbors.size(),
+               std::numeric_limits<OutputIdxT>::max());
+  thrust::fill(policy,
+               distances.data_handle(),
+               distances.data_handle() + distances.size(),
+               std::numeric_limits<float>::max());
+}
+
+}  // namespace detail
 
 // Member function implementations for cagra::index
 template <typename T, typename IdxT>
@@ -359,6 +416,8 @@ void search(raft::resources const& res,
     using none_filter_type    = cuvs::neighbors::filtering::none_sample_filter;
     auto& sample_filter       = dynamic_cast<const none_filter_type&>(sample_filter_ref);
     search_params params_copy = params;
+    RAFT_EXPECTS(params.filter_mode != filtering_mode::FAVOR,
+                 "FAVOR filtering requires a bitset filter");
     if (params.filtering_rate < 0.0) { params_copy.filtering_rate = 0.0; }
     auto sample_filter_copy = sample_filter;
     return search_with_filtering<T, IdxT, none_filter_type, OutputIdxT>(
@@ -371,7 +430,15 @@ void search(raft::resources const& res,
       dynamic_cast<const cuvs::neighbors::filtering::bitset_filter<uint32_t, int64_t>&>(
         sample_filter_ref);
     search_params params_copy = params;
-    if (params.filtering_rate < 0.0) {
+    if (params.filter_mode == filtering_mode::FAVOR) {
+      const auto num_set_bits = detail::count_favor_bitset_matches(res, idx, sample_filter);
+      if (num_set_bits == 0) {
+        detail::fill_empty_favor_results(res, neighbors, distances);
+        return;
+      }
+      params_copy.filtering_rate = static_cast<float>(idx.data().n_rows() - num_set_bits) /
+                                   static_cast<float>(idx.data().n_rows());
+    } else if (params.filtering_rate < 0.0) {
       const auto num_set_bits = sample_filter.bitset_view_.count(res);
       auto filtering_rate     = (float)(idx.data().n_rows() - num_set_bits) / idx.data().n_rows();
       const float min_filtering_rate = 0.0;
@@ -389,6 +456,8 @@ void search(raft::resources const& res,
     auto& sample_filter =
       dynamic_cast<const cuvs::neighbors::filtering::udf_filter&>(sample_filter_ref);
     search_params params_copy = params;
+    RAFT_EXPECTS(params.filter_mode != filtering_mode::FAVOR,
+                 "FAVOR filtering currently supports only bitset filters");
     if (params.filtering_rate < 0.0) {
       const float min_filtering_rate = 0.0f;
       const float max_filtering_rate = 0.999f;

@@ -275,6 +275,13 @@ enum class search_algo {
   AUTO         = 100
 };
 
+enum class filtering_mode : uint32_t {
+  /** Preserve the existing CAGRA filtering behavior. */
+  DEFAULT = 0,
+  /** Apply FAVOR exclusion-distance scoring during graph traversal. */
+  FAVOR = 1,
+};
+
 enum class hash_mode { HASH = 0, SMALL = 1, AUTO = 100 };
 
 enum class internal_dtype { F16 = 0, E5M2 = 1 };
@@ -355,6 +362,12 @@ struct search_params : cuvs::neighbors::search_params {
    * inferred from the source string.
    */
   float filtering_rate = -1.0;
+
+  /** Filtering implementation. FAVOR currently supports bitset filters with SINGLE_CTA only. */
+  filtering_mode filter_mode = filtering_mode::DEFAULT;
+
+  /** Dataset/graph-specific FAVOR delta-d statistic. Required when filter_mode is FAVOR. */
+  float favor_delta_d = -1.0f;
 
   /** Data type of the query vector and codebook table on shared memory. Currently, only VPQ
    * supports FP8. **/

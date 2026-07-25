@@ -853,6 +853,7 @@ void select_and_run(
       ->launch(topk_indices_ptr, topk_distances_ptr, queries_ptr, num_queries, topk);
     return;
   } else {
+    const bool favor = ps.filter_mode == filtering_mode::FAVOR;
     std::shared_ptr<AlgorithmLauncher> launcher =
       make_cagra_single_cta_jit_launcher<DataT,
                                          IndexT,
@@ -863,7 +864,8 @@ void select_and_run(
         topk_by_bitonic_sort,
         bitonic_sort_and_merge_multi_warps,
         false /* persistent */,
-        make_cagra_sample_filter_udf_fragment<SourceIndexT>(sample_filter));
+        make_cagra_sample_filter_udf_fragment<SourceIndexT>(sample_filter),
+        favor);
     if (!launcher) { RAFT_FAIL("Failed to get JIT launcher for CAGRA search kernel"); }
 
     // Get the device descriptor pointer - dev_ptr() initializes it if needed
@@ -889,44 +891,84 @@ void select_and_run(
                    num_queries,
                    smem_size);
 
-    // Dispatch kernel via launcher
-    auto kernel_launcher = [&]() -> void {
-      launcher->dispatch<search_single_cta_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>(
-        stream,
-        grid,
-        block,
-        static_cast<std::size_t>(smem_size),
-        topk_indices_ptr,
-        topk_distances_ptr,
-        topk,
-        queries_ptr,
-        graph.data_handle(),
-        graph_degree_u32,  // Cast int64_t to uint32_t
-        source_indices_ptr,
-        num_random_samplings_u,  // Cast uint32_t to unsigned for consistency
-        ps.rand_xor_mask,        // uint64_t matches kernel (8 bytes)
-        dev_seed_ptr,
-        num_seeds,
-        hashmap_ptr,
-        max_candidates,
-        max_itopk,
-        itopk_size_u32,      // Cast size_t to uint32_t
-        search_width_u32,    // Cast size_t to uint32_t
-        min_iterations_u32,  // Cast size_t to uint32_t
-        max_iterations_u32,  // Cast size_t to uint32_t
-        num_executed_iterations,
-        hash_bitlen_u32,                // Cast int64_t to uint32_t
-        small_hash_bitlen_u32,          // Cast size_t to uint32_t
-        small_hash_reset_interval_u32,  // Cast size_t to uint32_t
-        query_id_offset,                // Offset to add to query_id when calling filter
-        dev_desc,
-        static_cast<IndexT>(graph.extent(0)),
-        filter_payload);
-    };
-
-    cuvs::neighbors::detail::safely_launch_kernel_with_smem_size<
-      search_single_cta_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>(
-      smem_size, kernel_launcher, launcher->get_kernel());
+    if (favor) {
+      auto kernel_launcher = [&]() -> void {
+        launcher
+          ->dispatch<search_single_cta_favor_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>(
+            stream,
+            grid,
+            block,
+            static_cast<std::size_t>(smem_size),
+            topk_indices_ptr,
+            topk_distances_ptr,
+            topk,
+            queries_ptr,
+            graph.data_handle(),
+            graph_degree_u32,
+            source_indices_ptr,
+            num_random_samplings_u,
+            ps.rand_xor_mask,
+            dev_seed_ptr,
+            num_seeds,
+            hashmap_ptr,
+            max_candidates,
+            max_itopk,
+            itopk_size_u32,
+            search_width_u32,
+            min_iterations_u32,
+            max_iterations_u32,
+            num_executed_iterations,
+            hash_bitlen_u32,
+            small_hash_bitlen_u32,
+            small_hash_reset_interval_u32,
+            query_id_offset,
+            dev_desc,
+            static_cast<IndexT>(graph.extent(0)),
+            filter_payload,
+            ps.filtering_rate,
+            ps.favor_delta_d);
+      };
+      cuvs::neighbors::detail::safely_launch_kernel_with_smem_size<
+        search_single_cta_favor_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>(
+        smem_size, kernel_launcher, launcher->get_kernel());
+    } else {
+      auto kernel_launcher = [&]() -> void {
+        launcher->dispatch<search_single_cta_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>(
+          stream,
+          grid,
+          block,
+          static_cast<std::size_t>(smem_size),
+          topk_indices_ptr,
+          topk_distances_ptr,
+          topk,
+          queries_ptr,
+          graph.data_handle(),
+          graph_degree_u32,
+          source_indices_ptr,
+          num_random_samplings_u,
+          ps.rand_xor_mask,
+          dev_seed_ptr,
+          num_seeds,
+          hashmap_ptr,
+          max_candidates,
+          max_itopk,
+          itopk_size_u32,
+          search_width_u32,
+          min_iterations_u32,
+          max_iterations_u32,
+          num_executed_iterations,
+          hash_bitlen_u32,
+          small_hash_bitlen_u32,
+          small_hash_reset_interval_u32,
+          query_id_offset,
+          dev_desc,
+          static_cast<IndexT>(graph.extent(0)),
+          filter_payload);
+      };
+      cuvs::neighbors::detail::safely_launch_kernel_with_smem_size<
+        search_single_cta_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>(
+        smem_size, kernel_launcher, launcher->get_kernel());
+    }
 
     RAFT_CUDA_TRY(cudaPeekAtLastError());
   }

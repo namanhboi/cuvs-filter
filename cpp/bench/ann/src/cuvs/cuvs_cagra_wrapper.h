@@ -80,6 +80,8 @@ class cuvs_cagra : public algo<T>, public algo_gpu {
 
   struct search_param : public search_param_base {
     cuvs::neighbors::cagra::search_params p;
+    std::optional<std::string> favor_delta_d_file;
+    cuvs::neighbors::cagra::favor_delta_d_params favor_delta_d_params;
     float refine_ratio;
     AllocatorType graph_mem   = AllocatorType::kDevice;
     AllocatorType dataset_mem = AllocatorType::kDevice;
@@ -187,6 +189,7 @@ class cuvs_cagra : public algo<T>, public algo_gpu {
   size_t dynamic_batching_n_queues_;
   bool dynamic_batching_conservative_dispatch_;
 
+  std::shared_ptr<rmm::device_uvector<uint32_t>> filter_bitset_;
   std::shared_ptr<cuvs::neighbors::filtering::base_filter> filter_;
   std::vector<std::shared_ptr<cuvs::neighbors::cagra::index<T, IdxT>>> sub_indices_;
 
@@ -276,7 +279,17 @@ template <typename T, typename IdxT>
 void cuvs_cagra<T, IdxT>::set_search_param(const search_param_base& param,
                                            const void* filter_bitset)
 {
-  if (index_) { filter_ = make_cuvs_filter(filter_bitset, index_->size()); }
+  if (index_ && filter_bitset != nullptr) {
+    auto n_words   = raft::ceildiv<size_t>(index_->size(), sizeof(uint32_t) * 8);
+    auto stream    = raft::resource::get_cuda_stream(handle_);
+    filter_bitset_ = std::make_shared<rmm::device_uvector<uint32_t>>(n_words, stream);
+    raft::copy(
+      filter_bitset_->data(), reinterpret_cast<uint32_t const*>(filter_bitset), n_words, stream);
+    filter_ = make_cuvs_filter(filter_bitset_->data(), index_->size());
+  } else {
+    filter_bitset_.reset();
+    filter_ = make_cuvs_filter(nullptr, index_ ? index_->size() : 0);
+  }
   auto sp = dynamic_cast<const search_param&>(param);
   bool needs_dynamic_batcher_update =
     (dynamic_batching_max_batch_size_ != sp.dynamic_batching_max_batch_size) ||
@@ -330,6 +343,15 @@ void cuvs_cagra<T, IdxT>::set_search_param(const search_param_base& param,
 
     need_dataset_update_         = false;
     needs_dynamic_batcher_update = true;
+  }
+
+  // Deserialized CAGRA graph files do not contain the dense dataset. Load and validate the FAVOR
+  // sidecar only after the benchmark's search dataset and any relocated graph have been attached.
+  if (search_params_.filter_mode == cuvs::neighbors::cagra::filtering_mode::FAVOR &&
+      sp.favor_delta_d_file.has_value()) {
+    RAFT_EXPECTS(index_ != nullptr, "The CAGRA index must be loaded before FAVOR delta-d");
+    search_params_.favor_delta_d = cuvs::neighbors::cagra::load_favor_delta_d(
+      handle_, sp.favor_delta_d_file.value(), sp.favor_delta_d_params, *index_);
   }
 
   // dynamic batching

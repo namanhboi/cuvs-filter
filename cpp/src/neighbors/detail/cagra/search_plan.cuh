@@ -21,6 +21,7 @@
 #include <cuvs/neighbors/cagra.hpp>
 #include <raft/util/pow2_utils.cuh>
 
+#include <cmath>
 #include <optional>
 #include <tuple>
 #include <variant>
@@ -109,6 +110,10 @@ struct search_plan_impl_base : public search_params {
       graph_degree(graph_degree),
       topk(topk)
   {
+    if (filter_mode == filtering_mode::FAVOR && algo == search_algo::AUTO) {
+      algo = search_algo::SINGLE_CTA;
+      RAFT_LOG_DEBUG("Auto strategy: FAVOR filtering selects single-cta");
+    }
     if (persistent) {
       if (algo == search_algo::AUTO) {
         algo = search_algo::SINGLE_CTA;
@@ -392,6 +397,18 @@ struct search_plan_impl : public search_plan_impl_base {
     if (algo != search_algo::SINGLE_CTA && algo != search_algo::MULTI_CTA &&
         algo != search_algo::MULTI_KERNEL) {
       error_message += "An invalid kernel mode has been given: " + std::to_string((int)algo) + "";
+    }
+    if (filter_mode == filtering_mode::FAVOR) {
+      if (algo != search_algo::SINGLE_CTA) {
+        error_message += "FAVOR filtering currently supports only SINGLE_CTA. ";
+      }
+      if (persistent) { error_message += "FAVOR filtering does not support persistent search. "; }
+      if (!std::isfinite(favor_delta_d) || favor_delta_d < 0.0f) {
+        error_message += "`favor_delta_d` must be finite and nonnegative. ";
+      }
+      if (!(filtering_rate >= 0.0f && filtering_rate < 1.0f)) {
+        error_message += "FAVOR filtering requires an exact filtering rate in [0, 1). ";
+      }
     }
     if (thread_block_size != 0 && thread_block_size != 64 && thread_block_size != 128 &&
         thread_block_size != 256 && thread_block_size != 512 && thread_block_size != 1024) {

@@ -39,7 +39,8 @@ std::shared_ptr<AlgorithmLauncher> build_single_cta_launcher(
   bool topk_by_bitonic_sort,
   bool bitonic_sort_and_merge_multi_warps,
   bool persistent,
-  std::unique_ptr<UDFFatbinFragment> sample_filter_udf_fragment)
+  std::unique_ptr<UDFFatbinFragment> sample_filter_udf_fragment,
+  bool favor)
 {
   single_cta_search::CagraSingleCtaSearchPlanner<DataTag,
                                                  IndexTag,
@@ -56,7 +57,8 @@ std::shared_ptr<AlgorithmLauncher> build_single_cta_launcher(
             dataset_desc.is_vpq,
             dataset_desc.pq_bits,
             dataset_desc.pq_len,
-            persistent);
+            persistent,
+            favor);
 
   if constexpr (std::is_same_v<CodebookTag, tag_codebook_half>) {
     planner.add_setup_workspace_device_function(dataset_desc.team_size,
@@ -73,8 +75,13 @@ std::shared_ptr<AlgorithmLauncher> build_single_cta_launcher(
     planner.add_compute_distance_device_function(
       dataset_desc.metric, dataset_desc.team_size, dataset_desc.dataset_block_dim);
   }
-  planner.add_search_kernel_fragment(
-    topk_by_bitonic_sort, bitonic_sort_and_merge_multi_warps, persistent);
+  if (favor) {
+    planner.add_favor_search_kernel_fragment(topk_by_bitonic_sort,
+                                             bitonic_sort_and_merge_multi_warps);
+  } else {
+    planner.add_search_kernel_fragment(
+      topk_by_bitonic_sort, bitonic_sort_and_merge_multi_warps, persistent);
+  }
   planner.add_sample_filter_device_function(std::move(sample_filter_udf_fragment));
   return planner.get_launcher();
 }
@@ -222,7 +229,8 @@ std::shared_ptr<AlgorithmLauncher> make_cagra_single_cta_jit_launcher(
   bool topk_by_bitonic_sort,
   bool bitonic_sort_and_merge_multi_warps,
   bool persistent,
-  std::unique_ptr<UDFFatbinFragment> sample_filter_udf_fragment = nullptr)
+  std::unique_ptr<UDFFatbinFragment> sample_filter_udf_fragment = nullptr,
+  bool favor                                                    = false)
 {
   using DataTag   = decltype(get_data_type_tag<DataT>());
   using IndexTag  = decltype(get_index_type_tag<IndexT>());
@@ -247,7 +255,8 @@ std::shared_ptr<AlgorithmLauncher> make_cagra_single_cta_jit_launcher(
       topk_by_bitonic_sort,
       bitonic_sort_and_merge_multi_warps,
       persistent,
-      std::move(sample_filter_udf_fragment));
+      std::move(sample_filter_udf_fragment),
+      favor);
   }
   using CodebookTag = codebook_tag_standard_t;
   if (dataset_desc.metric == cuvs::distance::DistanceType::BitwiseHamming) {
@@ -268,7 +277,8 @@ std::shared_ptr<AlgorithmLauncher> make_cagra_single_cta_jit_launcher(
       topk_by_bitonic_sort,
       bitonic_sort_and_merge_multi_warps,
       persistent,
-      std::move(sample_filter_udf_fragment));
+      std::move(sample_filter_udf_fragment),
+      favor);
   }
   using QueryTag = query_type_tag_standard_t<DataTag, cuvs::distance::DistanceType::L2Expanded>;
   return cagra_jit_launcher_factory_detail::build_single_cta_launcher<DataTag,
@@ -286,7 +296,8 @@ std::shared_ptr<AlgorithmLauncher> make_cagra_single_cta_jit_launcher(
     topk_by_bitonic_sort,
     bitonic_sort_and_merge_multi_warps,
     persistent,
-    std::move(sample_filter_udf_fragment));
+    std::move(sample_filter_udf_fragment),
+    favor);
 }
 
 /// Build a JIT AlgorithmLauncher for multi-CTA CAGRA search.

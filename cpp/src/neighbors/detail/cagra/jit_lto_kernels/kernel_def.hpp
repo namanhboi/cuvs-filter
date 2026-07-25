@@ -49,6 +49,37 @@ using search_single_cta_kernel_func_t =
        const IndexT,
        cagra_sample_filter<SourceIndexT>);
 
+template <typename DataT, typename IndexT, typename DistanceT, typename SourceIndexT>
+using search_single_cta_favor_kernel_func_t =
+  void(uintptr_t,
+       DistanceT* const,
+       const std::uint32_t,
+       const DataT* const,
+       const IndexT* const,
+       const std::uint32_t,
+       const SourceIndexT*,
+       const unsigned,
+       const uint64_t,
+       const IndexT*,
+       const uint32_t,
+       IndexT* const,
+       const std::uint32_t,
+       const std::uint32_t,
+       const std::uint32_t,
+       const std::uint32_t,
+       const std::uint32_t,
+       const std::uint32_t,
+       std::uint32_t* const,
+       const std::uint32_t,
+       const std::uint32_t,
+       const std::uint32_t,
+       const std::uint32_t,
+       const dataset_descriptor_base_t<DataT, IndexT, DistanceT>*,
+       const IndexT,
+       cagra_sample_filter<SourceIndexT>,
+       const float,
+       const float);
+
 namespace single_cta_search {
 
 template <typename DataT, typename IndexT, typename DistanceT, typename SourceIndexT>

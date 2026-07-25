@@ -32,8 +32,12 @@ inline constexpr bool has_kpq_bits_v = has_kpq_bits<T>::value;
 
 // JIT version of compute_distance_to_random_nodes - uses const dataset_descriptor_base_t* (smem)
 // Shared between single_cta and multi_cta JIT kernels
-template <typename IndexT, typename DistanceT, typename DataT>
-RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_random_nodes_jit(
+template <bool APPLY_FAVOR,
+          typename IndexT,
+          typename DistanceT,
+          typename DataT,
+          typename SourceIndexT>
+RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_random_nodes_jit_impl(
   IndexT* __restrict__ result_indices_ptr,       // [num_pickup]
   DistanceT* __restrict__ result_distances_ptr,  // [num_pickup]
   const dataset_descriptor_base_t<DataT, IndexT, DistanceT>* smem_desc,
@@ -46,9 +50,13 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_random_nodes_jit(
   const uint32_t visited_hash_bitlen,
   IndexT* __restrict__ traversed_hash_ptr,
   const uint32_t traversed_hash_bitlen,
-  const uint32_t block_id   = 0,
-  const uint32_t num_blocks = 1,
-  const IndexT graph_size   = 0)
+  const uint32_t block_id                          = 0,
+  const uint32_t num_blocks                        = 1,
+  const IndexT graph_size                          = 0,
+  const SourceIndexT* source_indices_ptr           = nullptr,
+  const uint32_t query_id                          = 0,
+  cagra_sample_filter<SourceIndexT> filter_payload = {},
+  const DistanceT favor_penalty                    = DistanceT{0})
 {
   uint32_t team_size_bits = smem_desc->team_size_bitshift_from_smem();
   IndexT dataset_size     = smem_desc->size;
@@ -73,8 +81,22 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_random_nodes_jit(
         }
       }
 
-      const auto norm2 = cuvs::neighbors::cagra::detail::compute_distance<DataT, IndexT, DistanceT>(
+      auto norm2 = cuvs::neighbors::cagra::detail::compute_distance<DataT, IndexT, DistanceT>(
         args_load, seed_index, valid_i, team_size_bits);
+
+      if constexpr (APPLY_FAVOR) {
+        const unsigned team_width = 1u << team_size_bits;
+        const unsigned lane_id    = threadIdx.x & (team_width - 1u);
+        bool passes_filter        = true;
+        if (valid_i && lane_id == 0) {
+          auto source_id = source_indices_ptr == nullptr ? static_cast<SourceIndexT>(seed_index)
+                                                         : source_indices_ptr[seed_index];
+          passes_filter  = cuvs::neighbors::detail::sample_filter<SourceIndexT>(
+            query_id, source_id, filter_payload.sample_filter_data());
+        }
+        passes_filter = __shfl_sync(0xffffffffu, passes_filter, 0, team_width);
+        if (valid_i && !passes_filter) { norm2 += favor_penalty; }
+      }
 
       if (valid_i && (norm2 < best_norm2_team_local)) {
         best_norm2_team_local = norm2;
@@ -103,10 +125,91 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_random_nodes_jit(
   }
 }
 
+template <typename IndexT, typename DistanceT, typename DataT>
+RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_random_nodes_jit(
+  IndexT* __restrict__ result_indices_ptr,
+  DistanceT* __restrict__ result_distances_ptr,
+  const dataset_descriptor_base_t<DataT, IndexT, DistanceT>* smem_desc,
+  const uint32_t num_pickup,
+  const uint32_t num_distilation,
+  const uint64_t rand_xor_mask,
+  const IndexT* __restrict__ seed_ptr,
+  const uint32_t num_seeds,
+  IndexT* __restrict__ visited_hash_ptr,
+  const uint32_t visited_hash_bitlen,
+  IndexT* __restrict__ traversed_hash_ptr,
+  const uint32_t traversed_hash_bitlen,
+  const uint32_t block_id   = 0,
+  const uint32_t num_blocks = 1,
+  const IndexT graph_size   = 0)
+{
+  compute_distance_to_random_nodes_jit_impl<false, IndexT, DistanceT, DataT, IndexT>(
+    result_indices_ptr,
+    result_distances_ptr,
+    smem_desc,
+    num_pickup,
+    num_distilation,
+    rand_xor_mask,
+    seed_ptr,
+    num_seeds,
+    visited_hash_ptr,
+    visited_hash_bitlen,
+    traversed_hash_ptr,
+    traversed_hash_bitlen,
+    block_id,
+    num_blocks,
+    graph_size);
+}
+
+template <typename IndexT, typename DistanceT, typename DataT, typename SourceIndexT>
+RAFT_DEVICE_INLINE_FUNCTION void compute_favor_distance_to_random_nodes_jit(
+  IndexT* __restrict__ result_indices_ptr,
+  DistanceT* __restrict__ result_distances_ptr,
+  const dataset_descriptor_base_t<DataT, IndexT, DistanceT>* smem_desc,
+  const uint32_t num_pickup,
+  const uint32_t num_distilation,
+  const uint64_t rand_xor_mask,
+  const IndexT* __restrict__ seed_ptr,
+  const uint32_t num_seeds,
+  IndexT* __restrict__ visited_hash_ptr,
+  const uint32_t visited_hash_bitlen,
+  const IndexT graph_size,
+  const SourceIndexT* source_indices_ptr,
+  const uint32_t query_id,
+  cagra_sample_filter<SourceIndexT> filter_payload,
+  const DistanceT favor_penalty)
+{
+  compute_distance_to_random_nodes_jit_impl<true, IndexT, DistanceT, DataT, SourceIndexT>(
+    result_indices_ptr,
+    result_distances_ptr,
+    smem_desc,
+    num_pickup,
+    num_distilation,
+    rand_xor_mask,
+    seed_ptr,
+    num_seeds,
+    visited_hash_ptr,
+    visited_hash_bitlen,
+    static_cast<IndexT*>(nullptr),
+    0,
+    0,
+    1,
+    graph_size,
+    source_indices_ptr,
+    query_id,
+    filter_payload,
+    favor_penalty);
+}
+
 // JIT version of compute_distance_to_child_nodes - uses const dataset_descriptor_base_t* (smem)
 // Shared between single_cta and multi_cta JIT kernels
-template <typename IndexT, typename DistanceT, typename DataT, int STATIC_RESULT_POSITION = 1>
-RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_child_nodes_jit(
+template <bool APPLY_FAVOR,
+          typename IndexT,
+          typename DistanceT,
+          typename DataT,
+          typename SourceIndexT,
+          int STATIC_RESULT_POSITION = 1>
+RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_child_nodes_jit_impl(
   IndexT* __restrict__ result_child_indices_ptr,
   DistanceT* __restrict__ result_child_distances_ptr,
   const dataset_descriptor_base_t<DataT, IndexT, DistanceT>* smem_desc,
@@ -119,8 +222,12 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_child_nodes_jit(
   const IndexT* __restrict__ parent_indices,
   const IndexT* __restrict__ internal_topk_list,
   const uint32_t search_width,
-  int* __restrict__ result_position = nullptr,
-  const int max_result_position     = 0)
+  int* __restrict__ result_position                = nullptr,
+  const int max_result_position                    = 0,
+  const SourceIndexT* source_indices_ptr           = nullptr,
+  const uint32_t query_id                          = 0,
+  cagra_sample_filter<SourceIndexT> filter_payload = {},
+  const DistanceT favor_penalty                    = DistanceT{0})
 {
   constexpr IndexT index_msb_1_mask = utils::gen_index_msb_1_mask<IndexT>::value;
   constexpr IndexT invalid_index    = ~static_cast<IndexT>(0);
@@ -173,9 +280,106 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_child_nodes_jit(
     const DistanceT child_dist = device::team_sum(per_thread, team_size_bits);
     __syncwarp();
 
-    // Store the distance
-    if (valid_i && lead_lane) { result_child_distances_ptr[j] = child_dist; }
+    // Store the distance once, fusing FAVOR's bitset check into the lead lane.
+    if (valid_i && lead_lane) {
+      auto final_dist = child_dist;
+      if constexpr (APPLY_FAVOR) {
+        if (child_id != invalid_index) {
+          auto source_id = source_indices_ptr == nullptr ? static_cast<SourceIndexT>(child_id)
+                                                         : source_indices_ptr[child_id];
+          if (!cuvs::neighbors::detail::sample_filter<SourceIndexT>(
+                query_id, source_id, filter_payload.sample_filter_data())) {
+            final_dist += favor_penalty;
+          }
+        }
+      }
+      result_child_distances_ptr[j] = final_dist;
+    }
   }
+}
+
+template <typename IndexT, typename DistanceT, typename DataT, int STATIC_RESULT_POSITION = 1>
+RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_child_nodes_jit(
+  IndexT* __restrict__ result_child_indices_ptr,
+  DistanceT* __restrict__ result_child_distances_ptr,
+  const dataset_descriptor_base_t<DataT, IndexT, DistanceT>* smem_desc,
+  const IndexT* __restrict__ knn_graph,
+  const uint32_t knn_k,
+  IndexT* __restrict__ visited_hashmap_ptr,
+  const uint32_t visited_hash_bitlen,
+  IndexT* __restrict__ traversed_hashmap_ptr,
+  const uint32_t traversed_hash_bitlen,
+  const IndexT* __restrict__ parent_indices,
+  const IndexT* __restrict__ internal_topk_list,
+  const uint32_t search_width,
+  int* __restrict__ result_position = nullptr,
+  const int max_result_position     = 0)
+{
+  compute_distance_to_child_nodes_jit_impl<false,
+                                           IndexT,
+                                           DistanceT,
+                                           DataT,
+                                           IndexT,
+                                           STATIC_RESULT_POSITION>(result_child_indices_ptr,
+                                                                   result_child_distances_ptr,
+                                                                   smem_desc,
+                                                                   knn_graph,
+                                                                   knn_k,
+                                                                   visited_hashmap_ptr,
+                                                                   visited_hash_bitlen,
+                                                                   traversed_hashmap_ptr,
+                                                                   traversed_hash_bitlen,
+                                                                   parent_indices,
+                                                                   internal_topk_list,
+                                                                   search_width,
+                                                                   result_position,
+                                                                   max_result_position);
+}
+
+template <typename IndexT,
+          typename DistanceT,
+          typename DataT,
+          typename SourceIndexT,
+          int STATIC_RESULT_POSITION = 1>
+RAFT_DEVICE_INLINE_FUNCTION void compute_favor_distance_to_child_nodes_jit(
+  IndexT* __restrict__ result_child_indices_ptr,
+  DistanceT* __restrict__ result_child_distances_ptr,
+  const dataset_descriptor_base_t<DataT, IndexT, DistanceT>* smem_desc,
+  const IndexT* __restrict__ knn_graph,
+  const uint32_t knn_k,
+  IndexT* __restrict__ visited_hashmap_ptr,
+  const uint32_t visited_hash_bitlen,
+  const IndexT* __restrict__ parent_indices,
+  const IndexT* __restrict__ internal_topk_list,
+  const uint32_t search_width,
+  const SourceIndexT* source_indices_ptr,
+  const uint32_t query_id,
+  cagra_sample_filter<SourceIndexT> filter_payload,
+  const DistanceT favor_penalty)
+{
+  compute_distance_to_child_nodes_jit_impl<true,
+                                           IndexT,
+                                           DistanceT,
+                                           DataT,
+                                           SourceIndexT,
+                                           STATIC_RESULT_POSITION>(result_child_indices_ptr,
+                                                                   result_child_distances_ptr,
+                                                                   smem_desc,
+                                                                   knn_graph,
+                                                                   knn_k,
+                                                                   visited_hashmap_ptr,
+                                                                   visited_hash_bitlen,
+                                                                   static_cast<IndexT*>(nullptr),
+                                                                   0,
+                                                                   parent_indices,
+                                                                   internal_topk_list,
+                                                                   search_width,
+                                                                   nullptr,
+                                                                   0,
+                                                                   source_indices_ptr,
+                                                                   query_id,
+                                                                   filter_payload,
+                                                                   favor_penalty);
 }
 
 }  // namespace cuvs::neighbors::cagra::detail::device

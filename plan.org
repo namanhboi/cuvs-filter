@@ -1,0 +1,268 @@
+#+TITLE:FAVOR + CAGRA Design Document
+#+AUTHOR: Nam Anh Dang (nd433@cornell.edu)
+
+* Abstract
+This document proposes adding FAVOR-style filtering to CAGRA while preserving the current filtering behavior as the default. FAVOR is a filter-agnostic graph-search approach that keeps the original graph and adds a selectivity-dependent distance penalty to nodes that do not pass the filter. The document first explains how CAGRA filtering and FAVOR work, then discusses why FAVOR is a good fit for CAGRA's GPU graph-search procedure. It also covers the proposed public API, Δd computation, UDF selectivity estimation, query-time distance penalty, filter-aware retry strategy, implementation phases, and benchmarking plan.
+
+* Filter Selectivity Definition
+Filter selectivity: ratio of nodes in the dataset that passes the filter vs number of nodes in the dataset. High selectivity means that a lot of nodes pass. Selectivity is a common term in the literature on filtered search.
+* Background on CAGRA Filtering
+CAGRA filtered search is filter-agnostic and doesn't modify the underlying graph. Filter-agnostic means that CAGRA can support arbitrary filters on vectors (not limited to AND/OR queries or RANGE queries) by passing in a UDF or a bitset where passing nodes are 1. At the time of writing, bitmaps are not supported by CAGRA.
+
+CAGRA currently supports filtered search for both =SINGLE_CTA= and =MULTI_CTA=. For =SINGLE_CTA=, =search_plan.cuh= does not adjust search parameters based on =filtering_rate=. For =MULTI_CTA=, =search_plan.cuh= inflates =itopk_size= based on =filtering_rate= to compensate for expected filtered-out results, then rounds it up to a multiple of 32. Since each CTA uses a fixed local =itopk= size of 32, increasing the global =itopk_size= increases the number of CTAs assigned to each query for =MULTI_CTA=. Since =SINGLE_CTA= doesn't modify its =itopk_size= based on selectivity, its performance might not match =MULTI_CTA= in low-selectivity scenarios.
+
+=SINGLE_CTA= and =MULTI_CTA= use the same high-level filtering approach where non-passing nodes are allowed to participate in traversal. As such, I'll summarize the filtering approach used by =SINGLE_CTA= search loop:
+
+while there are still nodes to be expanded:
+  - Sort/merge =itopk= + candidate buffer.
+  - Select the best unexpanded parent nodes from =itopk=.
+  - Expand those parents through accessing the graph.
+  - Compute distances for their children.
+  - Write those children into the candidate buffer.
+  - After expansion, check whether each selected parent passes the filter.
+  - If a selected parent fails the filter, invalidate it in =itopk= using =invalid_index= and max distance.
+  - On the next iteration, the invalidated parent is moved out of the itopk buffer set by the sort/merge step.
+
+After traversal ends:
+  - Apply the filter to all remaining nodes in both =itopk= and the candidate buffer.
+  - Invalidate non-passing nodes with =invalid_index= and max distance.
+  - Compact valid nodes already in =itopk= toward the front.
+  - If =itopk= still does not contain enough valid results, run one more top-k merge over =itopk= + candidate buffer so valid candidate-buffer entries can replace invalid =itopk= entries.
+  - Write the first =top_k= entries from =itopk= to the output.
+  - If traversal did not discover at least =top_k= passing nodes, the output can still contain invalid/max-distance entries.
+
+The key point is that CAGRA tries to preserve graph navigability by allowing non-passing nodes to remain in the =itopk= buffer, rather than pruning every non-passing child immediately. However, because filtering is applied late, many non-passing nodes can occupy =itopk= slots during traversal. Under lower selectivity, this can leave too few passing nodes in the final =itopk= + candidate buffer causing low recall.
+
+This issue is not mitigated by the CAGRA's termination condition which is filter-unaware. CAGRA uses the default termination condition of graph search where traversal terminates once it has reached =max_iterations= or fails to find new unexpanded parent nodes after =min_iterations=. It does not check whether the current candidate state contains enough passing nodes.
+
+To improve the filtering of CAGRA, we can borrow from the literature on graph-based filter-agnostic vector search (on CPU) which proposes modified search procedures to maintain graph navigability while achieving high recall and throughput. The following sections discuss the FAVOR approach and why it's suitable for CAGRA; other approaches are described in the Appendix Tab.
+* The FAVOR Approach
+[[https://dl.acm.org/doi/10.1145/3802060][FAVOR]] ([[https://github.com/JunjieSong123/FAVOR][codebase]]) keeps the original HNSW graph but modifies the search procedure with a filter-aware distance score. Passing nodes use their normal vector distance, while non-passing nodes receive an added exclusion-distance penalty =D=. This keeps non-passing nodes available for traversal, preserving graph navigability, but pushes them farther back in the =itopk= buffer so passing nodes are more likely to be expanded.
+
+FAVOR has three main components:
+- Selectivity estimation:
+  - FAVOR estimates query selectivity by applying the filter to a small random sample of the dataset. The paper uses a 1% sample and reports low relative error
+  - The estimated selectivity p controls the size of the penalty.
+- Exclusion-distance penalty (D) calculation:
+  - FAVOR records a dataset-level distance statistic, Δd, during index construction.
+  - Δd is computed from the normalized distance gap between two neighbor ranks, controlled by α and β. FAVOR uses α = 10, β = efc.
+  - At the start of each query, FAVOR combines Δd, selectivity p, and =itopk= size (ef) to compute the penalty D: D = ((1 - p) * (ef - p) * Δd) / (2 * p)
+- Filter-Aware termination condition:
+  - Standard graph-search termination can stop too early when many non-passing nodes occupy the candidate queue.
+  - FAVOR's filter-aware condition requires enough passing nodes in the =itopk= buffer before search terminates. The FAVOR paper requires at least 0.5 * =topk= passing nodes.
+
+The FAVOR paper shows that their system outperforms ACORN and post-filtering on a variety of datasets and selectivity levels, and achieves competitive performance with specialized index constructions for AND/OR ([[https://dl.acm.org/doi/abs/10.1145/3698822][UNG]]) and range queries ([[https://dl.acm.org/doi/10.1145/3639324][SeRF]]). A more detailed performance comparison can be viewed in section 6 of the FAVOR paper.
+
+** Why FAVOR might be a better fit for CAGRA?
+FAVOR may be a good fit for CAGRA because the penalty can be added directly to the child-distance path without changing the graph, parent expansion pattern, candidate-buffer layout, or top-k merge logic.
+
+The main GPU tradeoff is the added filter check for every scored child. Bitset checks are cheap compared with vector-distance computation, while UDF overhead depends on the filter implementation and its memory accesses. The impact therefore needs to be measured across graph degree, vector dimension, and selectivity.
+
+FAVOR also suggests making termination filter-aware, but this needs to be done carefully on GPU because the termination condition is checked every iteration. The FAVOR paper's ablation suggests that the modified termination condition helps, although the gain is smaller than the main exclusion-distance scoring change. For CAGRA, a practical termination check should therefore be cheap and should avoid repeatedly filtering the full itopk buffer every iteration.
+
+The main things to implement for FAVOR style filtering in CAGRA are:
+- computing Δd during index construction or via a function call over a pre-built graph
+- implementing selectivity estimation for UDF filters via sampling 1% of the dataset
+- computing the query-time penalty D
+- applying the penalty in the child-distance path for both =SINGLE_CTA= and =MULTI_CTA=
+- implementing an efficient filter-aware termination check.
+- future work: implementing brute-force scan for passing nodes for selectivity < 1%;
+
+I'll discuss possible implementation plans for each of the above in the section below.
+
+* FAVOR filtering for CAGRA implementation plan
+This section will outline an implementation plan that aims to support FAVOR style filtering within CAGRA while maintaining backwards compatibility and allowing for a benchmark to transparently choose between default CAGRA filtering and FAVOR filtering.
+** Public API and Backwards Compatibility
+Extend =cagra::search_params= from =cpp/include/cuvs/neighbors/cagra.hpp= to include FAVOR specific parameters as well as having the default filter mode be the original CAGRA filtering implementation:
+
+#+begin_src cpp
+  enum class filtering_mode : uint32_t {
+      DEFAULT = 0,
+      FAVOR = 1,
+  };
+
+  struct search_params: cuvs::neighbors::search_params {
+      // ...
+
+      filtering_mode filter_mode = filtering_mode::DEFAULT;
+
+      float favor_delta_d = -1.0f;
+      uint32_t max_retries = 0;
+  };
+#+end_src
+** Computing Δd
+Δd estimates how quickly distances increase between nearby neighbor ranks. Δd is calculated as the average normalized distance gap between the α-th nearest neighbor and β-th nearest neighbor, divided by β - α. FAVOR computes this once per graph during index construction and uses α = 10 and β = =efc= for HNSW. For CAGRA, the closest build-time analogue to =efc= is =intermediate_graph_degree=, but the final stored graph is pruned down to =graph_degree=, so the β-th neighbor needed for the FAVOR statistic may not be available directly from the stored CAGRA graph.
+
+Instead of adding Δd computation to the CAGRA index construction path, we can create a function that takes a prebuilt CAGRA graph and approximates each node's local neighborhood with a small n-step BFS from that node. The function would collect enough reachable candidates to estimate the α-th and β-th neighbor distances, compute the normalized gap for each node, and average the result across the dataset. The function call can return the result as well as save it to file for later reuse. Each CTA will then take care of calculating the Δd for a node.
+
+This keeps the initial implementation separate from graph construction, but the approximation quality should be validated experimentally against the build-time value taken from running FAVOR on the same dataset.
+
+The function should be exposed as part of CAGRA public API in =cpp/include/cuvs/neighbors/cagra.hpp= with the routing layer implemented in =cpp/src/neighbors/cagra.cuh= and the host function and the actual kernel in the =cpp/src/neighbors/detail/cagra= folder.
+
+The function signature in =cagra.hpp= could be:
+
+#+begin_src cpp
+  struct favor_delta_d_params {
+      uint32_t alpha = 10;
+      uint32_t beta = 127;
+      uint32_t bfs_depth = 2;
+  };
+
+  template <typename T, typename IdxT>
+  float compute_favor_delta_d(
+      raft::resources const& res,
+      favor_delta_d_params const& params,
+      cagra::index<T, IdxT> const& index,
+      const std::string& filename);
+
+  float load_favor_delta_d(const std::string& filename);
+#+end_src
+
+=compute_favor_delta_d= returns the scalar and writes it to filename. The =cagra::search= function does not load files automatically; instead it's the user's responsibility to load or compute Δd and sets it to =search_params::favor_delta_d=. If the user doesn't load and select FAVOR as the =filter_mode= then search should fail.
+
+** Selectivity estimation for UDF filters
+Selectivity estimation in FAVOR is used to calculate the distance penalty =D= for each query and may later support selecting a specialized low-selectivity search path. FAVOR estimates selectivity by sampling 1% of the dataset and reports approximately 1% relative error for this sampling rate in the experiments in Section 4.2 of their [[https://dl.acm.org/doi/10.1145/3802060][paper]].
+
+Instead of independently selecting 1% of the node IDs, we can divide the dataset into contiguous blocks and pseudo-randomly select enough blocks to cover approximately 1% of the nodes. Every node in a selected block is  evaluated by the UDF filter.
+
+This block-based approach replaces scattered node-ID accesses with contiguous accesses. It enables coalesced reads of =source_indices= and filter data that is indexed contiguously by node ID. However, a UDF can access arbitrary data, so coalescing is not guaranteed for all filter memory accesses. Nodes within the same block may also have correlated filter values, which can increase estimation error compared with true random row sampling. The difference must be evaluated experimentally.
+
+One CTA handles one sampled block for one query. Within the CTA, each thread evaluates the filter for one node at a time. When the sampled block contains more nodes than the CTA has threads, each thread processes additional nodes in a strided loop. Thread-local passing counts are reduced into one passing count for that CTA. Passing counts from different sampled-block CTAs are then accumulated for each query.
+
+To avoid block collision in each CTA, we need to generate distinct block IDs:
+
+#+begin_src cpp
+  num_dataset_blocks = ceil(dataset_size / sample_block_size)
+  num_sample_blocks  = ceil(0.01 * num_dataset_blocks)
+  block_id = (start + sample_block_index * stride) % num_dataset_blocks
+#+end_src
+
+=start= is derived from the sampling seed, and =stride= is coprime with =num_dataset_blocks=. This prevents collisions between sampled blocks without storing an array of sampled row IDs. The same sampled block should be used for every query to improve cache reuse and make estimates comparable.
+
+A CTA handles a =(query id, sampled block id)= pair, and the grid dimensionality is:
+#+begin_src text
+  gridDim.x = number of sampled blocks
+  gridDim.y = number of queries
+#+end_src
+This works because =gridDim.x= has a limit of =2^31 - 1= and gridDim.y has limit of 64k, both of which are much higher than the number of sampled blocks and queries in a batch respectively.
+
+
+Each CTA then performs the following:
+
+#+begin_src text
+  identify its query id and sampled block id
+
+  for each node assigned to the thread:
+    map the internal node ID through source_indices when needed
+    evaluate the query's UDF
+    increment the thread-local passing count when the row passes
+
+  reduce the thread-local counts into one CTA passing count
+
+  atomically add:
+  CTA passing count -> passing_counts[query_id]
+  nodes evaluated   -> sample_counts[query_id]
+#+end_src
+
+After the sampling kernel executes, a small normalization kernel calculates the query-selectivity array in parallel. To avoid a zero estimate, it computes =query_selectivity[query_id] = max(passing_counts[query_id] / sample_counts[query_id], 1 / sample_counts[query_id])=.
+
+The sampling kernel should be implemented in =cpp/src/neighbors/detail/cagra/jit_lto_kernels= because it must call the JIT-compiled UDF. Its host wrapper should be implemented in =cpp/src/neighbors/detail/cagra=. The wrapper initializes the count arrays, retrieves or compiles the cached JIT runner, configures the grid, and  launches the sampling and normalization kernels on the RAFT stream.
+
+=search_main_core= calls the host wrapper for FAVOR UDF filters before creating the FAVOR search plan. The resulting device query-selectivity array is passed to the FAVOR search kernel through the =favor_runtime_state= struct. The search plan and =favor_runtime_state= are discussed in the next section.
+** FAVOR Search Kernel Implementation
+This section focuses on =SINGLE_CTA= per query implementation. =MULTI_CTA= support can be added later after =SINGLE_CTA= has been shown to work.
+
+To implement the Favor search kernel, we would need to :
+  1. Make the search kernel aware of each query's penalty distance and configure the FAVOR-specific search-plan and runtime state.
+  2. Create a search kernel that applies the penalty during distance computation and uses a modified filter-aware termination condition
+
+*** FAVOR =search_plan= and Runtime State
+
+Addressing 1. requires modifying the =operator()= interface in =search_plan_impl= so that the kernel can receive per-query FAVOR runtime state. It also motivates creating a separate FAVOR =search_plan= that inherits  from =search_plan_impl=. Although a separate plan is not required to pass the penalty distance, it provides a clean way to configure FAVOR-specific memory requirements, select the FAVOR JIT kernel, and keep the current CAGRA plans unchanged. The plan implementation will be in =cpp/src/neighbors/detail/cagra=, next to the implementation for the single and multi ctas plan.
+
+In CAGRA, =factory.cuh= creates a =search_plan= once for each public =cagra::search= invocation  based on =search_params::algo=. The plan configures search properties shared by the query batch, such as =itopk_size=, buffer sizes, hash-table sizes, and kernel launch parameters. =search_main_core= in =cagra_search.cuh= then reuses the same plan for each =max_queries=-sized query tile.
+
+=search_plan_impl::operator()= defines the common polymorphic search launch function. Concrete plan implementations, such as =single_cta_search::search= and =multi_cta_search::search=, implement =operator()= and invoke the appropriate search kernel launcher, which runs the selected JIT-compiled search kernel for the current query tile. We need to modify the =operator()= in the base =search_plan_impl= struct because the FAVOR search kernel needs access to the estimated selectivity of _EACH_ query to calculate the penalty distance. Therefore, =search_plan_impl::operator()= needs to be modified to accept a struct containing FAVOR specifc parameters for the current batch of queries being evaluated.
+
+The struct can be:
+#+begin_src cpp
+  struct favor_runtime_state {
+      bool enabled = false;
+      // pointer to array of float that has estimated selectivity of queries in batch
+      const float* estimated_selectivity_arr = nullptr;
+  };
+#+end_src
+
+For each =max_queries=-sized tile, =search_main_core= passes =estimated_selectivity_arr + qid= in =favor_runtime_state=.
+
+Then in =search_plan_impl= in =search_plan.cuh=:
+#+begin_src cpp
+  virtual void operator()(
+  // previous params
+  favor_runtime_state favor_state = {}) {};
+#+end_src
+
+Then all concrete plans (example: =SINGLE_CTA= is =single_cta_search::search=) update their override signature to include the extra final argument.
+*** Penalty Distance Support in Search Kernel
+
+Addressing 2. requires writing a new search kernel. Compared to the original CAGRA search kernel, the main difference is that the FAVOR kernel won't invalidate any nodes that don't pass the filter, and instead just adds the penalty distance to these nodes.
+
+At the beginning of the FAVOR kernel, thread 0 of each CTA calculates the query's penalty distance =D= using =favor_delta_d= from =search_params=, the query's estimated selectivity from =favor_runtime_state=, and =itopk_size=. It writes =D= to a shared scalar so that all distance-computation teams in the CTA can reuse it. The existing initialization synchronization can make this value visible without introducing a separate synchronization phase. An exact bitset selectivity of zero can skip search because no passing nodes exist.
+
+The filter check and penalty should be fused into the distance computation so that each candidate is written to the shared candidate buffer only once. This requires FAVOR-specific variants of =compute_distance_to_child_nodes_jit= and =compute_distance_to_random_nodes_jit= that also accept the =sample_filter= function, =query_id=, =source_indices_ptr=, and penalty distance =D=. These variants can reside in =cpp/src/neighbors/detail/cagra/jit_lto_kernels/device_common_jit.cuh= next to the original distance comparison functions.
+
+Since multiple threads work together to calculate one distance, only one thread in the team should map the source ID and check the UDF. The result can then be shared with the rest of the team before applying the penalty.
+
+*** Filter-Aware Termination and Bounded Retries
+
+Support for FAVOR's termination condition is a trickier subject. CAGRA's current termination condition is filter-unaware: search terminates when there are no unexpanded nodes in the =itopk= buffer or when =max_iterations= is reached. FAVOR's termination is filter-aware, requiring that the distance-based termination condition is satisfied and that enough passing nodes are in the =itopk= buffer before search is allowed to terminate. This has the effect of extending search until there are enough passing nodes.
+
+A faithful adaptation of FAVOR's termination condition to CAGRA would be very convoluted due to the fundamentally different traversal algorithms and data structures used in the 2 approaches:
+- The FAVOR implementation adapts the HNSW search procedure from =hnswlib=, which maintains two heaps: =top_candidates=, a result buffer bounded by =ef=, and =candidate_set=, a frontier of discovered but unexpanded nodes. HNSW compares the closest unexpanded node in =candidate_set= with the worst retained node in top_candidates. Standard HNSW terminates when the closest remaining candidate is farther than the current lower bound and top_candidates contains =ef= entries. FAVOR instead terminates when the closest remaining candidate is farther than 0.95 times the lower bound and more than half of the requested =topk= results in =top_candidates= satisfy the filter.
+- CAGRA's =itopk= buffer does the job of both heaps with the tradeoff of losing historical information on which nodes to expand next: it can only expand nodes that are in the =itopk= buffer after sorting itopk the candidate buffers.
+
+Any attempt of using a historical =candidate_set= like in HNSW would fundamentally change CAGRA's search procedure -- which uses the optimized shared memory buffer containing both =itopk= and candidate scratch buffer -- and thus would incur a lot of implementation overhead and might degrade unfiltered search performance.
+
+Instead, to continue search until enough passing result nodes are found, we can adopt a bounded retry strategy conceptually similar to iterative filtered index scans used by relational DBMS and cloud systems (pgvector, Milvus, AnalyticDB-V). Retries occur inside the CAGRA kernel and use passing results from previous rounds as new graph-search seeds:
+- Add =max_retries= to =search_params= with a default value of =0=. A search round is one complete CAGRA traversal containing up to =max_iterations= graph-expansion iterations. =max_retries = 0= runs only the initial round, while =max_retries = 1= permits one initial round and one retry.
+- Maintain a small persistent passing-result accumulator containing the best =k= unique passing =(internal_node_id, distance)= pairs found across all rounds. This prevents passing results from an earlier round from being lost or evicted during a later traversal.
+- At the end of each round, evaluate the filter over the final =itopk= and merge its passing entries into the persistent accumulator.
+- Before starting a retry, reset the visited hash table, candidate scratch buffer, itopk buffer, termination flag, and per-round iteration counter. Clear the expanded MSB from the preserved internal node IDs and seed the new =itopk= with passing nodes from the accumulator.
+- If a round does not change the passing-result accumulator, stop retrying because the next round would start from the same nodes and likely repeat the same work.
+- Search completes when the accumulator contains enough passing results or when =max_retries= is reached.
+
+One additional benefit of this iterative-post filtering approach is that it can also be applied to the default CAGRA filtering path.
+
+Tradeoffs: This approach is simpler to implement and will preserve the original CAGRA traversal algorithm, thus also preserving unfiltered search performance. The downside is that there will inevitably be repeated work compared to Favor's termination condition.
+
+** Future work: Brute-Force Scan for Low Selectivity
+At very low query selectivity, brute-force search may be more efficient than FAVOR graph traversal. A future  implementation could use the estimated query selectivity to select a brute-force path below a configurable threshold, such as 1%.
+
+One option is to reuse the brute-force KNN implementation already present in cuVS. Because cuVS brute-force filtering does not directly accept a CAGRA UDF, the UDF results would first need to be materialized as a temporary filter. A query-independent UDF could produce a bitset, while a query-dependent UDF would require a bitmap containing one filter row per query. This materialization could be performed one internal query tile at a time to limit memory usage.
+
+Another option is to implement a fused kernel that evaluates the UDF and computes a node's distance only when it passes. Multiple CTAs could scan different dataset chunks and merge partial top-k results. This avoids materializing a bitmap but requires a new brute-force implementation.
+
+The initial FAVOR implementation will send all filtered queries through FAVOR graph search, including bounded retries when enabled. Supporting a brute-force fallback would complicate this control flow: after selectivity estimation, =search_main_core= would need to identify which queries use brute force and which use graph search, execute the two groups separately, and write their results into the correct rows of the original output. This query-splitting behavior and the choice between reusing cuVS brute-force KNN and implementing a fused scan are intentionally left for future design work.
+
+** Implementation and Testing Phases
+
+The implementation should be broken into phases so that each FAVOR component can be tested separately:
+
+1. Add the public API and FAVOR plan. Verify that the default CAGRA path remains unchanged and invalid FAVOR configurations fail.
+2. Implement Δd computation and file loading. Compare the GPU result with a small CPU implementation.
+3. Implement exact bitset selectivity and block-based UDF sampling. Compare sampled estimates with exact selectivity, including query-dependent filters and batches larger than =max_queries=.
+4. Implement FAVOR =SINGLE_CTA= search. First test it with exact selectivity, then connect the sampling kernel. Verify that the penalty is applied to initial and child nodes and that returned nodes pass the filter.
+5. Implement bounded retries. Test result accumulation, duplicate removal, =max_retries = 0/1=, and queries with fewer than =top_k= passing nodes.
+6. After =SINGLE_CTA= works, add FAVOR support to =MULTI_CTA= and test its result merging and recall against =SINGLE_CTA=.
+7. Run the existing CAGRA tests with FAVOR disabled, then run the JAG workloads described in the benchmarking section.
+
+The brute-force fallback remains future work and is not required for the initial implementation.
+
+* Benchmarking
+The benchmark will use all datasets and filter workloads available from the [[https://arxiv.org/abs/2602.10258][JAG paper]] and [[https://github.com/xuhaike/JAG][JAG codebase]]. JAG is chosen because it provides an extensive filtered-search evaluation covering several datasets and scales (1M-25M), four filter types (Label, Range, Subset, and Boolean), and a wide range of query selectivities. This makes it suitable for evaluating whether FAVOR improves CAGRA consistently rather than only for one filter or selectivity regime. JAG is used only as the source of benchmark data and filters; its indexing and search algorithms are not part of this implementation.
+
+For each dataset and filter workload, we implement a CAGRA UDF that reproduces the JAG predicate and validate it against the provided filtered ground truth. If exact ground truth is unavailable, we can generate it by applying the filter to every base vector and performing exact search over the passing vectors.
+
+Build one attribute-independent CAGRA graph per dataset using recommended cuVS/JAG parameters (detailed in the Appendix section of the JAG paper). Then we need to verify that it can reach at least 95% unfiltered =recall@10=, then reuse the same graph for every filter workload and search configuration on that dataset.
+
+The main comparison is against default CAGRA filtering using the same graph, queries, and UDFs. The main benchmarking criteria are throughput (QPS vs =recall@10=), selectivity-estimation error, selectivity-estimation overhead, and end-to-end search time. The block-based 1% estimator should also be compared with exact selectivity and true-random 1% sampling to measure the error introduced by block sampling.
