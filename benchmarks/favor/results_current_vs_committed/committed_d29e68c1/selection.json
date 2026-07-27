@@ -1,0 +1,7 @@
+{
+  "recall_target": 0.9,
+  "recall_tolerance": 0.01,
+  "candidates": {},
+  "winner": null,
+  "conclusion": "no static formula satisfies the recall and QPS coverage constraints"
+}

@@ -1,0 +1,842 @@
+#+TITLE: FAVOR-Style Bitset Filtering for CAGRA
+#+AUTHOR: Nam Anh Dang
+#+OPTIONS: toc:2
+
+* Purpose and scope
+
+This document records the plan used to implement FAVOR-style filtering in
+CAGRA, the changes that were actually made, and the procedure used to reproduce
+the SIFT-1M benchmarks and Pareto-frontier plots.
+
+The implemented scope is intentionally narrower than the full design in
+=plan.org=:
+
+- only bitset filters are supported;
+- selectivity is exact and shared by the whole query batch;
+- only CAGRA =SINGLE_CTA= search is supported;
+- there is no UDF selectivity estimator or per-query runtime-state structure;
+- there is no FAVOR-specific termination condition, bounded retry, or
+  =MULTI_CTA= implementation;
+- default CAGRA filtering remains the default.
+
+The external reference implementation used while interpreting the algorithm is
+the FAVOR source tree at =/users/namanh/FAVOR=. The GPU implementation here is
+not copied from that CPU/HNSW code: it adapts the scoring idea to CAGRA's
+existing shared-memory search loop.
+
+* Plan
+
+The implementation followed this order:
+
+1. Build one attribute-independent SIFT-1M CAGRA graph with graph degree 32 and
+   intermediate graph degree 64.
+2. Compute the graph/dataset-specific FAVOR =delta_d= value, save it in a
+   validated sidecar, and verify that the sidecar can be loaded.
+3. Add an opt-in FAVOR search mode while leaving default CAGRA behavior as the
+   API default.
+4. For a bitset, count passing graph rows once on the host-side search path and
+   pass the resulting shared rejection rate through the existing
+   =filtering_rate= field.
+5. Select a separate FAVOR =SINGLE_CTA= JIT kernel.
+6. Compute one penalty value per query CTA and reuse it for all candidates
+   handled by that CTA.
+7. Fuse the bitset check and penalty into initial-node and child-node distance
+   calculation. Do not add a separate post-distance synchronization and
+   read/modify/write phase.
+8. Preserve rejected nodes for graph traversal by assigning their penalized
+   distance. Apply the bitset when producing final results.
+9. Add benchmark support for persistent bitsets, matched default/FAVOR
+   configurations, and delta-d sidecar loading.
+10. Compare recall/throughput for 10,000 queries and recall/batch-latency for
+    10 queries at 1%, 10%, 50%, and 90% selectivity.
+
+* Search behavior
+
+** Selectivity and penalty
+
+For this bitset-only implementation, let:
+
+- =p= be exact selectivity, the fraction of graph rows whose bit is set;
+- =r = 1 - p= be the rejection/filtering rate;
+- =ef= be CAGRA's internal top-k size;
+- =delta_d= be the graph/dataset statistic loaded from the sidecar.
+
+The kernel receives =r= through =search_params::filtering_rate= and computes:
+
+#+begin_src text
+p = 1 - filtering_rate
+D = filtering_rate * (ef - p) * delta_d / (2 * p * ef)
+#+end_src
+
+Thread 0 computes =D= once at CTA initialization and writes it to shared
+memory. The synchronization already used by initialization makes it visible to
+the distance-computation teams, so this does not add a standalone
+synchronization phase.
+
+An exact selectivity of zero is detected before kernel launch. Search is
+skipped and the output is filled with invalid indices and maximum distances.
+
+** Fused candidate scoring
+
+FAVOR-specific variants of the initial-random-node and child-node distance
+functions perform these operations together:
+
+#+begin_src text
+compute vector distance
+map the internal graph ID to the source ID when necessary
+have one lane in the distance team check the bitset
+share that result within the team
+add D when the row does not pass
+write the candidate and final score once
+#+end_src
+
+Rejected nodes are therefore retained as penalized traversal candidates.
+Default CAGRA instead follows its existing invalidation path. The compile-time
+=FAVOR= specialization keeps the two inner search paths separate.
+
+** Final filtering and the MSB sentinel correction
+
+CAGRA uses the most-significant index bit to mark nodes whose distance has
+already been calculated/expanded. Final compaction clears this bit before
+interpreting an index.
+
+The invalid sentinel is an all-one index. Clearing its MSB changes its numeric
+representation. The old comparison cleared the candidate's MSB but compared it
+with the unmodified sentinel, causing an invalid entry to be counted as valid:
+
+#+begin_src cpp
+(candidate & ~msb_mask) == invalid_index
+#+end_src
+
+The corrected comparison normalizes both sides:
+
+#+begin_src cpp
+(candidate & ~msb_mask) == (invalid_index & ~msb_mask)
+#+end_src
+
+Without this correction, rejected rows could occupy final output positions and
+FAVOR recall plateaued, especially at higher selectivity. The compaction code
+is shared, so this is also a correctness fix for default filtered CAGRA when an
+invalid sentinel reaches that stage.
+
+* Implemented changes
+
+** Public API and delta-d support
+
+- =cpp/include/cuvs/neighbors/cagra.hpp=
+  - added =filtering_mode { DEFAULT, FAVOR }=;
+  - appended =filter_mode= and =favor_delta_d= to =cagra::search_params=;
+  - kept =DEFAULT= as the default value;
+  - exposes =favor_delta_d_params= and compute/save/load APIs.
+- =cpp/src/neighbors/cagra_favor_delta_d.cu= and routing in
+  =cpp/src/neighbors/cagra.cuh=
+  - compute =delta_d= from a prebuilt graph using bounded BFS neighborhoods;
+  - store metadata and the scalar in a sidecar;
+  - validate graph, dataset, metric, dimensions, degree, parameters, and file
+    integrity when loading.
+- =examples/cpp/src/cagra_favor_compare.cu=
+  - computes CAGRA =delta_d=, compares it with a matched FAVOR reference run,
+    writes the sidecar, reloads it, and verifies exact scalar preservation.
+
+FAVOR search rejects missing/non-finite delta-d values, a non-bitset filter,
+and unsupported search algorithms.
+
+** Search routing and JIT kernel
+
+- =cpp/src/neighbors/cagra.cuh=
+  - counts exact bitset matches;
+  - places the shared rejection rate in =filtering_rate=;
+  - handles an empty bitset without launching search;
+  - rejects FAVOR for no-filter and UDF-filter calls.
+- =cpp/src/neighbors/detail/cagra/search_plan.cuh= and
+  =search_single_cta.cuh=
+  - select FAVOR only for =SINGLE_CTA=;
+  - reserve one shared distance scalar for the CTA penalty;
+  - preserve the existing default plan.
+- =cpp/src/neighbors/detail/cagra/jit_lto_kernels/device_common_jit.cuh=
+  - adds fused FAVOR variants for initial random candidates and graph
+    children.
+- =cpp/src/neighbors/detail/cagra/jit_lto_kernels/search_single_cta_jit.cuh=
+  - specializes the shared search core at compile time;
+  - computes the CTA penalty;
+  - routes scoring to the fused FAVOR functions;
+  - leaves default parent invalidation under =!FAVOR=;
+  - filters and compacts the final result;
+  - contains the normalized-MSB sentinel fix.
+- =search_single_cta_favor_kernel.cu.in=, =kernel_def.hpp=,
+  =cagra_jit_launcher_factory.hpp=, =search_single_cta_planner.hpp=,
+  =search_single_cta_kernel_launcher_jit.cuh=, and
+  =cagra_fragments.hpp=
+  - define, build, link, select, and launch the FAVOR JIT/LTO kernel variants.
+- =cpp/CMakeLists.txt=
+  - includes FAVOR kernel generation in the build.
+
+** Tests
+
+=cpp/tests/neighbors/ann_cagra/test_favor_search.cu= covers:
+
+- implicit default mode equals explicit =filtering_mode::DEFAULT=;
+- an accept-all FAVOR filter matches default search;
+- FAVOR returns only passing rows;
+- final top-k compacts rejected rows even when =favor_delta_d= is zero;
+- an empty filter returns sentinels without searching;
+- missing delta-d and non-bitset FAVOR calls fail.
+
+The existing delta-d tests cover GPU/CPU calculation agreement, persistence,
+metadata mismatch, malformed files, and invalid inputs.
+
+** cuVS benchmark integration
+
+- dataset configuration accepts =filter_bitset_file= and loads the same
+  persistent bitset for matched methods;
+- CAGRA search configuration accepts =filter_mode=, =favor_delta_d=, and
+  =favor_delta_d_file= plus its alpha/beta/BFS-depth metadata;
+- the benchmark attaches the dense dataset to the deserialized graph before
+  loading and validating the delta-d sidecar;
+- labels record filter mode and delta-d metadata;
+- old configurations without these fields continue to select default CAGRA.
+
+** Benchmark scripts
+
+- =prepare_sift_filters.py=
+  - deterministically creates exact 1%, 10%, 50%, and 90% bitsets;
+  - computes exact filtered ground truth for all SIFT queries.
+- =generate_configs.py=
+  - creates matched default/FAVOR configurations;
+  - sweeps =itopk={32,64,128,256,512}= and
+    =search_width={1,2,4}=;
+  - produces 30 configurations for each selectivity and batch size.
+- =run_benchmarks.sh=
+  - runs low-batch latency and large-batch throughput experiments;
+  - uses one measured benchmark repetition;
+  - validates exactly 30 completed configuration rows before accepting a file;
+  - regenerates the plots and summary CSV.
+- =plot_results.py=
+  - computes a separate Pareto frontier for each method/workload;
+  - writes one clearly labelled two-panel figure per selectivity;
+  - writes all 240 measurements to a summary CSV.
+
+* Reproducing the experiment
+
+All commands below are run from the repository root:
+
+#+begin_src sh
+cd /users/namanh/cuvs-filter
+#+end_src
+
+The commands use the existing =cuvs= micromamba environment. On the A30 used
+for this experiment, CUDA architecture =80-real= was selected. Change it for a
+different GPU.
+
+** Build cuVS, tests, and cuvs-bench
+
+Use all available build threads:
+
+#+begin_src sh
+PARALLEL_LEVEL=$(nproc) micromamba run -n cuvs ./build.sh \
+  libcuvs tests bench-ann -n \
+  --limit-tests=NEIGHBORS_ANN_CAGRA_FAVOR_SEARCH_TEST \
+  --limit-bench-ann=CUVS_CAGRA_ANN_BENCH \
+  --gpu-arch="80-real"
+#+end_src
+
+To build the delta-d comparison example as well:
+
+#+begin_src sh
+PARALLEL_LEVEL=$(nproc) micromamba run -n cuvs ./build.sh \
+  examples -n --gpu-arch="80-real"
+#+end_src
+
+** Required SIFT files
+
+The benchmark expects:
+
+#+begin_src text
+datasets/sift-128-euclidean/base.fbin
+datasets/sift-128-euclidean/query.fbin
+datasets/sift-128-euclidean/cagra_g32_ig64.index
+datasets/sift-128-euclidean/cagra_g32_ig64.index.delta_d
+datasets/sift-128-euclidean/favor/filter_s{01,10,50,90}.bin
+datasets/sift-128-euclidean/favor/groundtruth_s{01,10,50,90}.ibin
+#+end_src
+
+The current graph is approximately 128 MB and the delta-d sidecar is 80 bytes.
+The stored experiment uses =alpha=10=, =beta=64=, and BFS depth 2.
+
+** Create the graph first
+
+Generate the benchmark configurations. This does not access the delta-d file:
+
+#+begin_src sh
+micromamba run -n cuvs python benchmarks/favor/generate_configs.py \
+  --output-dir benchmarks/favor/results/configs \
+  --delta-d-file="$PWD/datasets/sift-128-euclidean/cagra_g32_ig64.index.delta_d"
+#+end_src
+
+For a fresh experiment, build the graph from one generated configuration:
+
+#+begin_src sh
+micromamba run -n cuvs env \
+  LD_PRELOAD="$PWD/cpp/build/libcuvs.so" \
+  ./cpp/build/bench/ann/CUVS_CAGRA_ANN_BENCH \
+  --build \
+  --threads=1 \
+  --data_prefix="$PWD/datasets" \
+  --index_prefix="$PWD/datasets" \
+  benchmarks/favor/results/configs/sift_s01_nq10.json
+#+end_src
+
+The configuration names the output
+=datasets/sift-128-euclidean/cagra_g32_ig64.index= and specifies NN-descent,
+graph degree 32, and intermediate graph degree 64. Add =--force= only when an
+existing graph is intentionally being replaced.
+
+** Compute and save delta-d second
+
+Delta-d must be computed after graph construction because its sidecar is bound
+to the graph and attached dataset. The essential API sequence is:
+
+#+begin_src cpp
+cagra::deserialize(res, graph_path, &index);
+index.update_dataset(res, dataset_view);
+auto params = cagra::favor_delta_d_params{10, 64, 2};
+auto delta_d = cagra::compute_favor_delta_d(res, params, index);
+cagra::save_favor_delta_d(res, graph_path + ".delta_d", params, index, delta_d);
+auto checked = cagra::load_favor_delta_d(
+  res, graph_path + ".delta_d", params, index);
+#+end_src
+
+=examples/cpp/src/cagra_favor_compare.cu= implements this sequence and also
+has a compute-only mode:
+
+#+begin_src sh
+micromamba run -n cuvs env \
+  LD_PRELOAD="$PWD/cpp/build/libcuvs.so" \
+  ./examples/cpp/build/CAGRA_FAVOR_COMPARE \
+  "$PWD/datasets/sift-128-euclidean/base.fbin" \
+  "$PWD/datasets/sift-128-euclidean/cagra_g32_ig64.index" \
+  2
+#+end_src
+
+It can optionally compare the result with a matched JSON result from the FAVOR
+reference implementation:
+
+#+begin_src sh
+micromamba run -n cuvs env \
+  LD_PRELOAD="$PWD/cpp/build/libcuvs.so" \
+  ./examples/cpp/build/CAGRA_FAVOR_COMPARE \
+  "$PWD/datasets/sift-128-euclidean/base.fbin" \
+  "$PWD/datasets/sift-128-euclidean/cagra_g32_ig64.index" \
+  /path/to/matched_favor_delta_d.json \
+  /path/to/delta_d_comparison.json \
+  2
+#+end_src
+
+This writes
+=datasets/sift-128-euclidean/cagra_g32_ig64.index.delta_d= and immediately
+reloads it. The matched reference JSON is used for validation/comparison; the
+CAGRA scalar itself is computed from the CAGRA graph.
+
+** Create exact bitsets and filtered ground truth
+
+This step may take time because it performs exact filtered search for all four
+selectivities:
+
+#+begin_src sh
+micromamba run -n cuvs python benchmarks/favor/prepare_sift_filters.py \
+  --dataset-dir "$PWD/datasets/sift-128-euclidean" \
+  --output-dir "$PWD/datasets/sift-128-euclidean/favor"
+#+end_src
+
+The default seed is fixed, so the four filters are nested deterministic subsets
+of the same row permutation. A manifest records the seed and passing counts.
+
+** Run all benchmarks and make plots
+
+The runner performs one measured repetition for each configuration. Google
+Benchmark may execute multiple timed iterations inside that repetition to
+obtain a stable measurement. A short warmup keeps one-time JIT linking/module
+loading out of the sole reported repetition.
+
+#+begin_src sh
+micromamba run -n cuvs benchmarks/favor/run_benchmarks.sh \
+  "$PWD/datasets" \
+  "$PWD/benchmarks/favor/results"
+#+end_src
+
+Complete JSON files are reused. Force a complete rerun with:
+
+#+begin_src sh
+micromamba run -n cuvs env FAVOR_FORCE_RERUN=1 \
+  benchmarks/favor/run_benchmarks.sh \
+  "$PWD/datasets" \
+  "$PWD/benchmarks/favor/results"
+#+end_src
+
+To remake plots from existing raw JSON without rerunning search:
+
+#+begin_src sh
+micromamba run -n cuvs python benchmarks/favor/plot_results.py \
+  --result-dir "$PWD/benchmarks/favor/results"
+#+end_src
+
+Outputs:
+
+#+begin_src text
+benchmarks/favor/results/raw/sift_s{01,10,50,90}_nq10.json
+benchmarks/favor/results/raw/sift_s{01,10,50,90}_nq10000.json
+benchmarks/favor/results/favor_benchmark_summary.csv
+benchmarks/favor/results/plots/sift_selectivity_{01,10,50,90}.png
+#+end_src
+
+The 10,000-query panel reports throughput in queries/second. The 10-query panel
+reports whole-batch latency in milliseconds.
+
+** Run focused tests
+
+#+begin_src sh
+micromamba run -n cuvs env \
+  LD_PRELOAD="$PWD/cpp/build/libcuvs.so" \
+  ./cpp/build/gtests/NEIGHBORS_ANN_CAGRA_FAVOR_SEARCH_TEST \
+  --gtest_color=no
+#+end_src
+
+The current focused suite contains ten tests: six float tests and four =uint8=
+tests. The =uint8= cases cover explicit-default compatibility, accept-all
+equivalence, passing-only final results, and zero-penalty compaction. The
+=LD_PRELOAD= above is important because the test executable's environment may
+otherwise resolve a previously installed =libcuvs.so= before the local build.
+
+* Current benchmark interpretation
+
+With the graph and sweep above:
+
+- at 1% selectivity, FAVOR has a large advantage because penalized rejected
+  nodes remain available as bridges through an otherwise highly fragmented
+  filtered graph;
+- at 10% and above, default CAGRA has enough passing nodes for effective
+  traversal, while FAVOR still pays for per-candidate bitset checks and
+  penalized-candidate competition;
+- at 50% and 90%, both methods reach approximately 0.999 recall and the small
+  performance difference is primarily FAVOR overhead;
+- the observed crossover on this dataset lies between 1% and 10%, but it is not
+  assumed to generalize to other graphs, dimensions, or datasets.
+
+Maximum measured FAVOR recall in the final one-repetition sweep was:
+
+| Selectivity | 10,000-query throughput run | 10-query latency run |
+|-------------+-----------------------------+----------------------|
+|          1% |                     0.95473 |              0.95567 |
+|         10% |                     0.98981 |              0.98913 |
+|         50% |                     0.99940 |              0.99952 |
+|         90% |                     0.99939 |              0.99937 |
+
+* GIST-1M reproduction and results
+
+The same experiment was also run on =datasets/gist-960-euclidean=. Its graph
+uses degree 32 and intermediate degree 64. Its independently computed delta-d
+is =0.0144914= with alpha 10, beta 64, and BFS depth 2.
+
+The standard GIST files in this workspace contain 1,000 queries. To exercise a
+real 10,000-row large-batch launch, the preparation script repeats those 1,000
+queries ten times and repeats their exact filtered ground truth in the same
+order. This measures a 10,000-query GPU batch but can have more favorable query
+cache behavior than 10,000 unique queries.
+
+Create the 10,000-row query file, exact bitsets, and ground truth with:
+
+#+begin_src sh
+micromamba run -n cuvs python benchmarks/favor/prepare_sift_filters.py \
+  --dataset-dir "$PWD/datasets/gist-960-euclidean" \
+  --output-dir "$PWD/datasets/gist-960-euclidean/favor" \
+  --benchmark-query-count=10000 \
+  --benchmark-query-file=query_10000.fbin
+#+end_src
+
+Run the complete GIST sweep and make the plots with:
+
+#+begin_src sh
+micromamba run -n cuvs env FAVOR_FORCE_RERUN=1 \
+  benchmarks/favor/run_benchmarks.sh \
+  "$PWD/datasets" \
+  "$PWD/benchmarks/favor/results_gist" \
+  gist-960-euclidean \
+  gist \
+  GIST-1M \
+  query_10000.fbin
+#+end_src
+
+GIST outputs are:
+
+#+begin_src text
+benchmarks/favor/results_gist/raw/gist_s{01,10,50,90}_nq10.json
+benchmarks/favor/results_gist/raw/gist_s{01,10,50,90}_nq10000.json
+benchmarks/favor/results_gist/favor_benchmark_summary.csv
+benchmarks/favor/results_gist/plots/gist_selectivity_{01,10,50,90}.png
+#+end_src
+
+Maximum measured recall was:
+
+| Selectivity | Throughput default | Throughput FAVOR | Latency default | Latency FAVOR |
+|-------------+--------------------+------------------+-----------------+---------------|
+|          1% |            0.76210 |          0.82210 |         0.76179 |       0.82548 |
+|         10% |            0.96290 |          0.95650 |         0.96169 |       0.95377 |
+|         50% |            0.98090 |          0.98070 |         0.98146 |       0.98095 |
+|         90% |            0.98551 |          0.98500 |         0.98527 |       0.98474 |
+
+The qualitative result agrees with SIFT: FAVOR has a clear recall/Pareto
+advantage at 1%, while the methods converge by 10% and are nearly identical at
+50% and 90%. On GIST, FAVOR is often slightly faster in low-batch latency at
+matched parameters, while default generally has the stronger 10% throughput
+frontier.
+
+* BIGANN-1M and BIGANN-10M reproduction and results
+
+BIGANN is stored as 128-dimensional =uint8= matrices. Both logical datasets use
+the same 10M =.u8bin= base file through symbolic links, so the 1M dataset does
+not duplicate the vectors. Its dataset configuration applies
+=subset_size: 1000000=.
+
+Generate exact unfiltered ground truth for the logical 1M subset with:
+
+#+begin_src sh
+micromamba run -n cuvs python benchmarks/favor/prepare_sift_filters.py \
+  --dataset-dir "$PWD/datasets/bigann-1M" \
+  --output-dir "$PWD/datasets/bigann-1M/favor" \
+  --base-file base.10M.u8bin \
+  --query-file query.public.10K.u8bin \
+  --dtype uint8 \
+  --subset-size 1000000 \
+  --unfiltered-only \
+  --k 100
+#+end_src
+
+Build the requested degree-32/intermediate-degree-64 graphs:
+
+#+begin_src sh
+env LD_PRELOAD="$PWD/cpp/build/libcuvs.so" \
+  cpp/build/bench/ann/CUVS_CAGRA_ANN_BENCH \
+  --build --data_prefix="$PWD/datasets" --index_prefix="$PWD/datasets" \
+  benchmarks/favor/results_bigann_1m/configs/bigann1m_build.json
+
+env LD_PRELOAD="$PWD/cpp/build/libcuvs.so" \
+  cpp/build/bench/ann/CUVS_CAGRA_ANN_BENCH \
+  --build --data_prefix="$PWD/datasets" --index_prefix="$PWD/datasets" \
+  benchmarks/favor/results_bigann_10m/configs/bigann10m_build.json
+#+end_src
+
+The independently computed delta-d values are =1376.73= for BIGANN-1M and
+=1078.06= for BIGANN-10M, using alpha 10, beta 64, and BFS depth 2. The
+comparison utility now accepts =uint8= input and an optional logical row count:
+
+#+begin_src sh
+examples/cpp/build/CAGRA_FAVOR_COMPARE_LOCAL \
+  datasets/bigann-1M/base.10M.u8bin \
+  datasets/bigann-1M/cagra_g32_ig64.index 2 1000000
+
+examples/cpp/build/CAGRA_FAVOR_COMPARE_LOCAL \
+  datasets/bigann-10M/base.10M.u8bin \
+  datasets/bigann-10M/cagra_g32_ig64.index 2
+#+end_src
+
+Generate exact bitsets and filtered ground truth:
+
+#+begin_src sh
+micromamba run -n cuvs python benchmarks/favor/prepare_sift_filters.py \
+  --dataset-dir "$PWD/datasets/bigann-1M" \
+  --output-dir "$PWD/datasets/bigann-1M/favor" \
+  --base-file base.10M.u8bin --query-file query.public.10K.u8bin \
+  --dtype uint8 --subset-size 1000000
+
+micromamba run -n cuvs python benchmarks/favor/prepare_sift_filters.py \
+  --dataset-dir "$PWD/datasets/bigann-10M" \
+  --output-dir "$PWD/datasets/bigann-10M/favor" \
+  --base-file base.10M.u8bin --query-file query.public.10K.u8bin \
+  --dtype uint8
+#+end_src
+
+Run the sweeps and plots:
+
+#+begin_src sh
+benchmarks/favor/run_benchmarks.sh \
+  datasets benchmarks/favor/results_bigann_1m \
+  bigann-1M bigann1m BIGANN-1M \
+  query.public.10K.u8bin base.10M.u8bin uint8 1000000
+
+benchmarks/favor/run_benchmarks.sh \
+  datasets benchmarks/favor/results_bigann_10m \
+  bigann-10M bigann10m BIGANN-10M \
+  query.public.10K.u8bin base.10M.u8bin uint8 0
+#+end_src
+
+Maximum measured throughput-run recall was:
+
+| Dataset    | Method  | 1%      | 10%     | 50%     | 90%     |
+|------------+---------+---------+---------+---------+---------|
+| BIGANN-1M  | Default | 0.77247 | 0.99831 | 0.99983 | 0.99990 |
+| BIGANN-1M  | FAVOR   | 0.95282 | 0.82620 | 0.99883 | 0.99977 |
+| BIGANN-10M | Default | 0.78604 | 0.99452 | 0.99878 | 0.99915 |
+| BIGANN-10M | FAVOR   | 0.91130 | 0.70441 | 0.99395 | 0.99883 |
+
+FAVOR again has a strong sparse-filter advantage at 1%. Unlike SIFT and GIST,
+the fixed FAVOR penalty is poorly calibrated for BIGANN at 10%, especially at
+10M scale, and its maximum recall within this sweep is substantially below
+default. At 50% the methods converge only at larger search budgets; at 90%
+they are nearly identical at high recall.
+
+** One-to-eight-percent crossover sweep
+
+The exact crossover was measured at every integer selectivity from 1% through
+8% on SIFT-1M, GIST-1M, BIGANN-1M, and BIGANN-10M. Predicates use the same
+deterministic permutation seed as the main experiment and are nested: each
+higher-selectivity bitset contains every passing row from the lower one.
+
+The preparation utility accepts an explicit list without replacing compatible
+entries already present in =manifest.json=:
+
+#+begin_src sh
+python benchmarks/favor/prepare_sift_filters.py \
+  --dataset-dir datasets/sift-128-euclidean \
+  --output-dir datasets/sift-128-euclidean/favor \
+  --selectivities 0.02 0.03 0.04 0.05 0.06 0.07 0.08
+#+end_src
+
+The benchmark runner also accepts explicit matrices through environment
+variables. The crossover run used one repetition and the common high-recall
+matrix =itopk=512=, =search_width={1,2,4}=:
+
+#+begin_src sh
+FAVOR_SELECTIVITIES='1 2 3 4 5 6 7 8' \
+FAVOR_ITOPK_VALUES='512' \
+FAVOR_SEARCH_WIDTHS='1 2 4' \
+benchmarks/favor/run_benchmarks.sh \
+  datasets benchmarks/favor/results \
+  sift-128-euclidean sift SIFT-1M query.fbin base.fbin float
+#+end_src
+
+Equivalent commands were run for the GIST and both BIGANN result directories.
+Each dataset has one QPS/recall and latency/recall plot per selectivity. The
+cross-dataset summary and crossover figures are generated with:
+
+#+begin_src sh
+python benchmarks/favor/plot_crossover.py
+#+end_src
+
+Outputs:
+
+#+begin_src text
+benchmarks/favor/results_crossover/crossover_summary.csv
+benchmarks/favor/results_crossover/sift_crossover_01_08.png
+benchmarks/favor/results_crossover/gist_crossover_01_08.png
+benchmarks/favor/results_crossover/bigann1m_crossover_01_08.png
+benchmarks/favor/results_crossover/bigann10m_crossover_01_08.png
+#+end_src
+
+Maximum 10,000-query recall within the common matrix was:
+
+| Dataset    | Method  | 1%      | 2%      | 3%      | 4%      | 5%      | 6%      | 7%      | 8%      |
+|------------+---------+---------+---------+---------+---------+---------+---------+---------+---------|
+| SIFT-1M    | Default | 0.78369 | 0.94380 | 0.95620 | 0.95466 | 0.96607 | 0.98448 | 0.99278 | 0.99662 |
+| SIFT-1M    | FAVOR   | 0.95473 | 0.98331 | 0.98958 | 0.99027 | 0.98999 | 0.99001 | 0.98983 | 0.98963 |
+| GIST-1M    | Default | 0.76210 | 0.87670 | 0.89970 | 0.91930 | 0.93806 | 0.94830 | 0.95380 | 0.95750 |
+| GIST-1M    | FAVOR   | 0.82210 | 0.88540 | 0.91140 | 0.92610 | 0.93890 | 0.94540 | 0.94930 | 0.95220 |
+| BIGANN-1M  | Default | 0.77246 | 0.94056 | 0.95506 | 0.95252 | 0.96278 | 0.98213 | 0.99094 | 0.99556 |
+| BIGANN-1M  | FAVOR   | 0.95282 | 0.96626 | 0.88743 | 0.06774 | 0.27990 | 0.46551 | 0.61377 | 0.70809 |
+| BIGANN-10M | Default | 0.78604 | 0.93135 | 0.94496 | 0.94720 | 0.96542 | 0.98091 | 0.98844 | 0.99190 |
+| BIGANN-10M | FAVOR   | 0.91130 | 0.91499 | 0.64075 | 0.02599 | 0.14810 | 0.31172 | 0.44966 | 0.55831 |
+
+At the 0.90-recall operating point, FAVOR has the better throughput on both
+BIGANN sizes at 2%: approximately 108k versus 80k QPS for BIGANN-1M and 103k
+versus 78k QPS for BIGANN-10M. At 3%, FAVOR cannot reach 0.90 recall on either
+BIGANN graph, while default CAGRA can.
+
+This invalidates a universal 5% selector threshold. The conservative selector
+supported by every dataset in this sweep is:
+
+#+begin_src text
+selectivity <= 2%  -> FAVOR
+selectivity >= 3%  -> default CAGRA
+#+end_src
+
+This rule sacrifices some FAVOR advantage on SIFT above 2% but avoids the
+severe BIGANN failure. A dataset-aware selector can retain FAVOR longer for
+float SIFT/GIST workloads, but requires a calibration signal beyond
+selectivity alone.
+
+** MSTuring-1M and MSTuring-10M
+
+The MSTuring sources are 100-dimensional =float32= files. The benchmark uses
+the 10,000-query test set. Large base and query files are symlinked rather
+than copied:
+
+#+begin_src sh
+mkdir -p datasets/msturing-1M datasets/msturing-10M
+ln -s /users/namanh/big-ann-benchmarks/data/MSTuringANNS/base1b.fbin.crop_nb_1000000 \
+  datasets/msturing-1M/base.fbin
+ln -s /users/namanh/big-ann-benchmarks/data/MSTuringANNS/testQuery10K.fbin \
+  datasets/msturing-1M/query.fbin
+ln -s /users/namanh/big-ann-benchmarks/data/MSTuringANNS/base1b.fbin.crop_nb_10000000 \
+  datasets/msturing-10M/base.fbin
+ln -s /users/namanh/big-ann-benchmarks/data/MSTuringANNS/testQuery10K.fbin \
+  datasets/msturing-10M/query.fbin
+#+end_src
+
+=datasets.yaml= contains =msturing-1M= and =msturing-10M= entries with
+=dims: 100=, Euclidean distance, and the linked =base.fbin=/=query.fbin=
+paths. The source ground-truth container is retained as a provenance symlink,
+but exact cuVS-format neighbors and distances were independently generated:
+
+#+begin_src sh
+python benchmarks/favor/prepare_sift_filters.py \
+  --dataset-dir datasets/msturing-1M \
+  --output-dir datasets/msturing-1M/favor \
+  --dtype float32 --k 100 --unfiltered-only
+
+python benchmarks/favor/prepare_sift_filters.py \
+  --dataset-dir datasets/msturing-10M \
+  --output-dir datasets/msturing-10M/favor \
+  --dtype float32 --k 100 --unfiltered-only
+#+end_src
+
+The degree-32, intermediate-degree-64 graphs are built with:
+
+#+begin_src sh
+env LD_PRELOAD="$PWD/cpp/build/libcuvs.so" \
+  cpp/build/bench/ann/CUVS_CAGRA_ANN_BENCH \
+  --build --data_prefix="$PWD/datasets" --index_prefix="$PWD/datasets" \
+  benchmarks/favor/results_msturing_1m/configs/msturing1m_build.json
+
+env LD_PRELOAD="$PWD/cpp/build/libcuvs.so" \
+  cpp/build/bench/ann/CUVS_CAGRA_ANN_BENCH \
+  --build --data_prefix="$PWD/datasets" --index_prefix="$PWD/datasets" \
+  benchmarks/favor/results_msturing_10m/configs/msturing10m_build.json
+#+end_src
+
+The corresponding alpha-10, beta-64, BFS-depth-2 delta-d sidecars are:
+
+| Dataset       | delta-d   | Compute time |
+|---------------+-----------+--------------|
+| MSTuring-1M   | 0.0142445 |       51.7 s |
+| MSTuring-10M  | 0.0129972 |      469.9 s |
+
+They are generated and saved beside the graph with:
+
+#+begin_src sh
+examples/cpp/build/CAGRA_FAVOR_COMPARE_LOCAL \
+  datasets/msturing-1M/base.fbin \
+  datasets/msturing-1M/cagra_g32_ig64.index 2
+
+examples/cpp/build/CAGRA_FAVOR_COMPARE_LOCAL \
+  datasets/msturing-10M/base.fbin \
+  datasets/msturing-10M/cagra_g32_ig64.index 2
+#+end_src
+
+All nested bitsets and exact filtered top-10 ground truth are prepared in one
+pass per dataset:
+
+#+begin_src sh
+python benchmarks/favor/prepare_sift_filters.py \
+  --dataset-dir datasets/msturing-1M \
+  --output-dir datasets/msturing-1M/favor --dtype float32 \
+  --selectivities 0.01 0.02 0.03 0.04 0.05 0.06 0.07 0.08 0.10 0.50 0.90
+
+python benchmarks/favor/prepare_sift_filters.py \
+  --dataset-dir datasets/msturing-10M \
+  --output-dir datasets/msturing-10M/favor --dtype float32 \
+  --selectivities 0.01 0.02 0.03 0.04 0.05 0.06 0.07 0.08 0.10 0.50 0.90
+#+end_src
+
+The full =itopk={32,64,128,256,512}=,
+=search_width={1,2,4}= sweep is:
+
+#+begin_src sh
+FAVOR_SELECTIVITIES='1 10 50 90' \
+benchmarks/favor/run_benchmarks.sh \
+  datasets benchmarks/favor/results_msturing_1m \
+  msturing-1M msturing1m MSTuring-1M query.fbin base.fbin float
+
+FAVOR_SELECTIVITIES='1 10 50 90' \
+benchmarks/favor/run_benchmarks.sh \
+  datasets benchmarks/favor/results_msturing_10m \
+  msturing-10M msturing10m MSTuring-10M query.fbin base.fbin float
+#+end_src
+
+Maximum 10,000-query recall and best QPS among points reaching 0.90 recall:
+
+| Dataset       | Selectivity | Default max recall | FAVOR max recall | Default QPS@0.90 | FAVOR QPS@0.90 |
+|---------------+-------------+--------------------+------------------+------------------+----------------|
+| MSTuring-1M   |          1% |            0.70319 |          0.68618 |              N/A |            N/A |
+| MSTuring-1M   |         10% |            0.92300 |          0.91353 |           73,302 |         77,332 |
+| MSTuring-1M   |         50% |            0.96788 |          0.96687 |          155,124 |        163,340 |
+| MSTuring-1M   |         90% |            0.97642 |          0.97597 |          156,360 |        163,247 |
+| MSTuring-10M  |          1% |            0.67580 |          0.67602 |              N/A |            N/A |
+| MSTuring-10M  |         10% |            0.91871 |          0.90886 |           73,961 |         77,049 |
+| MSTuring-10M  |         50% |            0.96372 |          0.96280 |          156,397 |        162,099 |
+| MSTuring-10M  |         90% |            0.97246 |          0.97202 |          157,551 |        162,335 |
+
+The focused threshold matrix uses =itopk=512= and widths 1, 2, and 4:
+
+#+begin_src sh
+FAVOR_SELECTIVITIES='1 2 3 4 5 6 7 8' \
+FAVOR_ITOPK_VALUES='512' FAVOR_SEARCH_WIDTHS='1 2 4' \
+benchmarks/favor/run_benchmarks.sh \
+  datasets benchmarks/favor/results_msturing_1m_threshold \
+  msturing-1M msturing1m MSTuring-1M query.fbin base.fbin float
+
+FAVOR_SELECTIVITIES='1 2 3 4 5 6 7 8' \
+FAVOR_ITOPK_VALUES='512' FAVOR_SEARCH_WIDTHS='1 2 4' \
+benchmarks/favor/run_benchmarks.sh \
+  datasets benchmarks/favor/results_msturing_10m_threshold \
+  msturing-10M msturing10m MSTuring-10M query.fbin base.fbin float
+#+end_src
+
+Within this fixed threshold matrix, MSTuring-1M first reaches 0.90 throughput
+recall at 7% for default CAGRA and 8% for FAVOR. At 8%, FAVOR provides about
+77.3k QPS versus 73.1k QPS for default. MSTuring-10M first reaches 0.90 at 8%
+for default; FAVOR reaches only 0.89773 there and first exceeds 0.90 at the
+separately measured 10% point. Neither method reaches 0.90 at 1%.
+
+The labeled per-selectivity plots are under each result directory's =plots/=
+subdirectory. Cross-dataset threshold figures and CSV tables, including both
+MSTuring sizes, are regenerated with:
+
+#+begin_src sh
+python benchmarks/favor/plot_crossover.py \
+  --output-dir benchmarks/favor/results_crossover --recall-target 0.90
+python benchmarks/favor/plot_crossover.py \
+  --output-dir benchmarks/favor/results_crossover_r95 --recall-target 0.95
+#+end_src
+
+* Known issue
+
+On the current environment, =CUVS_CAGRA_ANN_BENCH= sometimes exits with status
+139 during CUDA/process teardown after it has closed a complete JSON result.
+The runner does not ignore arbitrary crashes: it accepts a nonzero exit only
+after parsing the JSON and verifying exactly 30 unique iteration rows with no
+benchmark error flags. Incomplete results still fail the run.
+
+* Backwards compatibility
+
+- =filter_mode= defaults to =DEFAULT=.
+- New search fields were appended and old benchmark configuration fields remain
+  valid.
+- Default scoring and filter invalidation remain in the non-FAVOR compile-time
+  branch.
+- An explicit-default regression test matches the result of the legacy
+  implicit/default selection.
+- The normalized-MSB comparison is shared and can correct invalid-sentinel
+  handling in default filtered search; therefore results affected by the old
+  compaction bug may improve rather than remain bit-for-bit identical.
+
+* Deferred work
+
+The following items from =plan.org= were not implemented:
+
+- UDF filters and sampled/per-query selectivity;
+- a FAVOR runtime-state structure;
+- filter-aware termination or bounded retries;
+- =MULTI_CTA= FAVOR kernels;
+- brute-force fallback below an adaptive selectivity threshold;
+- automatic selection between default and FAVOR near the measured crossover;
+- evaluation on additional predicates beyond the deterministic bitsets used
+  for SIFT, GIST, BIGANN, and MSTuring.

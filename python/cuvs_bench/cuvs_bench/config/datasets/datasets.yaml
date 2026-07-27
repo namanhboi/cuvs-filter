@@ -21,6 +21,23 @@
   groundtruth_neighbors_file: bigann-100M/groundtruth.neighbors.ibin
   distance: euclidean
 
+- name: bigann-10M
+  base_file: bigann-10M/base.10M.u8bin
+  dims: 128
+  query_file: bigann-10M/query.public.10K.u8bin
+  groundtruth_neighbors_file: bigann-10M/groundtruth.neighbors.ibin
+  groundtruth_distances_file: bigann-10M/groundtruth.distances.fbin
+  distance: euclidean
+
+- name: bigann-1M
+  base_file: bigann-1M/base.10M.u8bin
+  subset_size: 1000000
+  dims: 128
+  query_file: bigann-1M/query.public.10K.u8bin
+  groundtruth_neighbors_file: bigann-1M/groundtruth.neighbors.ibin
+  groundtruth_distances_file: bigann-1M/groundtruth.distances.fbin
+  distance: euclidean
+
 - name: deep-image-96-inner
   base_file: deep-image-96-inner/base.fbin
   query_file: deep-image-96-inner/query.fbin
@@ -82,6 +99,22 @@
   base_file: mnist-784-euclidean/base.fbin
   query_file: mnist-784-euclidean/query.fbin
   groundtruth_neighbors_file: mnist-784-euclidean/groundtruth.neighbors.ibin
+  distance: euclidean
+
+- name: msturing-1M
+  dims: 100
+  base_file: msturing-1M/base.fbin
+  query_file: msturing-1M/query.fbin
+  groundtruth_neighbors_file: msturing-1M/groundtruth.neighbors.ibin
+  groundtruth_distances_file: msturing-1M/groundtruth.distances.fbin
+  distance: euclidean
+
+- name: msturing-10M
+  dims: 100
+  base_file: msturing-10M/base.fbin
+  query_file: msturing-10M/query.fbin
+  groundtruth_neighbors_file: msturing-10M/groundtruth.neighbors.ibin
+  groundtruth_distances_file: msturing-10M/groundtruth.distances.fbin
   distance: euclidean
 
 - name: nytimes-256-angular

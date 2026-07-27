@@ -1,0 +1,7 @@
+dataset,selectivity_percent,formula,max_recall,best_qps_recall_90,best_qps_recall_95,baseline_best_max_recall,recall_shortfall,passes_recall_constraint,best_cell_qps_recall_90,qps_regret_recall_90,best_cell_qps_recall_95,qps_regret_recall_95
+bigann10m,1,current,0.91059,103423.54265985622,,0.91059,0.0,True,103423.54265985622,0.0,,
+bigann10m,1,default,0.75767,,,0.91059,0.15292000000000006,False,103423.54265985622,,,
+bigann10m,4,current,0.07636,,,0.9366,0.86024,False,105006.90788283182,,,
+bigann10m,4,default,0.9366,105006.90788283182,,0.9366,0.0,True,105006.90788283182,0.0,,
+bigann10m,10,current,0.70444,,,0.99452,0.29008,False,374109.8196891033,,211325.32424210387,
+bigann10m,10,default,0.99452,374109.8196891033,211325.32424210387,0.99452,0.0,True,374109.8196891033,0.0,211325.32424210387,0.0
