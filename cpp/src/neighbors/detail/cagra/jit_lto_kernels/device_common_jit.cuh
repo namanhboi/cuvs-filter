@@ -36,7 +36,8 @@ template <bool APPLY_FAVOR,
           typename IndexT,
           typename DistanceT,
           typename DataT,
-          typename SourceIndexT>
+          typename SourceIndexT,
+          bool RECORD_FILTER_RESULT = false>
 RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_random_nodes_jit_impl(
   IndexT* __restrict__ result_indices_ptr,       // [num_pickup]
   DistanceT* __restrict__ result_distances_ptr,  // [num_pickup]
@@ -56,8 +57,10 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_random_nodes_jit_impl(
   const SourceIndexT* source_indices_ptr           = nullptr,
   const uint32_t query_id                          = 0,
   cagra_sample_filter<SourceIndexT> filter_payload = {},
-  const DistanceT favor_penalty                    = DistanceT{0})
+  const DistanceT favor_penalty                    = DistanceT{0},
+  std::uint8_t* pass_flags                         = nullptr)
 {
+  static_assert(!RECORD_FILTER_RESULT || APPLY_FAVOR);
   uint32_t team_size_bits = smem_desc->team_size_bitshift_from_smem();
   IndexT dataset_size     = smem_desc->size;
   const auto args_load    = smem_desc->args.load();
@@ -68,8 +71,9 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_random_nodes_jit_impl(
   for (uint32_t i = threadIdx.x >> team_size_bits; i < max_i; i += (blockDim.x >> team_size_bits)) {
     const bool valid_i = (i < num_pickup);
 
-    IndexT best_index_team_local    = raft::upper_bound<IndexT>();
-    DistanceT best_norm2_team_local = raft::upper_bound<DistanceT>();
+    IndexT best_index_team_local       = raft::upper_bound<IndexT>();
+    DistanceT best_norm2_team_local    = raft::upper_bound<DistanceT>();
+    bool best_passes_filter_team_local = false;
     for (uint32_t j = 0; j < num_distilation; j++) {
       IndexT seed_index = 0;
       if (valid_i) {
@@ -84,10 +88,10 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_random_nodes_jit_impl(
       auto norm2 = cuvs::neighbors::cagra::detail::compute_distance<DataT, IndexT, DistanceT>(
         args_load, seed_index, valid_i, team_size_bits);
 
+      bool passes_filter = true;
       if constexpr (APPLY_FAVOR) {
         const unsigned team_width = 1u << team_size_bits;
         const unsigned lane_id    = threadIdx.x & (team_width - 1u);
-        bool passes_filter        = true;
         if (valid_i && lane_id == 0) {
           auto source_id = source_indices_ptr == nullptr ? static_cast<SourceIndexT>(seed_index)
                                                          : source_indices_ptr[seed_index];
@@ -99,8 +103,9 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_random_nodes_jit_impl(
       }
 
       if (valid_i && (norm2 < best_norm2_team_local)) {
-        best_norm2_team_local = norm2;
-        best_index_team_local = seed_index;
+        best_norm2_team_local         = norm2;
+        best_index_team_local         = seed_index;
+        best_passes_filter_team_local = passes_filter;
       }
     }
 
@@ -109,18 +114,23 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_random_nodes_jit_impl(
       if (best_index_team_local != raft::upper_bound<IndexT>()) {
         if (hashmap::insert(visited_hash_ptr, visited_hash_bitlen, best_index_team_local) == 0) {
           // Deactivate this entry as insertion into visited hash table has failed.
-          best_norm2_team_local = raft::upper_bound<DistanceT>();
-          best_index_team_local = raft::upper_bound<IndexT>();
+          best_norm2_team_local         = raft::upper_bound<DistanceT>();
+          best_index_team_local         = raft::upper_bound<IndexT>();
+          best_passes_filter_team_local = false;
         } else if ((traversed_hash_ptr != nullptr) &&
                    hashmap::search<IndexT, 1>(
                      traversed_hash_ptr, traversed_hash_bitlen, best_index_team_local)) {
           // Deactivate this entry as it has been already used by others.
-          best_norm2_team_local = raft::upper_bound<DistanceT>();
-          best_index_team_local = raft::upper_bound<IndexT>();
+          best_norm2_team_local         = raft::upper_bound<DistanceT>();
+          best_index_team_local         = raft::upper_bound<IndexT>();
+          best_passes_filter_team_local = false;
         }
       }
       result_distances_ptr[i] = best_norm2_team_local;
       result_indices_ptr[i]   = best_index_team_local;
+      if constexpr (RECORD_FILTER_RESULT) {
+        pass_flags[i] = best_passes_filter_team_local ? std::uint8_t{1} : std::uint8_t{0};
+      }
     }
   }
 }
@@ -161,7 +171,11 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_random_nodes_jit(
     graph_size);
 }
 
-template <typename IndexT, typename DistanceT, typename DataT, typename SourceIndexT>
+template <typename IndexT,
+          typename DistanceT,
+          typename DataT,
+          typename SourceIndexT,
+          bool RECORD_FILTER_RESULT = false>
 RAFT_DEVICE_INLINE_FUNCTION void compute_favor_distance_to_random_nodes_jit(
   IndexT* __restrict__ result_indices_ptr,
   DistanceT* __restrict__ result_distances_ptr,
@@ -177,28 +191,34 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_favor_distance_to_random_nodes_jit(
   const SourceIndexT* source_indices_ptr,
   const uint32_t query_id,
   cagra_sample_filter<SourceIndexT> filter_payload,
-  const DistanceT favor_penalty)
+  const DistanceT favor_penalty,
+  std::uint8_t* pass_flags = nullptr)
 {
-  compute_distance_to_random_nodes_jit_impl<true, IndexT, DistanceT, DataT, SourceIndexT>(
-    result_indices_ptr,
-    result_distances_ptr,
-    smem_desc,
-    num_pickup,
-    num_distilation,
-    rand_xor_mask,
-    seed_ptr,
-    num_seeds,
-    visited_hash_ptr,
-    visited_hash_bitlen,
-    static_cast<IndexT*>(nullptr),
-    0,
-    0,
-    1,
-    graph_size,
-    source_indices_ptr,
-    query_id,
-    filter_payload,
-    favor_penalty);
+  compute_distance_to_random_nodes_jit_impl<true,
+                                            IndexT,
+                                            DistanceT,
+                                            DataT,
+                                            SourceIndexT,
+                                            RECORD_FILTER_RESULT>(result_indices_ptr,
+                                                                  result_distances_ptr,
+                                                                  smem_desc,
+                                                                  num_pickup,
+                                                                  num_distilation,
+                                                                  rand_xor_mask,
+                                                                  seed_ptr,
+                                                                  num_seeds,
+                                                                  visited_hash_ptr,
+                                                                  visited_hash_bitlen,
+                                                                  static_cast<IndexT*>(nullptr),
+                                                                  0,
+                                                                  0,
+                                                                  1,
+                                                                  graph_size,
+                                                                  source_indices_ptr,
+                                                                  query_id,
+                                                                  filter_payload,
+                                                                  favor_penalty,
+                                                                  pass_flags);
 }
 
 // JIT version of compute_distance_to_child_nodes - uses const dataset_descriptor_base_t* (smem)
@@ -208,7 +228,8 @@ template <bool APPLY_FAVOR,
           typename DistanceT,
           typename DataT,
           typename SourceIndexT,
-          int STATIC_RESULT_POSITION = 1>
+          int STATIC_RESULT_POSITION = 1,
+          bool RECORD_FILTER_RESULT  = false>
 RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_child_nodes_jit_impl(
   IndexT* __restrict__ result_child_indices_ptr,
   DistanceT* __restrict__ result_child_distances_ptr,
@@ -227,8 +248,10 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_child_nodes_jit_impl(
   const SourceIndexT* source_indices_ptr           = nullptr,
   const uint32_t query_id                          = 0,
   cagra_sample_filter<SourceIndexT> filter_payload = {},
-  const DistanceT favor_penalty                    = DistanceT{0})
+  const DistanceT favor_penalty                    = DistanceT{0},
+  std::uint8_t* pass_flags                         = nullptr)
 {
+  static_assert(!RECORD_FILTER_RESULT || APPLY_FAVOR);
   constexpr IndexT index_msb_1_mask = utils::gen_index_msb_1_mask<IndexT>::value;
   constexpr IndexT invalid_index    = ~static_cast<IndexT>(0);
 
@@ -282,18 +305,21 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_child_nodes_jit_impl(
 
     // Store the distance once, fusing FAVOR's bitset check into the lead lane.
     if (valid_i && lead_lane) {
-      auto final_dist = child_dist;
+      auto final_dist    = child_dist;
+      bool passes_filter = false;
       if constexpr (APPLY_FAVOR) {
         if (child_id != invalid_index) {
           auto source_id = source_indices_ptr == nullptr ? static_cast<SourceIndexT>(child_id)
                                                          : source_indices_ptr[child_id];
-          if (!cuvs::neighbors::detail::sample_filter<SourceIndexT>(
-                query_id, source_id, filter_payload.sample_filter_data())) {
-            final_dist += favor_penalty;
-          }
+          passes_filter  = cuvs::neighbors::detail::sample_filter<SourceIndexT>(
+            query_id, source_id, filter_payload.sample_filter_data());
+          if (!passes_filter) { final_dist += favor_penalty; }
         }
       }
       result_child_distances_ptr[j] = final_dist;
+      if constexpr (RECORD_FILTER_RESULT) {
+        pass_flags[j] = passes_filter ? std::uint8_t{1} : std::uint8_t{0};
+      }
     }
   }
 }
@@ -340,7 +366,8 @@ template <typename IndexT,
           typename DistanceT,
           typename DataT,
           typename SourceIndexT,
-          int STATIC_RESULT_POSITION = 1>
+          int STATIC_RESULT_POSITION = 1,
+          bool RECORD_FILTER_RESULT  = false>
 RAFT_DEVICE_INLINE_FUNCTION void compute_favor_distance_to_child_nodes_jit(
   IndexT* __restrict__ result_child_indices_ptr,
   DistanceT* __restrict__ result_child_distances_ptr,
@@ -355,31 +382,34 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_favor_distance_to_child_nodes_jit(
   const SourceIndexT* source_indices_ptr,
   const uint32_t query_id,
   cagra_sample_filter<SourceIndexT> filter_payload,
-  const DistanceT favor_penalty)
+  const DistanceT favor_penalty,
+  std::uint8_t* pass_flags = nullptr)
 {
   compute_distance_to_child_nodes_jit_impl<true,
                                            IndexT,
                                            DistanceT,
                                            DataT,
                                            SourceIndexT,
-                                           STATIC_RESULT_POSITION>(result_child_indices_ptr,
-                                                                   result_child_distances_ptr,
-                                                                   smem_desc,
-                                                                   knn_graph,
-                                                                   knn_k,
-                                                                   visited_hashmap_ptr,
-                                                                   visited_hash_bitlen,
-                                                                   static_cast<IndexT*>(nullptr),
-                                                                   0,
-                                                                   parent_indices,
-                                                                   internal_topk_list,
-                                                                   search_width,
-                                                                   nullptr,
-                                                                   0,
-                                                                   source_indices_ptr,
-                                                                   query_id,
-                                                                   filter_payload,
-                                                                   favor_penalty);
+                                           STATIC_RESULT_POSITION,
+                                           RECORD_FILTER_RESULT>(result_child_indices_ptr,
+                                                                 result_child_distances_ptr,
+                                                                 smem_desc,
+                                                                 knn_graph,
+                                                                 knn_k,
+                                                                 visited_hashmap_ptr,
+                                                                 visited_hash_bitlen,
+                                                                 static_cast<IndexT*>(nullptr),
+                                                                 0,
+                                                                 parent_indices,
+                                                                 internal_topk_list,
+                                                                 search_width,
+                                                                 nullptr,
+                                                                 0,
+                                                                 source_indices_ptr,
+                                                                 query_id,
+                                                                 filter_payload,
+                                                                 favor_penalty,
+                                                                 pass_flags);
 }
 
 }  // namespace cuvs::neighbors::cagra::detail::device

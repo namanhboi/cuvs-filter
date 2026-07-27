@@ -280,6 +280,12 @@ enum class filtering_mode : uint32_t {
   DEFAULT = 0,
   /** Apply FAVOR exclusion-distance scoring during graph traversal. */
   FAVOR = 1,
+  /**
+   * Apply FAVOR scoring and retain the best passing results independently from the traversal
+   * buffer. This GPU-optimized specialization currently supports bitset filters, SINGLE_CTA, and
+   * top-k values up to 32.
+   */
+  FAVOR_ACCUMULATOR = 2,
 };
 
 enum class hash_mode { HASH = 0, SMALL = 1, AUTO = 100 };
@@ -363,10 +369,11 @@ struct search_params : cuvs::neighbors::search_params {
    */
   float filtering_rate = -1.0;
 
-  /** Filtering implementation. FAVOR currently supports bitset filters with SINGLE_CTA only. */
+  /** Filtering implementation. FAVOR modes currently support bitset filters with SINGLE_CTA only.
+   */
   filtering_mode filter_mode = filtering_mode::DEFAULT;
 
-  /** Dataset/graph-specific FAVOR delta-d statistic. Required when filter_mode is FAVOR. */
+  /** Dataset/graph-specific FAVOR delta-d statistic. Required for either FAVOR mode. */
   float favor_delta_d = -1.0f;
 
   /** Data type of the query vector and codebook table on shared memory. Currently, only VPQ

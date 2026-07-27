@@ -72,11 +72,12 @@ class CagraFavorSearchTest : public ::testing::Test {
     return cuvs::neighbors::filtering::bitset_filter<uint32_t, int64_t>(bitsets.back().view());
   }
 
-  auto run(cagra::search_params params, cuvs::neighbors::filtering::base_filter const& filter)
-    -> search_result
+  auto run(cagra::search_params params,
+           cuvs::neighbors::filtering::base_filter const& filter,
+           int64_t output_k = k) -> search_result
   {
-    auto neighbors = raft::make_device_matrix<uint32_t, int64_t>(res, kQueries, k);
-    auto distances = raft::make_device_matrix<float, int64_t>(res, kQueries, k);
+    auto neighbors = raft::make_device_matrix<uint32_t, int64_t>(res, kQueries, output_k);
+    auto distances = raft::make_device_matrix<float, int64_t>(res, kQueries, output_k);
     cagra::search(res,
                   params,
                   *index,
@@ -128,8 +129,7 @@ class CagraFavorUint8SearchTest : public ::testing::Test {
     }
     for (int64_t row = 0; row < kQueries; ++row) {
       for (int64_t dim = 0; dim < kDim; ++dim) {
-        host_queries[row * kDim + dim] =
-          static_cast<uint8_t>((row * 29 + dim * 7 + 3) & 0xff);
+        host_queries[row * kDim + dim] = static_cast<uint8_t>((row * 29 + dim * 7 + 3) & 0xff);
       }
     }
     auto stream = raft::resource::get_cuda_stream(res);
@@ -162,11 +162,12 @@ class CagraFavorUint8SearchTest : public ::testing::Test {
     return cuvs::neighbors::filtering::bitset_filter<uint32_t, int64_t>(bitsets.back().view());
   }
 
-  auto run(cagra::search_params params, cuvs::neighbors::filtering::base_filter const& filter)
-    -> search_result
+  auto run(cagra::search_params params,
+           cuvs::neighbors::filtering::base_filter const& filter,
+           int64_t output_k = k) -> search_result
   {
-    auto neighbors = raft::make_device_matrix<uint32_t, int64_t>(res, kQueries, k);
-    auto distances = raft::make_device_matrix<float, int64_t>(res, kQueries, k);
+    auto neighbors = raft::make_device_matrix<uint32_t, int64_t>(res, kQueries, output_k);
+    auto distances = raft::make_device_matrix<float, int64_t>(res, kQueries, output_k);
     cagra::search(res,
                   params,
                   *index,
@@ -279,11 +280,57 @@ TEST_F(CagraFavorSearchTest, RejectsMissingDeltaAndNonBitsetFilter)
   missing_delta.filter_mode = cagra::filtering_mode::FAVOR;
   EXPECT_ANY_THROW(run(missing_delta, filter));
 
+  auto missing_accumulator_delta        = params();
+  missing_accumulator_delta.filter_mode = cagra::filtering_mode::FAVOR_ACCUMULATOR;
+  EXPECT_ANY_THROW(run(missing_accumulator_delta, filter));
+
   auto favor_params          = params();
   favor_params.filter_mode   = cagra::filtering_mode::FAVOR;
   favor_params.favor_delta_d = 100.0f;
   cuvs::neighbors::filtering::none_sample_filter no_filter;
   EXPECT_ANY_THROW(run(favor_params, no_filter));
+
+  auto accumulator_params          = params();
+  accumulator_params.filter_mode   = cagra::filtering_mode::FAVOR_ACCUMULATOR;
+  accumulator_params.favor_delta_d = 100.0f;
+  EXPECT_ANY_THROW(run(accumulator_params, no_filter));
+}
+
+TEST_F(CagraFavorSearchTest, AccumulatorAcceptAllMatchesDefaultSearch)
+{
+  auto filter                      = make_filter(0);
+  auto default_params              = params();
+  auto accumulator_params          = default_params;
+  accumulator_params.filter_mode   = cagra::filtering_mode::FAVOR_ACCUMULATOR;
+  accumulator_params.favor_delta_d = 100.0f;
+
+  auto expected = run(default_params, filter);
+  auto actual   = run(accumulator_params, filter);
+  EXPECT_EQ(expected.neighbors, actual.neighbors);
+  EXPECT_EQ(expected.distances, actual.distances);
+}
+
+TEST_F(CagraFavorSearchTest, AccumulatorReturnsOnlyPassingRowsWithZeroPenalty)
+{
+  auto filter                      = make_filter(kRows / 2);
+  auto accumulator_params          = params();
+  accumulator_params.filter_mode   = cagra::filtering_mode::FAVOR_ACCUMULATOR;
+  accumulator_params.favor_delta_d = 0.0f;
+
+  auto result = run(accumulator_params, filter);
+  for (auto neighbor : result.neighbors) {
+    ASSERT_NE(neighbor, std::numeric_limits<uint32_t>::max());
+    EXPECT_GE(neighbor, static_cast<uint32_t>(kRows / 2));
+  }
+}
+
+TEST_F(CagraFavorSearchTest, AccumulatorRejectsTopKAboveWarpCapacity)
+{
+  auto filter                      = make_filter(kRows / 2);
+  auto accumulator_params          = params();
+  accumulator_params.filter_mode   = cagra::filtering_mode::FAVOR_ACCUMULATOR;
+  accumulator_params.favor_delta_d = 100.0f;
+  EXPECT_ANY_THROW(run(accumulator_params, filter, 33));
 }
 
 TEST_F(CagraFavorUint8SearchTest, ExplicitDefaultPreservesExistingResults)
@@ -335,6 +382,20 @@ TEST_F(CagraFavorUint8SearchTest, ZeroPenaltyCompactsRejectedRows)
   favor_params.favor_delta_d = 0.0f;
 
   auto result = run(favor_params, filter);
+  for (auto neighbor : result.neighbors) {
+    ASSERT_NE(neighbor, std::numeric_limits<uint32_t>::max());
+    EXPECT_GE(neighbor, static_cast<uint32_t>(kRows / 2));
+  }
+}
+
+TEST_F(CagraFavorUint8SearchTest, AccumulatorReturnsOnlyPassingRows)
+{
+  auto filter                      = make_filter(kRows / 2);
+  auto accumulator_params          = params();
+  accumulator_params.filter_mode   = cagra::filtering_mode::FAVOR_ACCUMULATOR;
+  accumulator_params.favor_delta_d = 100.0f;
+
+  auto result = run(accumulator_params, filter);
   for (auto neighbor : result.neighbors) {
     ASSERT_NE(neighbor, std::numeric_limits<uint32_t>::max());
     EXPECT_GE(neighbor, static_cast<uint32_t>(kRows / 2));

@@ -1,0 +1,136 @@
+dataset,dataset_title,selectivity_percent,batch_size,k,workload,method,method_label,itopk,search_width,recall,value
+bigann10m,BIGANN-10M,1,10000,10,throughput,default,Default CAGRA filtering,32,1,0.07067,1388966.2080066528
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor,Current FAVOR,32,1,0.27207,1321856.852990582
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,32,1,0.27094,1319383.04696162
+bigann10m,BIGANN-10M,1,10000,10,throughput,default,Default CAGRA filtering,32,2,0.08532,1461890.6257333762
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor,Current FAVOR,32,2,0.28433,1375011.982525893
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,32,2,0.28325,1351416.663448737
+bigann10m,BIGANN-10M,1,10000,10,throughput,default,Default CAGRA filtering,32,4,0.11117,1167824.6348810468
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor,Current FAVOR,32,4,0.29296,1144023.9451070898
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,32,4,0.29253,1124595.347928594
+bigann10m,BIGANN-10M,1,10000,10,throughput,default,Default CAGRA filtering,64,1,0.13188,755619.7573147254
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor,Current FAVOR,64,1,0.43189,711972.8400152441
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,64,1,0.43184,713562.2870245669
+bigann10m,BIGANN-10M,1,10000,10,throughput,default,Default CAGRA filtering,64,2,0.13801,854449.0174515488
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor,Current FAVOR,64,2,0.43691,789439.0650416402
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,64,2,0.437,778433.2877647718
+bigann10m,BIGANN-10M,1,10000,10,throughput,default,Default CAGRA filtering,64,4,0.15673,756263.593861823
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor,Current FAVOR,64,4,0.4411,720164.543483669
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,64,4,0.44107,711661.6347982862
+bigann10m,BIGANN-10M,1,10000,10,throughput,default,Default CAGRA filtering,128,1,0.24958,367450.0164467698
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor,Current FAVOR,128,1,0.6166,355100.47898072156
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,128,1,0.6166,358965.1063326469
+bigann10m,BIGANN-10M,1,10000,10,throughput,default,Default CAGRA filtering,128,2,0.252,437453.8700426643
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor,Current FAVOR,128,2,0.61835,414330.3398871172
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,128,2,0.61839,410750.97205045726
+bigann10m,BIGANN-10M,1,10000,10,throughput,default,Default CAGRA filtering,128,4,0.27135,422059.8203587353
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor,Current FAVOR,128,4,0.61949,406318.5714821796
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,128,4,0.61944,399286.1199659883
+bigann10m,BIGANN-10M,1,10000,10,throughput,default,Default CAGRA filtering,256,1,0.48855,162519.7440821002
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor,Current FAVOR,256,1,0.78686,166803.06765158338
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,256,1,0.78686,169110.21742877355
+bigann10m,BIGANN-10M,1,10000,10,throughput,default,Default CAGRA filtering,256,2,0.47865,204791.84379000525
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor,Current FAVOR,256,2,0.78585,203399.70331251674
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,256,2,0.78583,201008.4998375462
+bigann10m,BIGANN-10M,1,10000,10,throughput,default,Default CAGRA filtering,256,4,0.44659,211015.47705190288
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor,Current FAVOR,256,4,0.78722,212820.58288806703
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,256,4,0.78719,209380.9600514064
+bigann10m,BIGANN-10M,1,10000,10,throughput,default,Default CAGRA filtering,512,1,0.78604,77668.94434219095
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor,Current FAVOR,512,1,0.9113,77067.09398282264
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,512,1,0.9113,72440.30375804173
+bigann10m,BIGANN-10M,1,10000,10,throughput,default,Default CAGRA filtering,512,2,0.77756,100640.04856156373
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor,Current FAVOR,512,2,0.91128,97227.92522534623
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,512,2,0.91125,92841.34205845317
+bigann10m,BIGANN-10M,1,10000,10,throughput,default,Default CAGRA filtering,512,4,0.75766,104555.7928289114
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor,Current FAVOR,512,4,0.91064,103724.22701021716
+bigann10m,BIGANN-10M,1,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,512,4,0.91063,102107.3048541818
+bigann10m,BIGANN-10M,4,10000,10,throughput,default,Default CAGRA filtering,32,1,0.25784,1379048.0984805252
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor,Current FAVOR,32,1,0.04082,1363439.8602865078
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,32,1,0.04082,1349480.2960052006
+bigann10m,BIGANN-10M,4,10000,10,throughput,default,Default CAGRA filtering,32,2,0.28059,1456940.0774782032
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor,Current FAVOR,32,2,0.0299,1427882.929021413
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,32,2,0.0299,1388308.8693817796
+bigann10m,BIGANN-10M,4,10000,10,throughput,default,Default CAGRA filtering,32,4,0.32147,1167988.9232900043
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor,Current FAVOR,32,4,0.03981,1147942.4541378783
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,32,4,0.03981,1121582.575788315
+bigann10m,BIGANN-10M,4,10000,10,throughput,default,Default CAGRA filtering,64,1,0.43632,756206.8949400068
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor,Current FAVOR,64,1,0.05304,716015.010728419
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,64,1,0.05304,714899.0235994164
+bigann10m,BIGANN-10M,4,10000,10,throughput,default,Default CAGRA filtering,64,2,0.4939,854085.0344642124
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor,Current FAVOR,64,2,0.062,778834.6280228159
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,64,2,0.062,761230.7084646799
+bigann10m,BIGANN-10M,4,10000,10,throughput,default,Default CAGRA filtering,64,4,0.51902,755082.5876770075
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor,Current FAVOR,64,4,0.06118,696325.845096608
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,64,4,0.06118,681947.3479792614
+bigann10m,BIGANN-10M,4,10000,10,throughput,default,Default CAGRA filtering,128,1,0.74787,368135.8335810701
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor,Current FAVOR,128,1,0.07312,352643.18802477507
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,128,1,0.07312,356133.8244780519
+bigann10m,BIGANN-10M,4,10000,10,throughput,default,Default CAGRA filtering,128,2,0.70822,437936.3757594431
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor,Current FAVOR,128,2,0.07141,405106.42097611463
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,128,2,0.07141,398075.1517462822
+bigann10m,BIGANN-10M,4,10000,10,throughput,default,Default CAGRA filtering,128,4,0.78948,422079.86137723905
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor,Current FAVOR,128,4,0.07636,398733.23466727603
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,128,4,0.07634,388389.73978889117
+bigann10m,BIGANN-10M,4,10000,10,throughput,default,Default CAGRA filtering,256,1,0.90198,164043.61795807243
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor,Current FAVOR,256,1,0.01033,172931.94910844718
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,256,1,0.01033,174902.9717866832
+bigann10m,BIGANN-10M,4,10000,10,throughput,default,Default CAGRA filtering,256,2,0.85467,205053.11221947183
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor,Current FAVOR,256,2,0.01157,207499.21314110977
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,256,2,0.01157,201978.0232962115
+bigann10m,BIGANN-10M,4,10000,10,throughput,default,Default CAGRA filtering,256,4,0.8988,211990.49996209715
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor,Current FAVOR,256,4,0.01132,210856.79275540472
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,256,4,0.01132,202700.0093904031
+bigann10m,BIGANN-10M,4,10000,10,throughput,default,Default CAGRA filtering,512,1,0.9472,77810.27507169233
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor,Current FAVOR,512,1,0.02552,76149.95048660271
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,512,1,0.02552,72340.13515124453
+bigann10m,BIGANN-10M,4,10000,10,throughput,default,Default CAGRA filtering,512,2,0.87477,100775.128019573
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor,Current FAVOR,512,2,0.02599,94753.03729568147
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,512,2,0.02599,91603.15076675738
+bigann10m,BIGANN-10M,4,10000,10,throughput,default,Default CAGRA filtering,512,4,0.93659,104868.1317776935
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor,Current FAVOR,512,4,0.02579,96606.93142635122
+bigann10m,BIGANN-10M,4,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,512,4,0.02579,97536.22868228989
+bigann10m,BIGANN-10M,10,10000,10,throughput,default,Default CAGRA filtering,32,1,0.54314,1385827.2238294955
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor,Current FAVOR,32,1,0.08125,1329419.8996918967
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,32,1,0.08125,1319564.1638649798
+bigann10m,BIGANN-10M,10,10000,10,throughput,default,Default CAGRA filtering,32,2,0.5708,1457312.0182904492
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor,Current FAVOR,32,2,0.0816,1361682.3022882282
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,32,2,0.0816,1329465.0308183283
+bigann10m,BIGANN-10M,10,10000,10,throughput,default,Default CAGRA filtering,32,4,0.61446,1168253.840353128
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor,Current FAVOR,32,4,0.06091,1102167.1825023093
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,32,4,0.06091,1073650.660210603
+bigann10m,BIGANN-10M,10,10000,10,throughput,default,Default CAGRA filtering,64,1,0.74799,759056.4982961329
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor,Current FAVOR,64,1,0.21936,703060.6578501562
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,64,1,0.21936,703285.6362249465
+bigann10m,BIGANN-10M,10,10000,10,throughput,default,Default CAGRA filtering,64,2,0.81163,857014.3386688805
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor,Current FAVOR,64,2,0.21469,765095.1273646945
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,64,2,0.21469,751479.5854340505
+bigann10m,BIGANN-10M,10,10000,10,throughput,default,Default CAGRA filtering,64,4,0.82603,760033.3274855566
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor,Current FAVOR,64,4,0.19099,676554.6361110274
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,64,4,0.19099,663031.6688412784
+bigann10m,BIGANN-10M,10,10000,10,throughput,default,Default CAGRA filtering,128,1,0.89116,369438.4250344987
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor,Current FAVOR,128,1,0.39319,349644.8152297877
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,128,1,0.39319,353526.1070546966
+bigann10m,BIGANN-10M,10,10000,10,throughput,default,Default CAGRA filtering,128,2,0.91605,438832.62360222696
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor,Current FAVOR,128,2,0.3924,401659.19130970055
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,128,2,0.39239,394789.7161001988
+bigann10m,BIGANN-10M,10,10000,10,throughput,default,Default CAGRA filtering,128,4,0.936,422491.3539855172
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor,Current FAVOR,128,4,0.39043,382111.2532498422
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,128,4,0.39043,375896.1820821958
+bigann10m,BIGANN-10M,10,10000,10,throughput,default,Default CAGRA filtering,256,1,0.94027,163966.36418213206
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor,Current FAVOR,256,1,0.56463,161385.14547064126
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,256,1,0.56463,163070.36342252578
+bigann10m,BIGANN-10M,10,10000,10,throughput,default,Default CAGRA filtering,256,2,0.96186,204482.11784822808
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor,Current FAVOR,256,2,0.56617,196271.3322447711
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,256,2,0.56616,194271.2078456251
+bigann10m,BIGANN-10M,10,10000,10,throughput,default,Default CAGRA filtering,256,4,0.97736,211575.13159820158
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor,Current FAVOR,256,4,0.56666,198633.77241246187
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,256,4,0.56665,195105.4687187373
+bigann10m,BIGANN-10M,10,10000,10,throughput,default,Default CAGRA filtering,512,1,0.96055,77876.26776316174
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor,Current FAVOR,512,1,0.70373,66946.37979491038
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,512,1,0.70372,64245.93590766665
+bigann10m,BIGANN-10M,10,10000,10,throughput,default,Default CAGRA filtering,512,2,0.98003,100527.66333053069
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor,Current FAVOR,512,2,0.70441,84626.63422593073
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,512,2,0.7044,81890.14106300293
+bigann10m,BIGANN-10M,10,10000,10,throughput,default,Default CAGRA filtering,512,4,0.99452,104318.6400869628
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor,Current FAVOR,512,4,0.70444,92178.62606500456
+bigann10m,BIGANN-10M,10,10000,10,throughput,favor_accumulator,FAVOR + passing-result accumulator,512,4,0.70445,92341.85255036943

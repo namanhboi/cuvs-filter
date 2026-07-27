@@ -1,0 +1,28 @@
+dataset,dataset_title,selectivity_percent,batch_size,k,workload,method,method_label,itopk,search_width,recall,value
+bigann10m,BIGANN-10M,1,10,10,latency,default,Default CAGRA filtering,128,4,0.27341317365269463,0.0008348863203592815
+bigann10m,BIGANN-10M,1,10,10,latency,favor,Current FAVOR,128,4,0.6192676767676768,0.0006640225732323233
+bigann10m,BIGANN-10M,1,10,10,latency,favor_accumulator,FAVOR + passing-result accumulator,128,4,0.6189736842105263,0.0007151559657894738
+bigann10m,BIGANN-10M,1,10,10,latency,default,Default CAGRA filtering,256,4,0.4503585657370518,0.001447228047808765
+bigann10m,BIGANN-10M,1,10,10,latency,favor,Current FAVOR,256,4,0.7894331983805668,0.0009164335708502025
+bigann10m,BIGANN-10M,1,10,10,latency,favor_accumulator,FAVOR + passing-result accumulator,256,4,0.7891503267973856,0.001224667973856209
+bigann10m,BIGANN-10M,1,10,10,latency,default,Default CAGRA filtering,512,4,0.7589090909090909,0.0024393654636363634
+bigann10m,BIGANN-10M,1,10,10,latency,favor,Current FAVOR,512,4,0.91,0.001781497980769231
+bigann10m,BIGANN-10M,1,10,10,latency,favor_accumulator,FAVOR + passing-result accumulator,512,4,0.9099122807017543,0.002207949061403509
+bigann10m,BIGANN-10M,4,10,10,latency,default,Default CAGRA filtering,128,4,0.7919161676646707,0.0007001248622754492
+bigann10m,BIGANN-10M,4,10,10,latency,favor,Current FAVOR,128,4,0.07702770780856423,0.0006578648261964735
+bigann10m,BIGANN-10M,4,10,10,latency,favor_accumulator,FAVOR + passing-result accumulator,128,4,0.07738786279683377,0.0006472540976253298
+bigann10m,BIGANN-10M,4,10,10,latency,default,Default CAGRA filtering,256,4,0.9028571428571428,0.001140357111111111
+bigann10m,BIGANN-10M,4,10,10,latency,favor,Current FAVOR,256,4,0.010430622009569379,0.0012234803349282296
+bigann10m,BIGANN-10M,4,10,10,latency,favor_accumulator,FAVOR + passing-result accumulator,256,4,0.011114754098360656,0.0009190984459016393
+bigann10m,BIGANN-10M,4,10,10,latency,default,Default CAGRA filtering,512,4,0.9396610169491525,0.0023830122457627117
+bigann10m,BIGANN-10M,4,10,10,latency,favor,Current FAVOR,512,4,0.026139240506329115,0.0017741805506329112
+bigann10m,BIGANN-10M,4,10,10,latency,favor_accumulator,FAVOR + passing-result accumulator,512,4,0.026870229007633587,0.0019694894961832057
+bigann10m,BIGANN-10M,10,10,10,latency,default,Default CAGRA filtering,128,4,0.9368862275449101,0.0007099407095808384
+bigann10m,BIGANN-10M,10,10,10,latency,favor,Current FAVOR,128,4,0.392976501305483,0.0006867423916449087
+bigann10m,BIGANN-10M,10,10,10,latency,favor_accumulator,FAVOR + passing-result accumulator,128,4,0.3935149863760218,0.0006451712697547684
+bigann10m,BIGANN-10M,10,10,10,latency,default,Default CAGRA filtering,256,4,0.9775100401606426,0.0011220342449799196
+bigann10m,BIGANN-10M,10,10,10,latency,favor,Current FAVOR,256,4,0.5733090909090909,0.0012244901418181817
+bigann10m,BIGANN-10M,10,10,10,latency,favor_accumulator,FAVOR + passing-result accumulator,256,4,0.5731386861313869,0.0013034484343065692
+bigann10m,BIGANN-10M,10,10,10,latency,default,Default CAGRA filtering,512,4,0.9942105263157894,0.0028107992842105268
+bigann10m,BIGANN-10M,10,10,10,latency,favor,Current FAVOR,512,4,0.7124,0.00217599445
+bigann10m,BIGANN-10M,10,10,10,latency,favor_accumulator,FAVOR + passing-result accumulator,512,4,0.7083333333333334,0.002260482231884058

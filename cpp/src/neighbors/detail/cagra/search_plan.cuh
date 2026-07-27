@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include "favor_mode.hpp"
 #include "hashmap.hpp"
 
 #include <cuvs/neighbors/common.hpp>
@@ -110,7 +111,7 @@ struct search_plan_impl_base : public search_params {
       graph_degree(graph_degree),
       topk(topk)
   {
-    if (filter_mode == filtering_mode::FAVOR && algo == search_algo::AUTO) {
+    if (is_favor_mode(filter_mode) && algo == search_algo::AUTO) {
       algo = search_algo::SINGLE_CTA;
       RAFT_LOG_DEBUG("Auto strategy: FAVOR filtering selects single-cta");
     }
@@ -381,6 +382,9 @@ struct search_plan_impl : public search_plan_impl_base {
     // For single-CTA and multi kernel
     RAFT_EXPECTS(
       topk <= itopk_size, "topk = %u must be smaller than itopk_size = %lu", topk, itopk_size);
+    RAFT_EXPECTS(!uses_passing_accumulator(filter_mode) || topk <= 32,
+                 "FAVOR_ACCUMULATOR currently supports topk <= 32 (received %u)",
+                 topk);
   }
 
   inline void check_params()
@@ -398,7 +402,7 @@ struct search_plan_impl : public search_plan_impl_base {
         algo != search_algo::MULTI_KERNEL) {
       error_message += "An invalid kernel mode has been given: " + std::to_string((int)algo) + "";
     }
-    if (filter_mode == filtering_mode::FAVOR) {
+    if (is_favor_mode(filter_mode)) {
       if (algo != search_algo::SINGLE_CTA) {
         error_message += "FAVOR filtering currently supports only SINGLE_CTA. ";
       }

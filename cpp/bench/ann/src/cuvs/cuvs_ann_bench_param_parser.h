@@ -484,6 +484,8 @@ void parse_search_param(const nlohmann::json& conf,
       param.p.filter_mode = cuvs::neighbors::cagra::filtering_mode::DEFAULT;
     } else if (mode == "favor") {
       param.p.filter_mode = cuvs::neighbors::cagra::filtering_mode::FAVOR;
+    } else if (mode == "favor_accumulator") {
+      param.p.filter_mode = cuvs::neighbors::cagra::filtering_mode::FAVOR_ACCUMULATOR;
     } else {
       THROW("Invalid CAGRA filter_mode: %s", mode.c_str());
     }

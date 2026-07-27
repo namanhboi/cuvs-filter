@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include "../favor_mode.hpp"
 #include "cagra_planner_base.hpp"
 #include <cuvs/detail/jit_lto/cagra/cagra_fragments.hpp>
 #include <cuvs/distance/distance.hpp>
@@ -23,19 +24,23 @@ struct CagraSingleCtaSearchPlanner
   : CagraPlannerBase<DataTag, IndexTag, DistanceTag, QueryTag, CodebookTag, SampleFilterJitTag> {
   static inline LauncherJitCache launcher_jit_cache{};
 
-  CagraSingleCtaSearchPlanner(cuvs::distance::DistanceType /*metric*/,
-                              bool /*topk_by_bitonic_sort*/,
-                              bool /*bitonic_sort_and_merge_multi_warps*/,
-                              uint32_t /*team_size*/,
-                              uint32_t /*dataset_block_dim*/,
-                              bool /*is_vpq*/,
-                              uint32_t /*pq_bits*/,
-                              uint32_t /*pq_len*/,
-                              bool persistent = false,
-                              bool favor      = false)
+  CagraSingleCtaSearchPlanner(
+    cuvs::distance::DistanceType /*metric*/,
+    bool /*topk_by_bitonic_sort*/,
+    bool /*bitonic_sort_and_merge_multi_warps*/,
+    uint32_t /*team_size*/,
+    uint32_t /*dataset_block_dim*/,
+    bool /*is_vpq*/,
+    uint32_t /*pq_bits*/,
+    uint32_t /*pq_len*/,
+    bool persistent                   = false,
+    single_cta_kernel_variant variant = single_cta_kernel_variant::DEFAULT)
     : CagraPlannerBase<DataTag, IndexTag, DistanceTag, QueryTag, CodebookTag, SampleFilterJitTag>(
         persistent ? "search_single_cta_p"
-                   : (favor ? "search_single_cta_favor" : "search_single_cta"),
+                   : (variant == single_cta_kernel_variant::FAVOR_ACCUMULATOR
+                        ? "search_single_cta_favor_accumulator"
+                        : (variant == single_cta_kernel_variant::FAVOR ? "search_single_cta_favor"
+                                                                       : "search_single_cta")),
         launcher_jit_cache)
   {
   }
@@ -138,6 +143,44 @@ struct CagraSingleCtaSearchPlanner
                                                                               DistanceTag,
                                                                               false,
                                                                               false>>();
+    }
+  }
+
+  void add_favor_accumulator_search_kernel_fragment(bool topk_by_bitonic_sort,
+                                                    bool bitonic_sort_and_merge_multi_warps)
+  {
+    if (topk_by_bitonic_sort && bitonic_sort_and_merge_multi_warps) {
+      this->template add_static_fragment<
+        fragment_tag_search_single_cta_favor_accumulator<DataTag,
+                                                         SourceIndexTag,
+                                                         IndexTag,
+                                                         DistanceTag,
+                                                         true,
+                                                         true>>();
+    } else if (topk_by_bitonic_sort && !bitonic_sort_and_merge_multi_warps) {
+      this->template add_static_fragment<
+        fragment_tag_search_single_cta_favor_accumulator<DataTag,
+                                                         SourceIndexTag,
+                                                         IndexTag,
+                                                         DistanceTag,
+                                                         true,
+                                                         false>>();
+    } else if (!topk_by_bitonic_sort && bitonic_sort_and_merge_multi_warps) {
+      this->template add_static_fragment<
+        fragment_tag_search_single_cta_favor_accumulator<DataTag,
+                                                         SourceIndexTag,
+                                                         IndexTag,
+                                                         DistanceTag,
+                                                         false,
+                                                         true>>();
+    } else {
+      this->template add_static_fragment<
+        fragment_tag_search_single_cta_favor_accumulator<DataTag,
+                                                         SourceIndexTag,
+                                                         IndexTag,
+                                                         DistanceTag,
+                                                         false,
+                                                         false>>();
     }
   }
 };

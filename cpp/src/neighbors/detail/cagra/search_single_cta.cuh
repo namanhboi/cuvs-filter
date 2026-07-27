@@ -7,6 +7,7 @@
 #include "../neighbors_device_intrinsics.cuh"
 #include "bitonic.hpp"
 #include "device_memory_ops.hpp"
+#include "favor_mode.hpp"
 #include "hashmap.hpp"
 #include "search_plan.cuh"
 #include "search_single_cta_kernel.cuh"
@@ -153,8 +154,17 @@ struct search
         std::max<std::uint32_t>(additional_smem_size, sizeof(scan_op_t::TempStorage));
     }
 
-    smem_size = base_smem_size + additional_smem_size;
-    if (filter_mode == filtering_mode::FAVOR) { smem_size += sizeof(DISTANCE_T); }
+    if (uses_passing_accumulator(filter_mode)) {
+      constexpr std::uint32_t accumulator_size = 32;
+      const auto pass_flag_size =
+        static_cast<std::uint32_t>(result_buffer_size_32 * sizeof(std::uint8_t));
+      additional_smem_size = std::max(additional_smem_size, pass_flag_size);
+      smem_size = base_smem_size + accumulator_size * (sizeof(INDEX_T) + sizeof(DISTANCE_T)) +
+                  additional_smem_size;
+    } else {
+      smem_size = base_smem_size + additional_smem_size;
+    }
+    if (is_favor_mode(filter_mode)) { smem_size += sizeof(DISTANCE_T); }
 
     uint32_t block_size = thread_block_size;
     if (block_size == 0) {

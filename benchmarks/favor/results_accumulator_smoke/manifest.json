@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "description": "Matched Pareto comparison of default CAGRA, current FAVOR, and FAVOR with an in-kernel passing-result accumulator.",
+  "methods": {
+    "default": "Default CAGRA filtering",
+    "favor": "Current FAVOR",
+    "favor_accumulator": "FAVOR + passing-result accumulator"
+  },
+  "configs": {
+    "bigann10m_s01_nq10.json": {
+      "dataset": "bigann10m",
+      "dataset_title": "BIGANN-10M",
+      "selectivity_percent": 1,
+      "batch_size": 10,
+      "k": 10,
+      "delta_d": 1078.0567626953125,
+      "entries": [
+        {
+          "param_index": 0,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 1,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 2,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 1
+        }
+      ]
+    }
+  }
+}

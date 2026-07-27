@@ -1,0 +1,10 @@
+dataset,selectivity_percent,workload,method,max_recall,best_value_recall_90,best_value_recall_95
+bigann10m,1,throughput,default,0.78604,,
+bigann10m,1,throughput,favor,0.9113,103724.22701021716,
+bigann10m,1,throughput,favor_accumulator,0.9113,102107.3048541818,
+bigann10m,4,throughput,default,0.9472,164043.61795807243,
+bigann10m,4,throughput,favor,0.07636,,
+bigann10m,4,throughput,favor_accumulator,0.07634,,
+bigann10m,10,throughput,default,0.99452,438832.62360222696,211575.13159820158
+bigann10m,10,throughput,favor,0.70444,,
+bigann10m,10,throughput,favor_accumulator,0.70445,,

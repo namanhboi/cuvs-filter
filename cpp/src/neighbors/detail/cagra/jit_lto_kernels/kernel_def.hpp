@@ -80,6 +80,10 @@ using search_single_cta_favor_kernel_func_t =
        const float,
        const float);
 
+template <typename DataT, typename IndexT, typename DistanceT, typename SourceIndexT>
+using search_single_cta_favor_accumulator_kernel_func_t =
+  search_single_cta_favor_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>;
+
 namespace single_cta_search {
 
 template <typename DataT, typename IndexT, typename DistanceT, typename SourceIndexT>

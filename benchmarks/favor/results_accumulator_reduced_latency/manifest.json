@@ -1,0 +1,230 @@
+{
+  "version": 1,
+  "description": "Matched Pareto comparison of default CAGRA, current FAVOR, and FAVOR with an in-kernel passing-result accumulator.",
+  "methods": {
+    "default": "Default CAGRA filtering",
+    "favor": "Current FAVOR",
+    "favor_accumulator": "FAVOR + passing-result accumulator"
+  },
+  "configs": {
+    "bigann10m_s01_nq10.json": {
+      "dataset": "bigann10m",
+      "dataset_title": "BIGANN-10M",
+      "selectivity_percent": 1,
+      "batch_size": 10,
+      "k": 10,
+      "delta_d": 1078.0567626953125,
+      "entries": [
+        {
+          "param_index": 0,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 1,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 2,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 3,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 4,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 5,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 6,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 7,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 8,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 4
+        }
+      ]
+    },
+    "bigann10m_s04_nq10.json": {
+      "dataset": "bigann10m",
+      "dataset_title": "BIGANN-10M",
+      "selectivity_percent": 4,
+      "batch_size": 10,
+      "k": 10,
+      "delta_d": 1078.0567626953125,
+      "entries": [
+        {
+          "param_index": 0,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 1,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 2,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 3,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 4,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 5,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 6,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 7,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 8,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 4
+        }
+      ]
+    },
+    "bigann10m_s10_nq10.json": {
+      "dataset": "bigann10m",
+      "dataset_title": "BIGANN-10M",
+      "selectivity_percent": 10,
+      "batch_size": 10,
+      "k": 10,
+      "delta_d": 1078.0567626953125,
+      "entries": [
+        {
+          "param_index": 0,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 1,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 2,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 3,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 4,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 5,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 6,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 7,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 8,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 4
+        }
+      ]
+    }
+  }
+}

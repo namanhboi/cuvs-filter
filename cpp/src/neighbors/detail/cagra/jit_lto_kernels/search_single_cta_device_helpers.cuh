@@ -27,6 +27,85 @@
 
 namespace cuvs::neighbors::cagra::detail::single_cta_search {
 
+/**
+ * Merge passing candidates into a sorted 32-entry accumulator.
+ *
+ * The traversal top-k helper assumes CAGRA's swizzled buffer layout. This helper deliberately
+ * reuses the lower-level bitonic primitive so passing-result state stays independent of traversal
+ * state.
+ */
+template <typename IndexT, typename DistanceT>
+_RAFT_DEVICE __noinline__ void merge_passing_candidates_topk_32(
+  IndexT* accumulator_indices,
+  DistanceT* accumulator_distances,
+  const IndexT* candidate_indices,
+  const DistanceT* candidate_distances,
+  const std::uint8_t* candidate_pass_flags,
+  std::uint32_t num_candidates)
+{
+  constexpr std::uint32_t capacity = 32;
+  const auto lane_id               = threadIdx.x & (capacity - 1);
+  const auto invalid_index         = utils::get_max_value<IndexT>();
+  const auto max_distance          = utils::get_max_value<DistanceT>();
+
+  for (std::uint32_t offset = 0; offset < num_candidates; offset += capacity) {
+    const auto candidate_position = offset + lane_id;
+    const bool keep_candidate     = candidate_position < num_candidates &&
+                                candidate_pass_flags[candidate_position] != 0 &&
+                                candidate_indices[candidate_position] != invalid_index;
+
+    DistanceT keys[2] = {accumulator_distances[lane_id],
+                         keep_candidate ? candidate_distances[candidate_position] : max_distance};
+    IndexT values[2]  = {accumulator_indices[lane_id],
+                        keep_candidate ? candidate_indices[candidate_position] : invalid_index};
+
+    bitonic::warp_sort<DistanceT, IndexT, 2>(keys, values);
+
+    // warp_sort stores consecutive ranks as [rank 2*lane, rank 2*lane+1]. Gather ranks 0..31
+    // back to one rank per lane without another shared-memory staging buffer.
+    const auto source_lane = lane_id >> 1;
+    const auto even_key    = __shfl_sync(0xffffffffu, keys[0], source_lane);
+    const auto odd_key     = __shfl_sync(0xffffffffu, keys[1], source_lane);
+    const auto even_value  = __shfl_sync(0xffffffffu, values[0], source_lane);
+    const auto odd_value   = __shfl_sync(0xffffffffu, values[1], source_lane);
+
+    accumulator_distances[lane_id] = (lane_id & 1u) == 0 ? even_key : odd_key;
+    accumulator_indices[lane_id]   = (lane_id & 1u) == 0 ? even_value : odd_value;
+    __syncwarp();
+  }
+}
+
+template <std::uint32_t Capacity, typename IndexT, typename DistanceT>
+struct passing_result_accumulator {
+  static_assert(Capacity == 32, "The initial GPU specialization supports one warp (32 results)");
+
+  IndexT* indices;
+  DistanceT* distances;
+
+  RAFT_DEVICE_INLINE_FUNCTION void initialize() const
+  {
+    if (threadIdx.x < Capacity) {
+      indices[threadIdx.x]   = utils::get_max_value<IndexT>();
+      distances[threadIdx.x] = utils::get_max_value<DistanceT>();
+    }
+  }
+
+  RAFT_DEVICE_INLINE_FUNCTION void merge(const IndexT* candidate_indices,
+                                         const DistanceT* candidate_distances,
+                                         const std::uint8_t* candidate_pass_flags,
+                                         std::uint32_t num_candidates) const
+  {
+    if (threadIdx.x < Capacity) {
+      merge_passing_candidates_topk_32(indices,
+                                       distances,
+                                       candidate_indices,
+                                       candidate_distances,
+                                       candidate_pass_flags,
+                                       num_candidates);
+    }
+  }
+};
+
 // Type bundle for `job_desc_t` (DATA_T / INDEX_T / DISTANCE_T for persistent single-CTA kernels).
 template <typename DataT, typename IndexT, typename DistanceT>
 struct job_desc_traits {

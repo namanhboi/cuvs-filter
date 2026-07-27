@@ -988,6 +988,152 @@ distance gaps, graph-correlated candidate discovery, or the rejected bridge
 nodes required for traversal. The next design should use query-local candidate
 statistics or separate traversal priority from passing-result retention.
 
+* Passing-result accumulator
+
+** Motivation and behavior
+
+The original =SINGLE_CTA= internal top-k is both the traversal frontier and the
+source of final results. FAVOR's penalty changes which nodes occupy that
+frontier, so a passing node discovered earlier can be evicted and become
+unavailable to final post-filtering.
+
+The new opt-in =filtering_mode::FAVOR_ACCUMULATOR= keeps the FAVOR traversal and
+penalty formula unchanged, while maintaining an independent shared-memory list
+of the best 32 passing =(internal ID, unpenalized distance)= pairs seen
+anywhere during traversal. This isolates result retention from traversal
+priority without retries, per-query state, or a new termination rule.
+
+The mode is restricted to bitset-filtered =SINGLE_CTA= search and
+=top_k <= 32=. =DEFAULT= remains the public default, and current =FAVOR=
+remains separately selectable.
+
+** GPU implementation
+
+The bitset check stays fused into initial- and child-distance computation. The
+lead lane for each distance team also writes a one-byte pass flag. Once a
+candidate batch is complete, the first warp merges passing candidates into the
+sorted accumulator through CAGRA's existing =bitonic::warp_sort= primitive.
+The thin =passing_result_accumulator= abstraction is separate from CAGRA's
+traversal top-k helper because that helper assumes a swizzled buffer layout and
+mutates expansion state.
+
+The permanent shared-memory cost is 32 indices plus 32 distances: 256 bytes for
+=uint32_t=/=float=. Pass flags use one byte per candidate in the existing
+temporary workspace, so they increase shared memory only when larger than the
+previous radix/filter workspace. Each merge sorts at most 64 pairs in one warp
+per 32-candidate tile. There is no global buffer, atomic, host round trip,
+additional kernel launch, or CTA-wide sorting primitive. One CTA barrier after
+each merge makes reuse of the flag workspace safe.
+
+At output, the accumulator mode writes its best =top_k= passing entries
+directly. The default and current-FAVOR JIT specializations compile with the
+accumulator disabled and retain their existing post-processing path. A
+three-way internal variant keeps planner, fragment lookup, launcher, and
+benchmark parsing aligned:
+
+#+begin_src text
+DEFAULT            -> existing CAGRA SINGLE_CTA fragment
+FAVOR              -> existing FAVOR SINGLE_CTA fragment
+FAVOR_ACCUMULATOR  -> new accumulator fragment
+#+end_src
+
+** Correctness tests
+
+=test_favor_search.cu= covers implicit/explicit default equivalence,
+all-passing equivalence to default, passing-only results with float and uint8,
+zero penalty, and rejection of =top_k > 32=. Build and run it with:
+
+#+begin_src sh
+PARALLEL_LEVEL=$(nproc) micromamba run -n cuvs \
+  ./build.sh libcuvs tests -n \
+  --limit-tests=NEIGHBORS_ANN_CAGRA_FAVOR_SEARCH_TEST
+
+LD_PRELOAD=$PWD/cpp/build/libcuvs.so micromamba run -n cuvs \
+  ./cpp/build/gtests/NEIGHBORS_ANN_CAGRA_FAVOR_SEARCH_TEST
+#+end_src
+
+** Pareto benchmark and plots
+
+=accumulator_experiment.py= treats method as a first-class experiment
+dimension and applies the same graph, queries, bitset, ground truth, and
+=itopk={32,64,128,256,512}= by =search_width={1,2,4}= grid to:
+
+- =Default CAGRA filtering=;
+- =FAVOR + passing-result accumulator=;
+- =Current FAVOR=, included as a diagnostic baseline.
+
+Plotting fails if default or accumulator data is absent. Labels, colors, and
+markers are registered once. It creates one clearly labeled file per
+selectivity and workload:
+
+#+begin_src text
+plots/<dataset>_s<selectivity>_throughput.png
+plots/<dataset>_s<selectivity>_latency.png
+#+end_src
+
+Throughput uses 10,000 queries and plots QPS versus recall. Low-batch latency
+uses 10 queries and plots milliseconds versus recall. =comparison.csv= records
+maximum recall and the best value reaching 90% and 95% recall for every method.
+One repetition is used because prior measurements showed low variance.
+
+Build, generate, run, summarize, and plot BIGANN-10M with:
+
+#+begin_src sh
+PARALLEL_LEVEL=$(nproc) micromamba run -n cuvs \
+  ./build.sh libcuvs bench-ann -n \
+  --limit-bench-ann=CUVS_CAGRA_ANN_BENCH
+
+result_dir=benchmarks/favor/results_accumulator_bigann10m
+micromamba run -n cuvs python \
+  benchmarks/favor/accumulator_experiment.py generate \
+  --result-dir "$result_dir" --data-dir datasets \
+  --datasets bigann10m \
+  --selectivities 1 2 3 4 5 6 7 8 10 50 90 \
+  --batch-sizes 10 10000
+
+benchmarks/favor/run_accumulator.sh "$result_dir" datasets
+#+end_src
+
+The runner resumes complete JSON files and writes =summary.csv=,
+=comparison.csv=, and the plot directory. Set =FAVOR_FORCE_RERUN=1= to rerun
+complete configurations.
+
+** Reduced BIGANN-10M validation result
+
+To avoid spending most of the experiment on repeated JIT linking, the executed
+validation used representative selectivities =1, 4, 10=. Throughput retained
+the full 45-point-per-selectivity method/grid comparison. Low-batch latency
+used =search_width=4= and =itopk={128,256,512}=.
+
+The result is negative but conclusive for this design:
+
+| Selectivity | Method              | Max recall | Best QPS at recall >= 0.90 |
+|-------------+---------------------+------------+----------------------------|
+|          1% | Default             |    0.78604 |                          - |
+|          1% | Current FAVOR       |     0.9113 |                    103,724 |
+|          1% | FAVOR + accumulator |     0.9113 |                    102,107 |
+|          4% | Default             |     0.9472 |                    164,044 |
+|          4% | Current FAVOR       |    0.07636 |                          - |
+|          4% | FAVOR + accumulator |    0.07634 |                          - |
+|         10% | Default             |    0.99452 |                    438,833 |
+|         10% | Current FAVOR       |    0.70444 |                          - |
+|         10% | FAVOR + accumulator |    0.70445 |                          - |
+
+At 1%, the accumulator preserves current FAVOR's recall but is about 1.6%
+slower at the best point reaching 0.90 recall. At 4% and 10%, accumulator and
+current FAVOR have essentially identical recall, far below default CAGRA.
+Therefore historical passing-result eviction is not the cause of BIGANN's
+higher-selectivity failure. The penalty changes traversal so the useful
+passing nodes are not discovered in the first place; an output accumulator
+cannot recover candidates that were never scored.
+
+The six plots and corresponding CSV files are in:
+
+#+begin_src text
+benchmarks/favor/results_accumulator_reduced_throughput/
+benchmarks/favor/results_accumulator_reduced_latency/
+#+end_src
+
 * Known issue
 
 On the current environment, =CUVS_CAGRA_ANN_BENCH= sometimes exits with status

@@ -1,0 +1,5861 @@
+{
+  "version": 1,
+  "description": "Matched Pareto comparison of default CAGRA, current FAVOR, and FAVOR with an in-kernel passing-result accumulator.",
+  "methods": {
+    "default": "Default CAGRA filtering",
+    "favor": "Current FAVOR",
+    "favor_accumulator": "FAVOR + passing-result accumulator"
+  },
+  "configs": {
+    "bigann10m_s01_nq10.json": {
+      "dataset": "bigann10m",
+      "dataset_title": "BIGANN-10M",
+      "selectivity_percent": 1,
+      "batch_size": 10,
+      "k": 10,
+      "delta_d": 1078.0567626953125,
+      "entries": [
+        {
+          "param_index": 0,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 1,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 2,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 3,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 4,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 5,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 6,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 7,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 8,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 9,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 10,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 11,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 12,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 13,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 14,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 15,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 16,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 17,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 18,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 19,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 20,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 21,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 22,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 23,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 24,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 25,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 26,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 27,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 28,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 29,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 30,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 31,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 32,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 33,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 34,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 35,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 36,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 37,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 38,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 39,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 40,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 41,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 42,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 43,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 44,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 4
+        }
+      ]
+    },
+    "bigann10m_s01_nq10000.json": {
+      "dataset": "bigann10m",
+      "dataset_title": "BIGANN-10M",
+      "selectivity_percent": 1,
+      "batch_size": 10000,
+      "k": 10,
+      "delta_d": 1078.0567626953125,
+      "entries": [
+        {
+          "param_index": 0,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 1,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 2,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 3,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 4,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 5,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 6,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 7,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 8,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 9,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 10,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 11,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 12,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 13,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 14,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 15,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 16,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 17,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 18,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 19,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 20,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 21,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 22,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 23,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 24,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 25,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 26,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 27,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 28,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 29,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 30,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 31,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 32,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 33,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 34,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 35,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 36,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 37,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 38,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 39,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 40,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 41,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 42,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 43,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 44,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 4
+        }
+      ]
+    },
+    "bigann10m_s02_nq10.json": {
+      "dataset": "bigann10m",
+      "dataset_title": "BIGANN-10M",
+      "selectivity_percent": 2,
+      "batch_size": 10,
+      "k": 10,
+      "delta_d": 1078.0567626953125,
+      "entries": [
+        {
+          "param_index": 0,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 1,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 2,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 3,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 4,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 5,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 6,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 7,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 8,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 9,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 10,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 11,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 12,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 13,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 14,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 15,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 16,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 17,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 18,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 19,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 20,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 21,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 22,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 23,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 24,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 25,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 26,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 27,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 28,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 29,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 30,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 31,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 32,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 33,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 34,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 35,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 36,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 37,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 38,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 39,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 40,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 41,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 42,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 43,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 44,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 4
+        }
+      ]
+    },
+    "bigann10m_s02_nq10000.json": {
+      "dataset": "bigann10m",
+      "dataset_title": "BIGANN-10M",
+      "selectivity_percent": 2,
+      "batch_size": 10000,
+      "k": 10,
+      "delta_d": 1078.0567626953125,
+      "entries": [
+        {
+          "param_index": 0,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 1,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 2,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 3,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 4,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 5,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 6,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 7,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 8,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 9,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 10,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 11,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 12,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 13,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 14,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 15,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 16,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 17,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 18,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 19,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 20,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 21,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 22,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 23,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 24,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 25,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 26,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 27,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 28,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 29,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 30,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 31,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 32,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 33,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 34,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 35,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 36,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 37,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 38,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 39,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 40,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 41,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 42,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 43,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 44,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 4
+        }
+      ]
+    },
+    "bigann10m_s03_nq10.json": {
+      "dataset": "bigann10m",
+      "dataset_title": "BIGANN-10M",
+      "selectivity_percent": 3,
+      "batch_size": 10,
+      "k": 10,
+      "delta_d": 1078.0567626953125,
+      "entries": [
+        {
+          "param_index": 0,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 1,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 2,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 3,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 4,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 5,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 6,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 7,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 8,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 9,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 10,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 11,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 12,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 13,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 14,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 15,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 16,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 17,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 18,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 19,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 20,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 21,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 22,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 23,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 24,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 25,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 26,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 27,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 28,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 29,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 30,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 31,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 32,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 33,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 34,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 35,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 36,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 37,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 38,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 39,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 40,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 41,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 42,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 43,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 44,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 4
+        }
+      ]
+    },
+    "bigann10m_s03_nq10000.json": {
+      "dataset": "bigann10m",
+      "dataset_title": "BIGANN-10M",
+      "selectivity_percent": 3,
+      "batch_size": 10000,
+      "k": 10,
+      "delta_d": 1078.0567626953125,
+      "entries": [
+        {
+          "param_index": 0,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 1,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 2,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 3,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 4,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 5,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 6,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 7,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 8,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 9,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 10,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 11,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 12,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 13,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 14,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 15,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 16,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 17,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 18,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 19,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 20,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 21,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 22,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 23,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 24,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 25,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 26,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 27,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 28,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 29,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 30,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 31,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 32,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 33,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 34,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 35,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 36,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 37,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 38,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 39,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 40,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 41,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 42,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 43,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 44,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 4
+        }
+      ]
+    },
+    "bigann10m_s04_nq10.json": {
+      "dataset": "bigann10m",
+      "dataset_title": "BIGANN-10M",
+      "selectivity_percent": 4,
+      "batch_size": 10,
+      "k": 10,
+      "delta_d": 1078.0567626953125,
+      "entries": [
+        {
+          "param_index": 0,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 1,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 2,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 3,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 4,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 5,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 6,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 7,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 8,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 9,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 10,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 11,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 12,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 13,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 14,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 15,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 16,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 17,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 18,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 19,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 20,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 21,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 22,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 23,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 24,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 25,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 26,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 27,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 28,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 29,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 30,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 31,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 32,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 33,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 34,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 35,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 36,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 37,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 38,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 39,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 40,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 41,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 42,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 43,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 44,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 4
+        }
+      ]
+    },
+    "bigann10m_s04_nq10000.json": {
+      "dataset": "bigann10m",
+      "dataset_title": "BIGANN-10M",
+      "selectivity_percent": 4,
+      "batch_size": 10000,
+      "k": 10,
+      "delta_d": 1078.0567626953125,
+      "entries": [
+        {
+          "param_index": 0,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 1,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 2,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 3,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 4,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 5,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 6,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 7,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 8,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 9,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 10,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 11,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 12,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 13,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 14,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 15,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 16,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 17,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 18,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 19,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 20,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 21,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 22,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 23,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 24,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 25,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 26,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 27,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 28,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 29,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 30,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 31,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 32,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 33,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 34,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 35,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 36,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 37,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 38,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 39,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 40,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 41,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 42,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 43,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 44,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 4
+        }
+      ]
+    },
+    "bigann10m_s05_nq10.json": {
+      "dataset": "bigann10m",
+      "dataset_title": "BIGANN-10M",
+      "selectivity_percent": 5,
+      "batch_size": 10,
+      "k": 10,
+      "delta_d": 1078.0567626953125,
+      "entries": [
+        {
+          "param_index": 0,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 1,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 2,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 3,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 4,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 5,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 6,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 7,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 8,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 9,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 10,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 11,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 12,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 13,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 14,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 15,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 16,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 17,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 18,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 19,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 20,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 21,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 22,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 23,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 24,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 25,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 26,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 27,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 28,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 29,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 30,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 31,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 32,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 33,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 34,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 35,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 36,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 37,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 38,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 39,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 40,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 41,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 42,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 43,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 44,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 4
+        }
+      ]
+    },
+    "bigann10m_s05_nq10000.json": {
+      "dataset": "bigann10m",
+      "dataset_title": "BIGANN-10M",
+      "selectivity_percent": 5,
+      "batch_size": 10000,
+      "k": 10,
+      "delta_d": 1078.0567626953125,
+      "entries": [
+        {
+          "param_index": 0,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 1,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 2,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 3,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 4,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 5,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 6,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 7,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 8,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 9,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 10,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 11,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 12,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 13,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 14,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 15,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 16,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 17,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 18,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 19,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 20,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 21,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 22,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 23,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 24,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 25,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 26,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 27,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 28,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 29,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 30,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 31,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 32,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 33,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 34,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 35,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 36,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 37,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 38,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 39,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 40,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 41,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 42,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 43,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 44,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 4
+        }
+      ]
+    },
+    "bigann10m_s06_nq10.json": {
+      "dataset": "bigann10m",
+      "dataset_title": "BIGANN-10M",
+      "selectivity_percent": 6,
+      "batch_size": 10,
+      "k": 10,
+      "delta_d": 1078.0567626953125,
+      "entries": [
+        {
+          "param_index": 0,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 1,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 2,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 3,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 4,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 5,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 6,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 7,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 8,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 9,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 10,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 11,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 12,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 13,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 14,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 15,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 16,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 17,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 18,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 19,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 20,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 21,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 22,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 23,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 24,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 25,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 26,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 27,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 28,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 29,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 30,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 31,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 32,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 33,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 34,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 35,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 36,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 37,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 38,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 39,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 40,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 41,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 42,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 43,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 44,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 4
+        }
+      ]
+    },
+    "bigann10m_s06_nq10000.json": {
+      "dataset": "bigann10m",
+      "dataset_title": "BIGANN-10M",
+      "selectivity_percent": 6,
+      "batch_size": 10000,
+      "k": 10,
+      "delta_d": 1078.0567626953125,
+      "entries": [
+        {
+          "param_index": 0,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 1,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 2,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 3,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 4,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 5,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 6,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 7,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 8,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 9,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 10,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 11,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 12,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 13,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 14,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 15,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 16,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 17,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 18,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 19,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 20,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 21,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 22,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 23,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 24,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 25,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 26,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 27,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 28,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 29,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 30,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 31,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 32,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 33,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 34,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 35,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 36,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 37,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 38,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 39,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 40,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 41,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 42,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 43,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 44,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 4
+        }
+      ]
+    },
+    "bigann10m_s07_nq10.json": {
+      "dataset": "bigann10m",
+      "dataset_title": "BIGANN-10M",
+      "selectivity_percent": 7,
+      "batch_size": 10,
+      "k": 10,
+      "delta_d": 1078.0567626953125,
+      "entries": [
+        {
+          "param_index": 0,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 1,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 2,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 3,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 4,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 5,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 6,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 7,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 8,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 9,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 10,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 11,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 12,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 13,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 14,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 15,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 16,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 17,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 18,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 19,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 20,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 21,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 22,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 23,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 24,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 25,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 26,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 27,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 28,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 29,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 30,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 31,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 32,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 33,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 34,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 35,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 36,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 37,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 38,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 39,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 40,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 41,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 42,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 43,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 44,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 4
+        }
+      ]
+    },
+    "bigann10m_s07_nq10000.json": {
+      "dataset": "bigann10m",
+      "dataset_title": "BIGANN-10M",
+      "selectivity_percent": 7,
+      "batch_size": 10000,
+      "k": 10,
+      "delta_d": 1078.0567626953125,
+      "entries": [
+        {
+          "param_index": 0,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 1,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 2,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 3,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 4,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 5,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 6,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 7,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 8,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 9,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 10,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 11,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 12,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 13,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 14,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 15,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 16,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 17,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 18,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 19,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 20,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 21,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 22,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 23,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 24,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 25,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 26,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 27,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 28,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 29,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 30,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 31,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 32,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 33,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 34,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 35,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 36,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 37,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 38,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 39,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 40,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 41,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 42,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 43,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 44,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 4
+        }
+      ]
+    },
+    "bigann10m_s08_nq10.json": {
+      "dataset": "bigann10m",
+      "dataset_title": "BIGANN-10M",
+      "selectivity_percent": 8,
+      "batch_size": 10,
+      "k": 10,
+      "delta_d": 1078.0567626953125,
+      "entries": [
+        {
+          "param_index": 0,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 1,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 2,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 3,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 4,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 5,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 6,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 7,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 8,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 9,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 10,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 11,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 12,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 13,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 14,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 15,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 16,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 17,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 18,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 19,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 20,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 21,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 22,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 23,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 24,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 25,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 26,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 27,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 28,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 29,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 30,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 31,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 32,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 33,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 34,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 35,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 36,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 37,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 38,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 39,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 40,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 41,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 42,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 43,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 44,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 4
+        }
+      ]
+    },
+    "bigann10m_s08_nq10000.json": {
+      "dataset": "bigann10m",
+      "dataset_title": "BIGANN-10M",
+      "selectivity_percent": 8,
+      "batch_size": 10000,
+      "k": 10,
+      "delta_d": 1078.0567626953125,
+      "entries": [
+        {
+          "param_index": 0,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 1,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 2,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 3,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 4,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 5,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 6,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 7,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 8,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 9,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 10,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 11,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 12,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 13,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 14,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 15,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 16,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 17,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 18,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 19,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 20,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 21,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 22,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 23,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 24,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 25,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 26,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 27,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 28,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 29,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 30,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 31,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 32,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 33,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 34,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 35,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 36,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 37,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 38,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 39,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 40,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 41,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 42,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 43,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 44,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 4
+        }
+      ]
+    },
+    "bigann10m_s10_nq10.json": {
+      "dataset": "bigann10m",
+      "dataset_title": "BIGANN-10M",
+      "selectivity_percent": 10,
+      "batch_size": 10,
+      "k": 10,
+      "delta_d": 1078.0567626953125,
+      "entries": [
+        {
+          "param_index": 0,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 1,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 2,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 3,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 4,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 5,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 6,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 7,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 8,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 9,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 10,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 11,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 12,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 13,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 14,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 15,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 16,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 17,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 18,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 19,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 20,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 21,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 22,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 23,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 24,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 25,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 26,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 27,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 28,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 29,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 30,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 31,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 32,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 33,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 34,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 35,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 36,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 37,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 38,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 39,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 40,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 41,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 42,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 43,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 44,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 4
+        }
+      ]
+    },
+    "bigann10m_s10_nq10000.json": {
+      "dataset": "bigann10m",
+      "dataset_title": "BIGANN-10M",
+      "selectivity_percent": 10,
+      "batch_size": 10000,
+      "k": 10,
+      "delta_d": 1078.0567626953125,
+      "entries": [
+        {
+          "param_index": 0,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 1,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 2,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "param_index": 3,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 4,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 5,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "param_index": 6,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 7,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 8,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "param_index": 9,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 10,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 11,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "param_index": 12,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 13,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 14,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "param_index": 15,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 16,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 17,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "param_index": 18,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 19,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 20,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "param_index": 21,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 22,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 23,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "param_index": 24,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 25,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 26,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "param_index": 27,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 28,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 29,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "param_index": 30,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 31,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 32,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "param_index": 33,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 34,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 35,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "param_index": 36,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 37,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 38,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "param_index": 39,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 40,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 41,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "param_index": 42,
+          "method": "default",
+          "method_label": "Default CAGRA filtering",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 43,
+          "method": "favor",
+          "method_label": "Current FAVOR",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "param_index": 44,
+          "method": "favor_accumulator",
+          "method_label": "FAVOR + passing-result accumulator",
+          "itopk": 512,
+          "search_width": 4
+        }
+      ]
+    }
+  }
+}

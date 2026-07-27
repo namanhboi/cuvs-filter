@@ -9,6 +9,7 @@
 #include "detail/cagra/cagra_build.cuh"
 #include "detail/cagra/cagra_merge.cuh"
 #include "detail/cagra/cagra_search.cuh"
+#include "detail/cagra/favor_mode.hpp"
 #include "detail/cagra/graph_core.cuh"
 
 #include "detail/ann_utils.cuh"
@@ -416,7 +417,7 @@ void search(raft::resources const& res,
     using none_filter_type    = cuvs::neighbors::filtering::none_sample_filter;
     auto& sample_filter       = dynamic_cast<const none_filter_type&>(sample_filter_ref);
     search_params params_copy = params;
-    RAFT_EXPECTS(params.filter_mode != filtering_mode::FAVOR,
+    RAFT_EXPECTS(!detail::is_favor_mode(params.filter_mode),
                  "FAVOR filtering requires a bitset filter");
     if (params.filtering_rate < 0.0) { params_copy.filtering_rate = 0.0; }
     auto sample_filter_copy = sample_filter;
@@ -430,7 +431,7 @@ void search(raft::resources const& res,
       dynamic_cast<const cuvs::neighbors::filtering::bitset_filter<uint32_t, int64_t>&>(
         sample_filter_ref);
     search_params params_copy = params;
-    if (params.filter_mode == filtering_mode::FAVOR) {
+    if (detail::is_favor_mode(params.filter_mode)) {
       const auto num_set_bits = detail::count_favor_bitset_matches(res, idx, sample_filter);
       if (num_set_bits == 0) {
         detail::fill_empty_favor_results(res, neighbors, distances);
@@ -456,7 +457,7 @@ void search(raft::resources const& res,
     auto& sample_filter =
       dynamic_cast<const cuvs::neighbors::filtering::udf_filter&>(sample_filter_ref);
     search_params params_copy = params;
-    RAFT_EXPECTS(params.filter_mode != filtering_mode::FAVOR,
+    RAFT_EXPECTS(!detail::is_favor_mode(params.filter_mode),
                  "FAVOR filtering currently supports only bitset filters");
     if (params.filtering_rate < 0.0) {
       const float min_filtering_rate = 0.0f;

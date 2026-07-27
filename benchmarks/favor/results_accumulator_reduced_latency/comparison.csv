@@ -1,0 +1,10 @@
+dataset,selectivity_percent,workload,method,max_recall,best_value_recall_90,best_value_recall_95
+bigann10m,1,latency,default,0.7589090909090909,,
+bigann10m,1,latency,favor,0.91,0.001781497980769231,
+bigann10m,1,latency,favor_accumulator,0.9099122807017543,0.002207949061403509,
+bigann10m,4,latency,default,0.9396610169491525,0.001140357111111111,
+bigann10m,4,latency,favor,0.07702770780856423,,
+bigann10m,4,latency,favor_accumulator,0.07738786279683377,,
+bigann10m,10,latency,default,0.9942105263157894,0.0007099407095808384,0.0011220342449799196
+bigann10m,10,latency,favor,0.7124,,
+bigann10m,10,latency,favor_accumulator,0.7083333333333334,,

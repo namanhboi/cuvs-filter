@@ -49,6 +49,7 @@ using cuvs::neighbors::cagra::detail::device::compute_favor_distance_to_random_n
 
 // JIT search_core - setup_workspace/compute_distance via function pointers
 template <bool FAVOR,
+          bool ACCUMULATE_PASSING,
           bool TOPK_BY_BITONIC_SORT,
           bool BITONIC_SORT_AND_MERGE_MULTI_WARPS,
           typename DataT,
@@ -86,6 +87,7 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   const float favor_delta_d  = 0.0f,
   const IndexT graph_size    = 0)  // Original number of bits
 {
+  static_assert(!ACCUMULATE_PASSING || FAVOR);
   using LOAD_T = device::LOAD_128BIT_T;
 
   auto to_source_index = [source_indices_ptr](IndexT x) {
@@ -134,13 +136,22 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   auto* __restrict__ topk_ws = reinterpret_cast<std::uint32_t*>(parent_list_buffer + search_width);
   auto* terminate_flag       = reinterpret_cast<std::uint32_t*>(topk_ws + 3);
   DistanceT* favor_penalty   = nullptr;
+  IndexT* passing_topk_indices      = nullptr;
+  DistanceT* passing_topk_distances = nullptr;
   std::uint32_t* smem_work_ptr;
   if constexpr (FAVOR) {
     favor_penalty = reinterpret_cast<DistanceT*>(terminate_flag + 1);
-    smem_work_ptr = reinterpret_cast<std::uint32_t*>(favor_penalty + 1);
+    if constexpr (ACCUMULATE_PASSING) {
+      passing_topk_indices   = reinterpret_cast<IndexT*>(favor_penalty + 1);
+      passing_topk_distances = reinterpret_cast<DistanceT*>(passing_topk_indices + 32);
+      smem_work_ptr          = reinterpret_cast<std::uint32_t*>(passing_topk_distances + 32);
+    } else {
+      smem_work_ptr = reinterpret_cast<std::uint32_t*>(favor_penalty + 1);
+    }
   } else {
     smem_work_ptr = reinterpret_cast<std::uint32_t*>(terminate_flag + 1);
   }
+  auto* candidate_pass_flags = reinterpret_cast<std::uint8_t*>(smem_work_ptr);
 
   // A flag for filtering.
   auto filter_flag = terminate_flag;
@@ -154,6 +165,10 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
       favor_penalty[0]        = static_cast<DistanceT>(filtering_rate * (ef - selectivity) *
                                                 favor_delta_d / (2.0f * selectivity * ef));
     }
+  }
+  if constexpr (ACCUMULATE_PASSING) {
+    passing_result_accumulator<32, IndexT, DistanceT>{passing_topk_indices, passing_topk_distances}
+      .initialize();
   }
 
   // Init hashmap
@@ -173,22 +188,26 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   // Get dataset_size directly from base descriptor
   IndexT dataset_size = smem_desc->size;
   if constexpr (FAVOR) {
-    compute_favor_distance_to_random_nodes_jit<IndexT, DistanceT, DataT, SourceIndexT>(
-      result_indices_buffer,
-      result_distances_buffer,
-      smem_desc,
-      result_buffer_size,
-      num_distilation,
-      rand_xor_mask,
-      local_seed_ptr,
-      num_seeds,
-      local_visited_hashmap_ptr,
-      hash_bitlen,
-      graph_size,
-      source_indices_ptr,
-      query_id + query_id_offset,
-      filter_payload,
-      favor_penalty[0]);
+    compute_favor_distance_to_random_nodes_jit<IndexT,
+                                               DistanceT,
+                                               DataT,
+                                               SourceIndexT,
+                                               ACCUMULATE_PASSING>(result_indices_buffer,
+                                                                   result_distances_buffer,
+                                                                   smem_desc,
+                                                                   result_buffer_size,
+                                                                   num_distilation,
+                                                                   rand_xor_mask,
+                                                                   local_seed_ptr,
+                                                                   num_seeds,
+                                                                   local_visited_hashmap_ptr,
+                                                                   hash_bitlen,
+                                                                   graph_size,
+                                                                   source_indices_ptr,
+                                                                   query_id + query_id_offset,
+                                                                   filter_payload,
+                                                                   favor_penalty[0],
+                                                                   candidate_pass_flags);
   } else {
     compute_distance_to_random_nodes_jit<IndexT, DistanceT, DataT>(result_indices_buffer,
                                                                    result_distances_buffer,
@@ -207,6 +226,12 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
                                                                    graph_size);
   }
   __syncthreads();
+  if constexpr (ACCUMULATE_PASSING) {
+    passing_result_accumulator<32, IndexT, DistanceT>{passing_topk_indices, passing_topk_distances}
+      .merge(
+        result_indices_buffer, result_distances_buffer, candidate_pass_flags, result_buffer_size);
+    __syncthreads();
+  }
   _CLK_REC(clk_compute_1st_distance);
 
   std::uint32_t iter = 0;
@@ -315,7 +340,12 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
     // compute the norms between child nodes and query node using JIT version
     _CLK_START();
     if constexpr (FAVOR) {
-      compute_favor_distance_to_child_nodes_jit<IndexT, DistanceT, DataT, SourceIndexT>(
+      compute_favor_distance_to_child_nodes_jit<IndexT,
+                                                DistanceT,
+                                                DataT,
+                                                SourceIndexT,
+                                                1,
+                                                ACCUMULATE_PASSING>(
         result_indices_buffer + internal_topk,
         result_distances_buffer + internal_topk,
         smem_desc,
@@ -329,7 +359,8 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
         source_indices_ptr,
         query_id + query_id_offset,
         filter_payload,
-        favor_penalty[0]);
+        favor_penalty[0],
+        candidate_pass_flags);
     } else {
       compute_distance_to_child_nodes_jit<IndexT, DistanceT, DataT>(
         result_indices_buffer + internal_topk,
@@ -348,6 +379,15 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
     // Critical: __syncthreads() must be reached by ALL threads
     // If any thread is stuck in compute_distance_to_child_nodes_jit, this will hang
     __syncthreads();
+    if constexpr (ACCUMULATE_PASSING) {
+      passing_result_accumulator<32, IndexT, DistanceT>{passing_topk_indices,
+                                                        passing_topk_distances}
+        .merge(result_indices_buffer + internal_topk,
+               result_distances_buffer + internal_topk,
+               candidate_pass_flags,
+               search_width * graph_degree);
+      __syncthreads();
+    }
     _CLK_REC(clk_compute_distance);
 
     if constexpr (!FAVOR) {
@@ -376,79 +416,83 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
     iter++;
   }
 
-  // Post process for filtering - use extern sample_filter function
+  // Post process for filtering - use extern sample_filter function. The accumulator variant has
+  // already retained a sorted passing-only result set and bypasses this traversal-buffer cleanup.
   constexpr IndexT index_msb_1_mask = utils::gen_index_msb_1_mask<IndexT>::value;
   const IndexT invalid_index        = utils::get_max_value<IndexT>();
 
-  for (unsigned i = threadIdx.x; i < internal_topk + search_width * graph_degree; i += blockDim.x) {
-    const auto node_id = result_indices_buffer[i] & ~index_msb_1_mask;
-    if (node_id != (invalid_index & ~index_msb_1_mask) &&
-        !sample_filter<SourceIndexT>(query_id + query_id_offset,
-                                     to_source_index(node_id),
-                                     filter_payload.sample_filter_data())) {
-      result_distances_buffer[i] = utils::get_max_value<DistanceT>();
-      result_indices_buffer[i]   = invalid_index;
-    }
-  }
-
-  __syncthreads();
-  // Move invalid index items to the end of the buffer without sorting the entire buffer
-  using scan_op_t    = cub::WarpScan<unsigned>;
-  auto& temp_storage = *reinterpret_cast<typename scan_op_t::TempStorage*>(smem_work_ptr);
-
-  constexpr std::uint32_t warp_size = 32;
-  if (threadIdx.x < warp_size) {
-    std::uint32_t num_found_valid = 0;
-    for (std::uint32_t buffer_offset = 0; buffer_offset < internal_topk;
-         buffer_offset += warp_size) {
-      const auto src_position = buffer_offset + threadIdx.x;
-      const std::uint32_t is_valid_index =
-        (result_indices_buffer[src_position] & (~index_msb_1_mask)) ==
-            (invalid_index & (~index_msb_1_mask))
-          ? 0
-          : 1;
-      std::uint32_t new_position;
-      scan_op_t(temp_storage).InclusiveSum(is_valid_index, new_position);
-      if (is_valid_index) {
-        const auto dst_position               = num_found_valid + (new_position - 1);
-        result_indices_buffer[dst_position]   = result_indices_buffer[src_position];
-        result_distances_buffer[dst_position] = result_distances_buffer[src_position];
-      }
-
-      num_found_valid += new_position;
-      for (std::uint32_t offset = (warp_size >> 1); offset > 0; offset >>= 1) {
-        const auto v = raft::shfl_xor(num_found_valid, offset);
-        if ((threadIdx.x & offset) == 0) { num_found_valid = v; }
-      }
-
-      if (num_found_valid >= top_k) { break; }
-    }
-
-    if (num_found_valid < top_k) {
-      for (std::uint32_t i = num_found_valid + threadIdx.x; i < internal_topk; i += warp_size) {
-        result_indices_buffer[i]   = invalid_index;
+  if constexpr (!ACCUMULATE_PASSING) {
+    for (unsigned i = threadIdx.x; i < internal_topk + search_width * graph_degree;
+         i += blockDim.x) {
+      const auto node_id = result_indices_buffer[i] & ~index_msb_1_mask;
+      if (node_id != (invalid_index & ~index_msb_1_mask) &&
+          !sample_filter<SourceIndexT>(query_id + query_id_offset,
+                                       to_source_index(node_id),
+                                       filter_payload.sample_filter_data())) {
         result_distances_buffer[i] = utils::get_max_value<DistanceT>();
+        result_indices_buffer[i]   = invalid_index;
       }
     }
-  }
 
-  // If the sufficient number of valid indexes are not in the internal topk, pick up from the
-  // candidate list.
-  if (top_k > internal_topk || result_indices_buffer[top_k - 1] == invalid_index) {
     __syncthreads();
-    topk_by_bitonic_sort_and_merge<BITONIC_SORT_AND_MERGE_MULTI_WARPS>(
-      result_distances_buffer,
-      result_indices_buffer,
-      max_itopk,
-      internal_topk,
-      result_distances_buffer + internal_topk,
-      result_indices_buffer + internal_topk,
-      max_candidates,
-      search_width * graph_degree,
-      topk_ws,
-      (iter == 0));
+    // Move invalid index items to the end of the buffer without sorting the entire buffer
+    using scan_op_t    = cub::WarpScan<unsigned>;
+    auto& temp_storage = *reinterpret_cast<typename scan_op_t::TempStorage*>(smem_work_ptr);
+
+    constexpr std::uint32_t warp_size = 32;
+    if (threadIdx.x < warp_size) {
+      std::uint32_t num_found_valid = 0;
+      for (std::uint32_t buffer_offset = 0; buffer_offset < internal_topk;
+           buffer_offset += warp_size) {
+        const auto src_position = buffer_offset + threadIdx.x;
+        const std::uint32_t is_valid_index =
+          (result_indices_buffer[src_position] & (~index_msb_1_mask)) ==
+              (invalid_index & (~index_msb_1_mask))
+            ? 0
+            : 1;
+        std::uint32_t new_position;
+        scan_op_t(temp_storage).InclusiveSum(is_valid_index, new_position);
+        if (is_valid_index) {
+          const auto dst_position               = num_found_valid + (new_position - 1);
+          result_indices_buffer[dst_position]   = result_indices_buffer[src_position];
+          result_distances_buffer[dst_position] = result_distances_buffer[src_position];
+        }
+
+        num_found_valid += new_position;
+        for (std::uint32_t offset = (warp_size >> 1); offset > 0; offset >>= 1) {
+          const auto v = raft::shfl_xor(num_found_valid, offset);
+          if ((threadIdx.x & offset) == 0) { num_found_valid = v; }
+        }
+
+        if (num_found_valid >= top_k) { break; }
+      }
+
+      if (num_found_valid < top_k) {
+        for (std::uint32_t i = num_found_valid + threadIdx.x; i < internal_topk; i += warp_size) {
+          result_indices_buffer[i]   = invalid_index;
+          result_distances_buffer[i] = utils::get_max_value<DistanceT>();
+        }
+      }
+    }
+
+    // If the sufficient number of valid indexes are not in the internal topk, pick up from the
+    // candidate list.
+    if (top_k > internal_topk || result_indices_buffer[top_k - 1] == invalid_index) {
+      __syncthreads();
+      topk_by_bitonic_sort_and_merge<BITONIC_SORT_AND_MERGE_MULTI_WARPS>(
+        result_distances_buffer,
+        result_indices_buffer,
+        max_itopk,
+        internal_topk,
+        result_distances_buffer + internal_topk,
+        result_indices_buffer + internal_topk,
+        max_candidates,
+        search_width * graph_degree,
+        topk_ws,
+        (iter == 0));
+    }
+    __syncthreads();
   }
-  __syncthreads();
 
   // NB: The indices pointer is tagged with its element size.
   const uint32_t index_element_tag = result_indices_ptr & 0x3;
@@ -470,15 +514,27 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
           reinterpret_cast<uint8_t*>(ptr)[i] = static_cast<uint8_t>(x);
         };
   for (std::uint32_t i = threadIdx.x; i < top_k; i += blockDim.x) {
-    unsigned j  = i + (top_k * query_id);
-    unsigned ii = i;
-    if constexpr (TOPK_BY_BITONIC_SORT) { ii = device::swizzling(i); }
-    if (result_distances_ptr != nullptr) { result_distances_ptr[j] = result_distances_buffer[ii]; }
+    unsigned j = i + (top_k * query_id);
+    if constexpr (ACCUMULATE_PASSING) {
+      const auto internal_index = passing_topk_indices[i];
+      if (result_distances_ptr != nullptr) { result_distances_ptr[j] = passing_topk_distances[i]; }
+      if (internal_index == invalid_index) {
+        write_indices(result_indices_ptr, j, static_cast<SourceIndexT>(invalid_index));
+      } else {
+        write_indices(result_indices_ptr, j, to_source_index(internal_index));
+      }
+    } else {
+      unsigned ii = i;
+      if constexpr (TOPK_BY_BITONIC_SORT) { ii = device::swizzling(i); }
+      if (result_distances_ptr != nullptr) {
+        result_distances_ptr[j] = result_distances_buffer[ii];
+      }
 
-    auto internal_index =
-      result_indices_buffer[ii] & ~index_msb_1_mask;  // clear most significant bit
-    auto source_index = to_source_index(internal_index);
-    write_indices(result_indices_ptr, j, source_index);
+      auto internal_index =
+        result_indices_buffer[ii] & ~index_msb_1_mask;  // clear most significant bit
+      auto source_index = to_source_index(internal_index);
+      write_indices(result_indices_ptr, j, source_index);
+    }
   }
   if (threadIdx.x == 0 && num_executed_iterations != nullptr) {
     num_executed_iterations[query_id] = iter + 1;
@@ -548,6 +604,7 @@ __device__ void search_kernel_jit(
 {
   const auto query_id = blockIdx.y;
   search_core<false,
+              false,
               TOPK_BY_BITONIC_SORT,
               BITONIC_SORT_AND_MERGE_MULTI_WARPS,
               DataT,
@@ -622,6 +679,82 @@ __device__ void search_favor_kernel_jit(
 {
   const auto query_id = blockIdx.y;
   search_core<true,
+              false,
+              TOPK_BY_BITONIC_SORT,
+              BITONIC_SORT_AND_MERGE_MULTI_WARPS,
+              DataT,
+              IndexT,
+              DistanceT,
+              SourceIndexT>(result_indices_ptr,
+                            result_distances_ptr,
+                            top_k,
+                            queries_ptr,
+                            knn_graph,
+                            graph_degree,
+                            source_indices_ptr,
+                            num_distilation,
+                            rand_xor_mask,
+                            seed_ptr,
+                            num_seeds,
+                            visited_hashmap_ptr,
+                            max_candidates,
+                            max_itopk,
+                            internal_topk,
+                            search_width,
+                            min_iteration,
+                            max_iteration,
+                            num_executed_iterations,
+                            hash_bitlen,
+                            small_hash_bitlen,
+                            small_hash_reset_interval,
+                            query_id,
+                            query_id_offset,
+                            dataset_desc,
+                            filter_payload,
+                            filtering_rate,
+                            favor_delta_d,
+                            graph_size);
+}
+
+template <bool TOPK_BY_BITONIC_SORT,
+          bool BITONIC_SORT_AND_MERGE_MULTI_WARPS,
+          typename DataT,
+          typename IndexT,
+          typename DistanceT,
+          typename SourceIndexT>
+__device__ void search_favor_accumulator_kernel_jit(
+  uintptr_t result_indices_ptr,
+  DistanceT* const result_distances_ptr,
+  const std::uint32_t top_k,
+  const DataT* const queries_ptr,
+  const IndexT* const knn_graph,
+  const std::uint32_t graph_degree,
+  const SourceIndexT* source_indices_ptr,
+  const unsigned num_distilation,
+  const uint64_t rand_xor_mask,
+  const IndexT* seed_ptr,
+  const uint32_t num_seeds,
+  IndexT* const visited_hashmap_ptr,
+  const std::uint32_t max_candidates,
+  const std::uint32_t max_itopk,
+  const std::uint32_t internal_topk,
+  const std::uint32_t search_width,
+  const std::uint32_t min_iteration,
+  const std::uint32_t max_iteration,
+  std::uint32_t* const num_executed_iterations,
+  const std::uint32_t hash_bitlen,
+  const std::uint32_t small_hash_bitlen,
+  const std::uint32_t small_hash_reset_interval,
+  const std::uint32_t query_id_offset,
+  const dataset_descriptor_base_t<DataT, IndexT, DistanceT>* dataset_desc,
+  const IndexT graph_size,
+  cagra_sample_filter<SourceIndexT> filter_payload,
+  const float filtering_rate,
+  const float favor_delta_d)
+{
+  const auto query_id = blockIdx.y;
+  search_core<true,
+              true,
               TOPK_BY_BITONIC_SORT,
               BITONIC_SORT_AND_MERGE_MULTI_WARPS,
               DataT,
@@ -734,6 +867,7 @@ __device__ void search_single_cta_p_impl(
 
     // work phase - use JIT search_core
     search_core<false,
+                false,
                 TOPK_BY_BITONIC_SORT,
                 BITONIC_SORT_AND_MERGE_MULTI_WARPS,
                 DataT,

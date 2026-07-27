@@ -347,7 +347,8 @@ void cuvs_cagra<T, IdxT>::set_search_param(const search_param_base& param,
 
   // Deserialized CAGRA graph files do not contain the dense dataset. Load and validate the FAVOR
   // sidecar only after the benchmark's search dataset and any relocated graph have been attached.
-  if (search_params_.filter_mode == cuvs::neighbors::cagra::filtering_mode::FAVOR &&
+  if ((search_params_.filter_mode == cuvs::neighbors::cagra::filtering_mode::FAVOR ||
+       search_params_.filter_mode == cuvs::neighbors::cagra::filtering_mode::FAVOR_ACCUMULATOR) &&
       sp.favor_delta_d_file.has_value()) {
     RAFT_EXPECTS(index_ != nullptr, "The CAGRA index must be loaded before FAVOR delta-d");
     search_params_.favor_delta_d = cuvs::neighbors::cagra::load_favor_delta_d(

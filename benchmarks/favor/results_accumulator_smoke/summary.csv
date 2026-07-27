@@ -1,0 +1,4 @@
+dataset,dataset_title,selectivity_percent,batch_size,workload,method,method_label,itopk,search_width,recall,value
+bigann10m,BIGANN-10M,1,10,latency,default,Default CAGRA filtering,64,1,0.1308761329305136,0.0008079622990936556
+bigann10m,BIGANN-10M,1,10,latency,favor,Current FAVOR,64,1,0.43326760563380284,0.0006538602084507042
+bigann10m,BIGANN-10M,1,10,latency,favor_accumulator,FAVOR + passing-result accumulator,64,1,0.4332152588555858,0.0006721218773841962
