@@ -1,0 +1,35 @@
+{
+  "sift": {
+    "delta_d": 1087.3199462890625,
+    "name": "sift-128-euclidean",
+    "base": "base.fbin",
+    "query": "query.fbin",
+    "dtype": "float",
+    "title": "SIFT-1M"
+  },
+  "gist": {
+    "delta_d": 0.014491359703242779,
+    "name": "gist-960-euclidean",
+    "base": "base.fbin",
+    "query": "query_10000.fbin",
+    "dtype": "float",
+    "title": "GIST-1M"
+  },
+  "bigann1m": {
+    "delta_d": 1376.7340087890625,
+    "name": "bigann-1M",
+    "base": "base.10M.u8bin",
+    "query": "query.public.10K.u8bin",
+    "dtype": "uint8",
+    "title": "BIGANN-1M",
+    "subset_size": 1000000
+  },
+  "bigann10m": {
+    "delta_d": 1078.0567626953125,
+    "name": "bigann-10M",
+    "base": "base.10M.u8bin",
+    "query": "query.public.10K.u8bin",
+    "dtype": "uint8",
+    "title": "BIGANN-10M"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "input": "/users/namanh/cuvs-filter/datasets/msturing-1M/base.fbin",
+  "format": "fbin",
+  "file_rows": 1000000,
+  "rows": 1000000,
+  "dim": 100,
+  "M": 32,
+  "ef_construction": 64,
+  "threads": 32,
+  "random_seed": 100,
+  "elapsed_seconds": 36.217833616,
+  "delta_d": 0.013341763988137245
+}

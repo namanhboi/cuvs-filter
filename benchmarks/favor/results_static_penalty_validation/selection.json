@@ -1,0 +1,76 @@
+{
+  "recall_target": 0.9,
+  "recall_tolerance": 0.01,
+  "candidates": {
+    "hard10": {
+      "survives": false,
+      "invalid_recall_cells": [
+        {
+          "dataset": "bigann10m",
+          "selectivity_percent": 2,
+          "baseline_best_max_recall": 0.93135,
+          "candidate_max_recall": 0.91499,
+          "shortfall": 0.01636000000000004
+        },
+        {
+          "dataset": "bigann10m",
+          "selectivity_percent": 8,
+          "baseline_best_max_recall": 0.9919,
+          "candidate_max_recall": 0.98012,
+          "shortfall": 0.011780000000000013
+        },
+        {
+          "dataset": "bigann10m",
+          "selectivity_percent": 10,
+          "baseline_best_max_recall": 0.99452,
+          "candidate_max_recall": 0.98252,
+          "shortfall": 0.01200000000000001
+        }
+      ],
+      "missing_qps_at_recall_90_cells": [
+        {
+          "dataset": "msturing10m",
+          "selectivity_percent": 8
+        }
+      ],
+      "worst_qps_regret_recall_90": 0.5142834465532748,
+      "median_qps_regret_recall_90": 0.001223797805346127
+    },
+    "smooth4": {
+      "survives": false,
+      "invalid_recall_cells": [
+        {
+          "dataset": "bigann10m",
+          "selectivity_percent": 2,
+          "baseline_best_max_recall": 0.93135,
+          "candidate_max_recall": 0.91495,
+          "shortfall": 0.01639999999999997
+        },
+        {
+          "dataset": "bigann10m",
+          "selectivity_percent": 8,
+          "baseline_best_max_recall": 0.9919,
+          "candidate_max_recall": 0.98012,
+          "shortfall": 0.011780000000000013
+        },
+        {
+          "dataset": "bigann10m",
+          "selectivity_percent": 10,
+          "baseline_best_max_recall": 0.99452,
+          "candidate_max_recall": 0.98251,
+          "shortfall": 0.012009999999999965
+        }
+      ],
+      "missing_qps_at_recall_90_cells": [
+        {
+          "dataset": "msturing10m",
+          "selectivity_percent": 8
+        }
+      ],
+      "worst_qps_regret_recall_90": 0.5149683503116154,
+      "median_qps_regret_recall_90": 0.0008066764212043673
+    }
+  },
+  "winner": null,
+  "conclusion": "no static formula satisfies the recall and QPS coverage constraints"
+}

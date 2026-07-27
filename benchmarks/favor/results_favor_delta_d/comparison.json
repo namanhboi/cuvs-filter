@@ -1,0 +1,41 @@
+{
+  "purpose": "Cross-check cuVS delta_d against the original FAVOR construction-time calculation",
+  "favor_parameters": {
+    "M": 32,
+    "ef_construction": 64,
+    "threads": 32,
+    "random_seed": 100,
+    "runs": 1
+  },
+  "datasets": [
+    {
+      "name": "bigann-1M",
+      "favor_delta_d": 1489.25244140625,
+      "cuvs_delta_d": 1376.7340087890625,
+      "favor_over_cuvs": 1.0817285197422817,
+      "percent_difference": 8.172851974228168
+    },
+    {
+      "name": "bigann-10M",
+      "favor_delta_d": 1114.417724609375,
+      "cuvs_delta_d": 1078.0567626953125,
+      "favor_over_cuvs": 1.0337282443487987,
+      "percent_difference": 3.372824434879873
+    },
+    {
+      "name": "msturing-1M",
+      "favor_delta_d": 0.013341763988137245,
+      "cuvs_delta_d": 0.01424454990774393,
+      "favor_over_cuvs": 0.936622362555949,
+      "percent_difference": -6.3377637444051
+    },
+    {
+      "name": "msturing-10M",
+      "favor_delta_d": 0.012662586756050587,
+      "cuvs_delta_d": 0.012997153215110302,
+      "favor_over_cuvs": 0.9742584815672748,
+      "percent_difference": -2.574151843272521
+    }
+  ],
+  "conclusion": "The independently computed values agree within 8.2 percent. This rules out a scale or normalization fault in the cuVS delta_d calculation; small differences are expected because FAVOR accumulates during HNSW construction while cuVS samples a CAGRA graph."
+}

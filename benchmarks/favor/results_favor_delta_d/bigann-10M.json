@@ -1,0 +1,13 @@
+{
+  "input": "/users/namanh/cuvs-filter/datasets/bigann-10M/base.10M.u8bin",
+  "format": "u8bin",
+  "file_rows": 10000000,
+  "rows": 10000000,
+  "dim": 128,
+  "M": 32,
+  "ef_construction": 64,
+  "threads": 32,
+  "random_seed": 100,
+  "elapsed_seconds": 249.69564735400002,
+  "delta_d": 1114.417724609375
+}

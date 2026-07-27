@@ -1,0 +1,147 @@
+{
+  "dataset": {
+    "name": "bigann-10M-diagnostic-s10",
+    "base_file": "bigann-10M/base.10M.u8bin",
+    "query_file": "bigann-10M/query.public.10K.u8bin",
+    "groundtruth_neighbors_file": "bigann-10M/favor/groundtruth_s10.ibin",
+    "filter_bitset_file": "bigann-10M/favor/filter_s10.bin",
+    "distance": "euclidean",
+    "dtype": "uint8"
+  },
+  "search_basic_param": {
+    "batch_size": 10000,
+    "k": 10
+  },
+  "index": [
+    {
+      "name": "cagra-g32-ig64",
+      "algo": "cuvs_cagra",
+      "file": "bigann-10M/cagra_g32_ig64.index",
+      "build_param": {
+        "graph_build_algo": "NN_DESCENT",
+        "graph_degree": 32,
+        "intermediate_graph_degree": 64
+      },
+      "search_params": [
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1.0780567626953125e-05,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0010780567626953125,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.10780567626953126,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1.0780567626953126,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 10.780567626953125,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 53.90283813476563,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 107.80567626953126,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 269.5141906738281,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 539.0283813476562,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1078.0567626953125,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 2156.113525390625,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 4312.22705078125,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 8624.4541015625,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 11858.624389648438,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1078056762.6953125,
+          "itopk": 512,
+          "search_width": 1
+        }
+      ]
+    }
+  ]
+}

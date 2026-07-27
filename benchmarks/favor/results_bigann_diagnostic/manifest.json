@@ -1,0 +1,13 @@
+{
+  "bigann1m": {
+    "delta_d": 1376.7340087890625,
+    "name": "bigann-1M",
+    "title": "BIGANN-1M",
+    "subset_size": 1000000
+  },
+  "bigann10m": {
+    "delta_d": 1078.0567626953125,
+    "name": "bigann-10M",
+    "title": "BIGANN-10M"
+  }
+}

@@ -1,0 +1,539 @@
+{
+  "dataset": {
+    "name": "bigann-10M-static-penalty-s90",
+    "base_file": "bigann-10M/base.10M.u8bin",
+    "query_file": "bigann-10M/query.public.10K.u8bin",
+    "groundtruth_neighbors_file": "bigann-10M/favor/groundtruth_s90.ibin",
+    "filter_bitset_file": "bigann-10M/favor/filter_s90.bin",
+    "distance": "euclidean",
+    "dtype": "uint8"
+  },
+  "search_basic_param": {
+    "batch_size": 10000,
+    "k": 10
+  },
+  "index": [
+    {
+      "name": "cagra-g32-ig64",
+      "algo": "cuvs_cagra",
+      "file": "bigann-10M/cagra_g32_ig64.index",
+      "build_param": {
+        "graph_build_algo": "NN_DESCENT",
+        "graph_degree": 32,
+        "intermediate_graph_degree": 64
+      },
+      "search_params": [
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1078.0567626953125,
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1078.0567626953125,
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1078.0567626953125,
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1.7802817407665478e-61,
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1.7802817407665478e-61,
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1.7802817407665478e-61,
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1078.0567626953125,
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1078.0567626953125,
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1078.0567626953125,
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1.5013900977834036e-177,
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1.5013900977834036e-177,
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1.5013900977834036e-177,
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1078.0567626953125,
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1078.0567626953125,
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1078.0567626953125,
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1078.0567626953125,
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1078.0567626953125,
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1078.0567626953125,
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1078.0567626953125,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1078.0567626953125,
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1078.0567626953125,
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 512,
+          "search_width": 4
+        }
+      ]
+    }
+  ]
+}

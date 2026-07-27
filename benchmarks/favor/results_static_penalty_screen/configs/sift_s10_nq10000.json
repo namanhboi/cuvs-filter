@@ -1,0 +1,173 @@
+{
+  "dataset": {
+    "name": "sift-128-euclidean-static-penalty-s10",
+    "base_file": "sift-128-euclidean/base.fbin",
+    "query_file": "sift-128-euclidean/query.fbin",
+    "groundtruth_neighbors_file": "sift-128-euclidean/favor/groundtruth_s10.ibin",
+    "filter_bitset_file": "sift-128-euclidean/favor/filter_s10.bin",
+    "distance": "euclidean",
+    "dtype": "float"
+  },
+  "search_basic_param": {
+    "batch_size": 10000,
+    "k": 10
+  },
+  "index": [
+    {
+      "name": "cagra-g32-ig64",
+      "algo": "cuvs_cagra",
+      "file": "sift-128-euclidean/cagra_g32_ig64.index",
+      "build_param": {
+        "graph_build_algo": "NN_DESCENT",
+        "graph_degree": 32,
+        "intermediate_graph_degree": 64
+      },
+      "search_params": [
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1087.3199462890625,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1087.3199462890625,
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1087.3199462890625,
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 5.482854483539599e-24,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 5.482854483539599e-24,
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 5.482854483539599e-24,
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 2.7647513862197124e-50,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 2.7647513862197124e-50,
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 2.7647513862197124e-50,
+          "itopk": 512,
+          "search_width": 4
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,222 @@
+{
+  "recall_target": 0.9,
+  "recall_tolerance": 0.01,
+  "candidates": {
+    "hard05": {
+      "survives": false,
+      "invalid_recall_cells": [
+        {
+          "dataset": "bigann1m",
+          "selectivity_percent": 3,
+          "baseline_best_max_recall": 0.97156,
+          "candidate_max_recall": 0.88744,
+          "shortfall": 0.08411999999999997
+        },
+        {
+          "dataset": "bigann1m",
+          "selectivity_percent": 8,
+          "baseline_best_max_recall": 0.99556,
+          "candidate_max_recall": 0.98503,
+          "shortfall": 0.01053000000000004
+        },
+        {
+          "dataset": "bigann1m",
+          "selectivity_percent": 10,
+          "baseline_best_max_recall": 0.99827,
+          "candidate_max_recall": 0.98617,
+          "shortfall": 0.0121
+        },
+        {
+          "dataset": "sift",
+          "selectivity_percent": 8,
+          "baseline_best_max_recall": 0.99662,
+          "candidate_max_recall": 0.98586,
+          "shortfall": 0.010759999999999992
+        },
+        {
+          "dataset": "sift",
+          "selectivity_percent": 10,
+          "baseline_best_max_recall": 0.99873,
+          "candidate_max_recall": 0.98697,
+          "shortfall": 0.011759999999999993
+        }
+      ],
+      "missing_qps_at_recall_90_cells": [
+        {
+          "dataset": "bigann1m",
+          "selectivity_percent": 3
+        },
+        {
+          "dataset": "msturing1m",
+          "selectivity_percent": 7
+        }
+      ],
+      "worst_qps_regret_recall_90": 0.02628610457062803,
+      "median_qps_regret_recall_90": 0.0022934744170153855
+    },
+    "hard10": {
+      "survives": false,
+      "invalid_recall_cells": [
+        {
+          "dataset": "bigann1m",
+          "selectivity_percent": 8,
+          "baseline_best_max_recall": 0.99556,
+          "candidate_max_recall": 0.98502,
+          "shortfall": 0.010539999999999994
+        },
+        {
+          "dataset": "bigann1m",
+          "selectivity_percent": 10,
+          "baseline_best_max_recall": 0.99827,
+          "candidate_max_recall": 0.98617,
+          "shortfall": 0.0121
+        },
+        {
+          "dataset": "sift",
+          "selectivity_percent": 3,
+          "baseline_best_max_recall": 0.98958,
+          "candidate_max_recall": 0.97262,
+          "shortfall": 0.016959999999999975
+        },
+        {
+          "dataset": "sift",
+          "selectivity_percent": 8,
+          "baseline_best_max_recall": 0.99662,
+          "candidate_max_recall": 0.98586,
+          "shortfall": 0.010759999999999992
+        },
+        {
+          "dataset": "sift",
+          "selectivity_percent": 10,
+          "baseline_best_max_recall": 0.99873,
+          "candidate_max_recall": 0.98698,
+          "shortfall": 0.011750000000000038
+        }
+      ],
+      "missing_qps_at_recall_90_cells": [
+        {
+          "dataset": "msturing1m",
+          "selectivity_percent": 7
+        }
+      ],
+      "worst_qps_regret_recall_90": 0.023010288429788573,
+      "median_qps_regret_recall_90": 0.0008811805050228169
+    },
+    "smooth2": {
+      "survives": false,
+      "invalid_recall_cells": [
+        {
+          "dataset": "bigann1m",
+          "selectivity_percent": 3,
+          "baseline_best_max_recall": 0.97156,
+          "candidate_max_recall": 0.88734,
+          "shortfall": 0.08421999999999996
+        },
+        {
+          "dataset": "bigann1m",
+          "selectivity_percent": 8,
+          "baseline_best_max_recall": 0.99556,
+          "candidate_max_recall": 0.98503,
+          "shortfall": 0.01053000000000004
+        },
+        {
+          "dataset": "bigann1m",
+          "selectivity_percent": 10,
+          "baseline_best_max_recall": 0.99827,
+          "candidate_max_recall": 0.98617,
+          "shortfall": 0.0121
+        },
+        {
+          "dataset": "sift",
+          "selectivity_percent": 3,
+          "baseline_best_max_recall": 0.98958,
+          "candidate_max_recall": 0.97314,
+          "shortfall": 0.01644000000000001
+        },
+        {
+          "dataset": "sift",
+          "selectivity_percent": 8,
+          "baseline_best_max_recall": 0.99662,
+          "candidate_max_recall": 0.98586,
+          "shortfall": 0.010759999999999992
+        },
+        {
+          "dataset": "sift",
+          "selectivity_percent": 10,
+          "baseline_best_max_recall": 0.99873,
+          "candidate_max_recall": 0.98697,
+          "shortfall": 0.011759999999999993
+        }
+      ],
+      "missing_qps_at_recall_90_cells": [
+        {
+          "dataset": "bigann1m",
+          "selectivity_percent": 3
+        },
+        {
+          "dataset": "msturing1m",
+          "selectivity_percent": 7
+        }
+      ],
+      "worst_qps_regret_recall_90": 0.026003175396791926,
+      "median_qps_regret_recall_90": 0.0029111661088517104
+    },
+    "smooth4": {
+      "survives": false,
+      "invalid_recall_cells": [
+        {
+          "dataset": "bigann1m",
+          "selectivity_percent": 8,
+          "baseline_best_max_recall": 0.99556,
+          "candidate_max_recall": 0.98503,
+          "shortfall": 0.01053000000000004
+        },
+        {
+          "dataset": "bigann1m",
+          "selectivity_percent": 10,
+          "baseline_best_max_recall": 0.99827,
+          "candidate_max_recall": 0.98617,
+          "shortfall": 0.0121
+        },
+        {
+          "dataset": "sift",
+          "selectivity_percent": 2,
+          "baseline_best_max_recall": 0.98331,
+          "candidate_max_recall": 0.91676,
+          "shortfall": 0.06655
+        },
+        {
+          "dataset": "sift",
+          "selectivity_percent": 3,
+          "baseline_best_max_recall": 0.98958,
+          "candidate_max_recall": 0.97262,
+          "shortfall": 0.016959999999999975
+        },
+        {
+          "dataset": "sift",
+          "selectivity_percent": 8,
+          "baseline_best_max_recall": 0.99662,
+          "candidate_max_recall": 0.98586,
+          "shortfall": 0.010759999999999992
+        },
+        {
+          "dataset": "sift",
+          "selectivity_percent": 10,
+          "baseline_best_max_recall": 0.99873,
+          "candidate_max_recall": 0.98696,
+          "shortfall": 0.011770000000000058
+        }
+      ],
+      "missing_qps_at_recall_90_cells": [
+        {
+          "dataset": "msturing1m",
+          "selectivity_percent": 7
+        }
+      ],
+      "worst_qps_regret_recall_90": 0.02218699356631738,
+      "median_qps_regret_recall_90": 0.0007778107674383742
+    }
+  },
+  "winner": null,
+  "conclusion": "no static formula satisfies the recall and QPS coverage constraints"
+}

@@ -1,0 +1,539 @@
+{
+  "dataset": {
+    "name": "gist-960-euclidean-static-penalty-s06",
+    "base_file": "gist-960-euclidean/base.fbin",
+    "query_file": "gist-960-euclidean/query_10000.fbin",
+    "groundtruth_neighbors_file": "gist-960-euclidean/favor/groundtruth_s06.ibin",
+    "filter_bitset_file": "gist-960-euclidean/favor/filter_s06.bin",
+    "distance": "euclidean",
+    "dtype": "float"
+  },
+  "search_basic_param": {
+    "batch_size": 10000,
+    "k": 10
+  },
+  "index": [
+    {
+      "name": "cagra-g32-ig64",
+      "algo": "cuvs_cagra",
+      "file": "gist-960-euclidean/cagra_g32_ig64.index",
+      "build_param": {
+        "graph_build_algo": "NN_DESCENT",
+        "graph_degree": 32,
+        "intermediate_graph_degree": 64
+      },
+      "search_params": [
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014491359703242779,
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014491359703242779,
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014491359703242779,
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014491359703242779,
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014491359703242779,
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014491359703242779,
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014490696957964226,
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014490696957964226,
+          "itopk": 32,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014490696957964226,
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014491359703242779,
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014491359703242779,
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014491359703242779,
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014491359703242779,
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014491359703242779,
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014491359703242779,
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014224368576301964,
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014224368576301964,
+          "itopk": 64,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014224368576301964,
+          "itopk": 64,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014491359703242779,
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014491359703242779,
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014491359703242779,
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014491359703242779,
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014491359703242779,
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014491359703242779,
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.004844567872635879,
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.004844567872635879,
+          "itopk": 128,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.004844567872635879,
+          "itopk": 128,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014491359703242779,
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014491359703242779,
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014491359703242779,
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1.2002414934878636e-07,
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1.2002414934878636e-07,
+          "itopk": 256,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 1.2002414934878636e-07,
+          "itopk": 256,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014491359703242779,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014491359703242779,
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.014491359703242779,
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 0.0,
+          "itopk": 512,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 6.658425170091301e-25,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 6.658425170091301e-25,
+          "itopk": 512,
+          "search_width": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "favor_delta_d": 6.658425170091301e-25,
+          "itopk": 512,
+          "search_width": 4
+        }
+      ]
+    }
+  ]
+}

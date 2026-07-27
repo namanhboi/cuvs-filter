@@ -584,6 +584,92 @@ the fixed FAVOR penalty is poorly calibrated for BIGANN at 10%, especially at
 default. At 50% the methods converge only at larger search budgets; at 90%
 they are nearly identical at high recall.
 
+** BIGANN 10% penalty diagnosis
+
+A focused diagnostic isolates three possible explanations for the low 10%
+FAVOR recall:
+
+1. a miscalibrated penalty;
+2. insufficient search iterations;
+3. insufficient search width.
+
+Generate and run all focused configurations with one repetition using:
+
+#+begin_src sh
+benchmarks/favor/run_bigann_diagnostic.sh
+#+end_src
+
+The command writes:
+
+#+begin_src text
+benchmarks/favor/results_bigann_diagnostic/bigann_diagnostic_summary.csv
+benchmarks/favor/results_bigann_diagnostic/plots/bigann_penalty_transition.png
+benchmarks/favor/results_bigann_diagnostic/configs/*.json
+benchmarks/favor/results_bigann_diagnostic/raw/*.json
+#+end_src
+
+All experiments use the 10,000-query throughput batch, =SINGLE_CTA=,
+=itopk=512=, and the same graph, bitset, and ground truth as the main sweep.
+
+The narrow multiplier sweep localizes a sharp transition. The effective
+penalty =D= includes the selectivity/ef factor applied inside the kernel:
+
+| Dataset    | Delta-d multiplier | Effective D | Recall@10 |
+|------------+--------------------+-------------+-----------|
+| BIGANN-1M  |            0.00010 |       0.619 |   0.98938 |
+| BIGANN-1M  |            0.00015 |       0.929 |   0.94979 |
+| BIGANN-1M  |            0.00020 |       1.239 |   0.87890 |
+| BIGANN-1M  |            0.00030 |       1.858 |   0.82734 |
+| BIGANN-1M  |            0.00050 |       3.097 |   0.82510 |
+| BIGANN-10M |            0.00010 |       0.485 |   0.96276 |
+| BIGANN-10M |            0.00015 |       0.728 |   0.88699 |
+| BIGANN-10M |            0.00020 |       0.970 |   0.78114 |
+| BIGANN-10M |            0.00030 |       1.455 |   0.70689 |
+| BIGANN-10M |            0.00050 |       2.425 |   0.70373 |
+
+The normal multiplier is 1.0, corresponding to =D=6194 for BIGANN-1M and
+=D=4850 for BIGANN-10M. Recall has already saturated at its low plateau by
+=D=3.1= and =D=2.4= respectively. This rules out a penalty that is too small.
+It shows that the delta-d formula is severely over-calibrated for these
+=uint8= BIGANN graphs at 10% selectivity.
+
+Increasing independent traversal budget does not recover recall:
+
+| Dataset    | Method       | Default iterations | 1024 iterations |
+|------------+--------------+--------------------+-----------------|
+| BIGANN-1M  | Default      |            0.95373 |         0.95532 |
+| BIGANN-1M  | FAVOR D=0    |            0.98615 |         0.98615 |
+| BIGANN-1M  | FAVOR normal |            0.82510 |         0.82682 |
+| BIGANN-10M | Default      |            0.96055 |         0.96556 |
+| BIGANN-10M | FAVOR D=0    |            0.98245 |         0.98247 |
+| BIGANN-10M | FAVOR normal |            0.70373 |         0.71180 |
+
+An attempted 2048-iteration, 10,000-query case was intentionally discarded:
+CAGRA requested about 10.5 GB of iteration state, beyond the 6.3 GB RMM limit
+available to this process. The valid 1024-iteration point already doubles the
+default traversal budget and does not materially change the conclusion.
+
+Search width gives the same result:
+
+| Dataset    | Method | Width 1 | Width 2 | Width 4 |
+|------------+--------+---------+---------+---------|
+| BIGANN-1M  | Default| 0.95373 | 0.97712 | 0.99827 |
+| BIGANN-1M  | FAVOR  | 0.82510 | 0.82558 | 0.82615 |
+| BIGANN-10M | Default| 0.96055 | 0.98003 | 0.99452 |
+| BIGANN-10M | FAVOR  | 0.70373 | 0.70441 | 0.70444 |
+
+The default path improves normally as width grows, while FAVOR remains pinned
+to the penalty-induced plateau. FAVOR with =D=0= exceeds 0.98 recall on both
+datasets, proving that the graph, bitset, final compaction, and basic FAVOR
+=uint8= dispatch can reach high recall. The local =uint8= regression tests also
+pass. The failure is therefore caused by penalized traversal ordering for this
+workload, not by a generally poor graph or too little search.
+
+For this deterministic BIGANN workload, a practical calibration must keep
+=D= below roughly 0.7 if 90% recall is required at 10% selectivity. Choosing
+such a clamp or changing the delta-d estimator is an algorithm-policy change
+and is not silently applied by the benchmark diagnostic.
+
 ** One-to-eight-percent crossover sweep
 
 The exact crossover was measured at every integer selectivity from 1% through
@@ -806,6 +892,101 @@ python benchmarks/favor/plot_crossover.py \
 python benchmarks/favor/plot_crossover.py \
   --output-dir benchmarks/favor/results_crossover_r95 --recall-target 0.95
 #+end_src
+
+* CAGRA-specific static penalty experiment
+
+The HNSW-derived penalty can evict rejected traversal bridges from CAGRA's
+shared traversal/result candidate buffer. The static experiment tests whether
+the penalty should be reduced once =internal_topk= is likely to contain the
+requested number of passing results.
+
+For =B=internal_topk=, passing selectivity =p=, and requested result count =k=,
+the host models the number of passing candidate slots as:
+
+#+begin_src text
+X ~ Binomial(B, p)
+P_short = Pr[X < k]
+#+end_src
+
+=P_short= is calculated once per =(B,p,k)= benchmark configuration. It is not
+calculated per query or in the CUDA kernel, and it does not allocate another
+candidate buffer. The experiment scales the delta-d scalar already accepted by
+the kernel:
+
+#+begin_src text
+D_current = ((1-p) * (B-p) * delta_d) / (2*p*B)
+D_test = multiplier * D_current
+
+current: multiplier = 1
+zero:    multiplier = 0
+hard05:  multiplier = 1 if P_short > 0.05 else 0
+hard10:  multiplier = 1 if P_short > 0.10 else 0
+smooth2: multiplier = P_short^2
+smooth4: multiplier = P_short^4
+#+end_src
+
+The driver writes a manifest containing =P_short=, the multiplier, the original
+and scaled delta-d values, and the expected applied penalty for every search
+parameter. Generated cuvs-bench JSON contains only the existing direct
+=favor_delta_d= scalar.
+
+Run the formula checks and screening stage with:
+
+#+begin_src sh
+python benchmarks/favor/static_penalty_experiment.py check
+python -m unittest discover -s benchmarks/favor \
+  -p 'test_static_penalty_experiment.py' -v
+
+python benchmarks/favor/static_penalty_experiment.py generate \
+  --result-dir benchmarks/favor/results_static_penalty_screen \
+  --datasets sift bigann1m msturing1m \
+  --selectivities 1 2 3 4 5 6 7 8 10 50 90 \
+  --itopk-values 512 --search-widths 1 2 4 \
+  --batch-sizes 10000 \
+  --formulas current zero hard05 hard10 smooth2 smooth4
+
+benchmarks/favor/run_static_penalty.sh \
+  benchmarks/favor/results_static_penalty_screen
+#+end_src
+
+The runner reuses complete results and then creates =summary.csv=,
+=formula_comparison.csv=, and one clearly labeled Pareto plot for every
+available dataset/selectivity/workload combination. A custom experiment can use
+any subset of dataset keys, selectivities, =internal_topk= values, widths, batch
+sizes, or formulas accepted by the generator.
+
+** Static penalty results
+
+The screening stage measured 693 points on SIFT-1M, BIGANN-1M, and MSTuring-1M.
+The best hard gate was =epsilon=0.10= and the best smooth gate by worst-case
+recall gap was =r=4=. Both preserved the full penalty at very low selectivity
+and removed BIGANN's severe full-penalty collapse after the 2--3% transition.
+
+The held-out validation measured 2,475 points on GIST-1M, BIGANN-10M, and
+MSTuring-10M over the full =internal_topk={32,64,128,256,512}= and
+=search_width={1,2,4}= grid. Neither finalist passed the predeclared recall
+constraint:
+
+| Dataset    | Selectivity | Best baseline max recall | Hard 0.10 | Smooth r=4 |
+|------------+-------------+--------------------------+-----------+------------|
+| BIGANN-10M |          2% |                  0.93135 |   0.91499 |    0.91495 |
+| BIGANN-10M |          8% |                  0.99190 |   0.98012 |    0.98012 |
+| BIGANN-10M |         10% |                  0.99452 |   0.98252 |    0.98251 |
+
+Both formulas also remained below 0.90 recall on MSTuring-10M at 8%, where
+default CAGRA reached 0.90712. The exact failed cells and QPS regrets are in
+=results_static_penalty_validation/selection.json=.
+
+There is therefore no static-formula winner, and the final low-batch latency
+sweep was intentionally not run. This follows the experiment's stopping rule:
+do not tune constants on the held-out datasets when no formula using only
+=p=, =B=, =k=, and global =delta_d= satisfies the constraints.
+
+The result rules out =P_short= as a complete CAGRA penalty controller. It is
+useful for detecting candidate scarcity, but it cannot model query-local
+distance gaps, graph-correlated candidate discovery, or the rejected bridge
+nodes required for traversal. The next design should use query-local candidate
+statistics or separate traversal priority from passing-result retention.
 
 * Known issue
 
