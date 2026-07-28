@@ -1,0 +1,604 @@
+#+TITLE: FAVOR-Style Filtering for CAGRA
+#+SUBTITLE: SINGLE-CTA and MULTI-CTA Performance
+#+AUTHOR: Nam Anh Dang
+#+DATE: 2026-07-27
+#+OPTIONS: toc:2 num:t
+
+* Abstract
+
+This exploratory study evaluates FAVOR-style bitset filtering in CAGRA for
+large-batch =SINGLE_CTA= search and small-batch =MULTI_CTA= search.  The
+evaluation covers SIFT-1M, GIST-1M, BIGANN-1M, BIGANN-10M, MSTuring-1M, and
+MSTuring-10M at passing selectivities of 1%, 10%, 50%, and 90%.  Selectivity
+means the fraction of database vectors accepted by the filter.
+
+The result is mode dependent.  FAVOR =SINGLE_CTA= is strongest at the
+measured 1% selectivity, although it does not universally dominate default
+CAGRA filtering.  Default =SINGLE_CTA= does not reach Recall@10 = 0.90 on any
+evaluated 1% workload.  FAVOR reaches it on SIFT-1M, BIGANN-1M, and
+BIGANN-10M at 87,222, 109,974, and 103,758 QPS, respectively, with ten-query
+batch latencies of 1.785, 1.757, and 1.783 ms.  A direct speedup at 0.90
+cannot be reported because default never reaches the target.  FAVOR also
+misses 0.90 on GIST-1M, MSTuring-1M, and MSTuring-10M.
+
+For =MULTI_CTA=, performance is compared at fixed Recall@10 = 0.99 by
+linearly interpolating each dataset's QPS--recall Pareto frontier.  Short
+extrapolation is used when 0.99 is within 0.005 recall of a measured endpoint.
+At 1%, FAVOR is 10.9--59.5% faster across the six datasets.  At 50% and 90%,
+it is 27.7--44.6% and 26.2--45.5% faster, respectively.  The 10% result is
+the exception: FAVOR is faster on SIFT, GIST, and both MSTuring scales, but
+it is 27.8% slower on BIGANN-1M and an extrapolated 66.2% slower on
+BIGANN-10M.  BIGANN-10M does not actually reach 0.99 within the configured
+=itopk= cap of 16,384.  These are within-dataset estimates; absolute QPS is
+not compared across datasets.
+
+The main limitation is therefore dataset dependent.  Extending the 10%
+=MULTI_CTA= sweep beyond the canonical maximum =itopk= of 512 lets
+BIGANN-1M reach 0.99, but only with enough extra traversal to erase FAVOR's
+throughput advantage.  BIGANN-10M reaches 0.9871 at =itopk= 16,384 and
+remains below the target.  FAVOR =SINGLE_CTA= also misses 0.90 on both
+BIGANN scales at 10%.  Understanding this BIGANN-specific behavior is the
+highest-priority future work.
+
+Beyond 1%, FAVOR =SINGLE_CTA= has no compelling saturated-throughput
+advantage.  Its throughput frontiers largely overlap default outside BIGANN,
+while BIGANN is substantially worse.  Latency is a separate tradeoff: FAVOR
+often lowers ten-query batch latency, including on all six datasets at 90%.
+
+* Background and evaluation objective
+
+Default inline CAGRA filtering invalidates graph nodes that fail the filter.
+This is efficient when passing nodes are common, but at 1% selectivity it can
+remove most of the graph routes that would lead to valid neighborhoods.
+
+[[https://arxiv.org/abs/2605.07770][FAVOR]] instead assigns rejected nodes an
+exclusion-distance penalty.  Rejected nodes can remain traversal candidates,
+but passing nodes are preferred in candidate ordering.  The reference method
+was designed around HNSW; this work adapts the central scoring idea to the
+parallel traversal in [[https://arxiv.org/abs/2308.15136][CAGRA]].
+
+The evaluation asks two practical questions:
+
+1. Does FAVOR improve the QPS--recall and latency--recall tradeoff over default
+   bitset filtering at very sparse selectivity?
+2. Does the result remain stable across datasets, scales, selectivities, and
+   CAGRA's large- and small-batch search modes?
+
+All comparisons are between FAVOR and default filtering within the same CTA
+mode.  Absolute =SINGLE_CTA= and =MULTI_CTA= measurements are not compared
+because their batch sizes and intended workloads differ.
+
+* Implementation evaluated
+
+** FAVOR scoring in CAGRA
+
+FAVOR does not invalidate a graph node solely because it fails the bitset.
+Instead, it adds a penalty to the node's distance.  The bitset lookup and
+penalty addition are fused into the child-node and random-node distance
+helpers.  Each candidate is therefore written to the shared candidate buffer
+once, without a separate distance-read, penalty-write, or CTA-wide
+synchronization phase.  Final compaction still guarantees that returned
+neighbors pass the bitset.
+
+For passing selectivity =s=, filtering rate =f = 1-s=, configured internal
+top-k =E=, and graph/dataset statistic =delta_d=, the current penalty is:
+
+#+begin_example
+D = f * (E - s) * delta_d / (2 * s * E)
+#+end_example
+
+The bitset provides one exact selectivity shared by the query batch; the
+kernel does not estimate selectivity.  The implementation evaluated here is
+bitset-only.
+
+** Graph-first delta-d sidecar
+
+Delta-d is computed after constructing the CAGRA graph.  For each deterministic
+root, a bounded breadth-first traversal collects unique reachable candidates.
+After sorting root-to-candidate distances, a valid root contributes:
+
+#+begin_example
+delta_d(root) = 5 * (d_beta - d_alpha) / (beta - alpha)
+#+end_example
+
+Roots with fewer than =beta= unique candidates are skipped, and the final
+=delta_d= is the mean over valid roots.  These benchmarks use =alpha=10=,
+=beta=64=, and BFS depth 2.  The scalar is stored in an 80-byte, versioned
+sidecar bound to the graph, logical dataset, distance metric, dimensions,
+degree, calculation parameters, and content fingerprints.  Search loads the
+sidecar and assigns the checked scalar to =search_params.favor_delta_d=.
+
+** SINGLE-CTA and adjusted MULTI-CTA
+
+=SINGLE_CTA= uses configured =itopk= for traversal and for the penalty.
+=MULTI_CTA= uses the same selectivity-adjusted traversal breadth policy as
+default filtered CAGRA:
+
+#+begin_example
+adjusted_E = round_up_32(k / s + (E - k) / sqrt(s))
+num_cta_per_query = max(search_width, adjusted_E / 32)
+#+end_example
+
+Here =k= is the requested result count and =E= is configured =itopk=.
+=adjusted_E= controls traversal breadth and the number of CTAs; configured
+=E= remains in the FAVOR penalty.  This adjusted traversal is the default
+behavior of explicit FAVOR =MULTI_CTA= in the implementation under test.
+
+The FAVOR integration added =filtering_mode=,
+=search_params.filter_mode=, =search_params.favor_delta_d=,
+=favor_delta_d_params=, and the =compute_favor_delta_d=,
+=save_favor_delta_d=, and =load_favor_delta_d= APIs.  Making adjusted traversal
+the default for FAVOR =MULTI_CTA= required no additional public parameter.
+
+* Experimental methodology
+
+All experiments ran on an NVIDIA A30 with 24 GB of memory.  Every index used
+graph degree 32, intermediate graph degree 64, and ten requested neighbors.
+The canonical search swept =itopk= values 32, 64, 128, 256, and 512.
+=SINGLE_CTA= additionally swept search widths 1, 2, and 4; =MULTI_CTA= used
+search width 1.  A targeted =MULTI_CTA= extension added only the configurations
+needed to surround 0.99 recall, using configured =itopk= values as high as
+16,384.
+
+=SINGLE_CTA= throughput used 10,000-query batches and latency used ten-query
+batches.  =MULTI_CTA= used one query for both measurements.  Both modes were
+tested at 1%, 10%, 50%, and 90% selectivity with one run per configuration.
+
+SIFT, GIST, and MSTuring use =float32= vectors; BIGANN uses =uint8=.  GIST has
+1,000 distinct queries, so its 10,000-query throughput workload repeats the
+query set ten times.  Both filtering methods use identical graphs, queries,
+bitsets, and exact filtered ground truth.
+
+The one-run policy follows earlier checks that showed low variance.  The
+results therefore characterize the observed Pareto frontiers but do not
+provide confidence intervals.  =SINGLE_CTA= findings report reachability and
+the measured frontiers without calculating threshold-derived speedup
+percentages.  =MULTI_CTA= QPS@0.99 is linearly interpolated between the nearest
+Pareto points below and above Recall@10 = 0.99.  When the target lies outside
+the measured frontier but within 0.005 recall of its endpoint, the two nearest
+frontier points are linearly extrapolated and the result is labelled
+accordingly.
+
+For =MULTI_CTA= at batch size 1, reported throughput is the reciprocal of
+single-query latency.  It is useful as QPS, but it is not saturated
+large-batch throughput.
+
+* SINGLE-CTA findings
+
+** 1% selectivity at Recall@10 >= 0.90
+
+*Target reachability*
+
+- *Default CAGRA:* does not reach 0.90 on any of the six datasets.
+- *FAVOR:* reaches 0.90 on SIFT-1M, BIGANN-1M, and BIGANN-10M; it does not
+  reach 0.90 on GIST-1M, MSTuring-1M, or MSTuring-10M.
+
+*Successful FAVOR operating points*
+
+- *SIFT-1M:* 87,222 QPS with 1.785 ms batch-10 latency.
+- *BIGANN-1M:* 109,974 QPS with 1.757 ms batch-10 latency.
+- *BIGANN-10M:* 103,758 QPS with 1.783 ms batch-10 latency.
+
+Because default does not reach 0.90, these successful FAVOR points do not have
+a direct default speedup at the target.
+
+*** SIFT-1M
+
+#+CAPTION: At 1% selectivity, FAVOR reaches 0.90 on SIFT-1M while default CAGRA does not.
+[[file:report_v2/single/sift/plots/sift_selectivity_01.png]]
+
+*** GIST-1M
+
+#+CAPTION: At 1% selectivity on GIST-1M, neither SINGLE-CTA method reaches 0.90.
+[[file:report_v2/single/gist/plots/gist_selectivity_01.png]]
+
+*** BIGANN-1M
+
+#+CAPTION: At 1% selectivity, FAVOR reaches 0.90 on BIGANN-1M while default CAGRA does not.
+[[file:report_v2/single/bigann1m/plots/bigann1m_selectivity_01.png]]
+
+*** BIGANN-10M
+
+#+CAPTION: At 1% selectivity, FAVOR reaches 0.90 on BIGANN-10M while default CAGRA does not.
+[[file:report_v2/single/bigann10m/plots/bigann10m_selectivity_01.png]]
+
+*** MSTuring-1M
+
+#+CAPTION: At 1% selectivity on MSTuring-1M, neither SINGLE-CTA method reaches 0.90.
+[[file:report_v2/single/msturing1m/plots/msturing1m_selectivity_01.png]]
+
+*** MSTuring-10M
+
+#+CAPTION: At 1% selectivity on MSTuring-10M, neither SINGLE-CTA method reaches 0.90.
+[[file:report_v2/single/msturing10m/plots/msturing10m_selectivity_01.png]]
+
+** 10% selectivity at Recall@10 >= 0.90
+
+At 10%, default =SINGLE_CTA= reaches 0.90 on all six datasets.  FAVOR reaches
+the target on SIFT, GIST, and both MSTuring scales, but misses it on
+BIGANN-1M and BIGANN-10M.  FAVOR's maximum measured recall is lower than
+default's on all six datasets; the loss is modest outside BIGANN but severe
+on both BIGANN scales.
+
+Among the four datasets where both methods reach 0.90, the saturated-QPS
+frontiers largely overlap.  FAVOR has lower batch-10 latency on those same
+datasets, so the throughput result does not imply that FAVOR is slower on
+every metric.  On BIGANN, however, no target-level performance comparison is
+possible because FAVOR does not reach 0.90.
+
+#+CAPTION: BIGANN-10M illustrates the 10% SINGLE-CTA limitation: default reaches 0.90 and FAVOR does not.
+[[file:report_v2/single/bigann10m/plots/bigann10m_selectivity_10.png]]
+
+** 50% and 90% selectivity at Recall@10 >= 0.90
+
+The canonical sweep contains no measurements between 10% and 50%; the
+following statements apply only to the measured 50% and 90% points.  Both
+methods reach 0.90 on every dataset at both selectivities.
+
+At 50%, the non-BIGANN saturated-QPS frontiers largely overlap.  BIGANN is
+substantially worse, with FAVOR well below default on both scales.  FAVOR
+lowers batch-10 latency on five of six datasets; BIGANN-10M is the exception.
+
+At 90%, non-BIGANN saturated throughput remains approximately neutral and
+BIGANN remains below default.  In contrast to the throughput result, FAVOR
+lowers latency on all six datasets.  Recall remains high and nearly unchanged
+on BIGANN at 50% and 90%; these are throughput regressions rather than the
+10%-selectivity recall collapse.
+
+#+CAPTION: At 50% selectivity, BIGANN-10M is the strongest dense SINGLE-CTA counterexample: FAVOR reaches 0.90 but loses both throughput and latency.
+[[file:report_v2/single/bigann10m/plots/bigann10m_selectivity_50.png]]
+
+#+CAPTION: At 90% selectivity on MSTuring-10M, FAVOR reaches 0.90 with modestly higher throughput and lower batch-10 latency.
+[[file:report_v2/single/msturing10m/plots/msturing10m_selectivity_90.png]]
+
+* MULTI-CTA findings
+
+** 1% selectivity at Recall@10 = 0.99
+
+FAVOR has higher QPS on all six datasets at the fixed target:
+
+- *SIFT-1M:* 1,694 default versus an extrapolated 2,524 FAVOR QPS, a 49.0%
+  improvement.
+- *GIST-1M:* 1,198 versus 1,329 QPS, a 10.9% improvement.
+- *BIGANN-1M:* 1,521 versus an extrapolated 2,426 QPS, a 59.5% improvement.
+- *BIGANN-10M:* 1,685 versus 2,337 QPS, a 38.7% improvement.
+- *MSTuring-1M:* 1,494 versus 2,063 QPS, a 38.1% improvement.
+- *MSTuring-10M:* 1,294 versus 1,465 QPS, a 13.2% improvement.
+
+SIFT-1M and BIGANN-1M FAVOR are slightly extrapolated because even configured
+=itopk= 10 exceeds 0.99 recall; all other values are measured at the target or
+linearly interpolated.
+
+*** SIFT-1M
+
+#+CAPTION: SIFT-1M MULTI-CTA at 1%; the X markers show the fixed-recall comparison.
+[[file:report_v2/multi/sift/plots/sift_selectivity_01.png]]
+
+*** GIST-1M
+
+#+CAPTION: GIST-1M MULTI-CTA at 1%; the X markers show interpolated QPS@0.99.
+[[file:report_v2/multi/gist/plots/gist_selectivity_01.png]]
+
+*** BIGANN-1M
+
+#+CAPTION: BIGANN-1M MULTI-CTA at 1%; FAVOR has the largest fixed-recall improvement.
+[[file:report_v2/multi/bigann1m/plots/bigann1m_selectivity_01.png]]
+
+*** BIGANN-10M
+
+#+CAPTION: BIGANN-10M MULTI-CTA at 1%; FAVOR remains above default at 0.99 recall.
+[[file:report_v2/multi/bigann10m/plots/bigann10m_selectivity_01.png]]
+
+*** MSTuring-1M
+
+#+CAPTION: MSTuring-1M MULTI-CTA at 1%; the X markers show interpolated QPS@0.99.
+[[file:report_v2/multi/msturing1m/plots/msturing1m_selectivity_01.png]]
+
+*** MSTuring-10M
+
+#+CAPTION: MSTuring-10M MULTI-CTA at 1%; FAVOR has a smaller but positive fixed-recall improvement.
+[[file:report_v2/multi/msturing10m/plots/msturing10m_selectivity_01.png]]
+
+** 10% selectivity at Recall@10 = 0.99
+
+The fixed-recall result separates BIGANN from the other datasets:
+
+- *SIFT-1M:* 2,006 default versus 2,735 FAVOR QPS, a 36.4% improvement.
+- *GIST-1M:* 1,377 versus 1,817 QPS, a 32.0% improvement.
+- *BIGANN-1M:* 1,825 versus 1,317 QPS, a 27.8% regression.
+- *BIGANN-10M:* default is estimated at 1,794 QPS; FAVOR is extrapolated to
+  606 QPS, a 66.2% regression.  Its largest measured point reaches only
+  0.9871 at configured =itopk= 16,384.
+- *MSTuring-1M:* 1,501 versus 2,395 QPS, a 59.6% improvement.
+- *MSTuring-10M:* 1,458 versus 2,092 QPS, a 43.5% improvement.
+
+#+CAPTION: MSTuring-10M represents the successful 10% MULTI-CTA cases at fixed 0.99 recall.
+[[file:report_v2/multi/msturing10m/plots/msturing10m_selectivity_10.png]]
+
+#+CAPTION: BIGANN-10M illustrates the 10% limitation: FAVOR's QPS@0.99 marker is extrapolated beyond its 0.9871 endpoint.
+[[file:report_v2/multi/bigann10m/plots/bigann10m_selectivity_10.png]]
+
+** 50% and 90% selectivity at Recall@10 = 0.99
+
+At 50%, FAVOR has higher interpolated QPS on every dataset:
+
+- *SIFT-1M:* +35.1%.
+- *GIST-1M:* +31.7%.
+- *BIGANN-1M:* +27.7%.
+- *BIGANN-10M:* +35.9%.
+- *MSTuring-1M:* +34.0%.
+- *MSTuring-10M:* +44.6%.
+
+At 90%, FAVOR again has higher interpolated QPS on every dataset:
+
+- *SIFT-1M:* +41.8%.
+- *GIST-1M:* +26.2%.
+- *BIGANN-1M:* +28.7%.
+- *BIGANN-10M:* +44.3%.
+- *MSTuring-1M:* +45.5%.
+- *MSTuring-10M:* +33.7%.
+
+These results establish the fixed-recall =MULTI_CTA= advantage at the two
+measured dense selectivities; they do not establish behavior at unmeasured
+selectivities between 10% and 50%.
+
+#+CAPTION: BIGANN-10M at 50% contrasts with SINGLE-CTA: FAVOR MULTI-CTA has higher interpolated QPS@0.99.
+[[file:report_v2/multi/bigann10m/plots/bigann10m_selectivity_50.png]]
+
+#+CAPTION: MSTuring-1M at 90% shows the largest fixed-recall MULTI-CTA improvement.
+[[file:report_v2/multi/msturing1m/plots/msturing1m_selectivity_90.png]]
+
+* Why the 10% limitation is dataset dependent
+
+The BIGANN result is not a general graph-quality failure: default CAGRA uses
+the same graph and reaches 0.99.  It is also not a general 10% failure,
+because SIFT, GIST, and both MSTuring scales reach the target with FAVOR and
+retain higher QPS.  The two BIGANN scales instead show different degrees of
+the same warning sign.  In =MULTI_CTA=, BIGANN-1M reaches 0.99 only after
+expanding configured =itopk= to 8,192--16,384 and is slower than default at
+the target; BIGANN-10M remains below 0.99 at the cap.  In =SINGLE_CTA=, both
+scales miss 0.90 in the canonical sweep.  These observations are limited to
+the six evaluated dataset/scale combinations and are not intended to
+generalize to untested datasets.
+
+The supported working hypothesis is that FAVOR's static penalty changes which
+nodes survive CAGRA's repeated local top-k operations.  For BIGANN at 10%, the
+resulting ordering can repeatedly preserve an unproductive route even when
+the graph and number of CTAs are sufficient.  The worsening from 1M to 10M
+suggests a scale interaction, but the current experiments do not prove a
+complete causal model.
+
+* Conclusions, evidence boundaries, and next steps
+
+The clearest =SINGLE_CTA= result occurs at the measured 1% selectivity, where
+FAVOR reaches Recall@10 = 0.90 on three datasets for which default does not.
+Beyond 1%, FAVOR has no compelling =SINGLE_CTA= saturated-throughput
+advantage: the measured changes are only a few percent outside BIGANN, while
+BIGANN either misses the target at 10% or loses substantial throughput at
+50% and 90%.  FAVOR often lowers ten-query batch latency, so this conclusion
+is specific to saturated throughput rather than all performance metrics.
+
+The clearest overall result is =MULTI_CTA=: at fixed Recall@10 = 0.99, FAVOR
+improves batch-size-1 QPS across every evaluated workload at 1%, 50%, and
+90%.  At 10%, it improves four datasets and regresses on both BIGANN scales;
+the BIGANN-10M regression is extrapolated because its measured frontier
+remains below the target.  This is evidence for an advantage at the measured
+selectivities, not a deployment recommendation or a claim about untested
+datasets and intermediate selectivities.
+
+The BIGANN 10% behavior is the principal evidence boundary.  Future work
+should first test additional dataset families at 10%, then sweep selectivity
+more finely around the failure region, and finally instrument the
+penalty-induced candidate ordering and traversal behavior on both BIGANN
+scales.  The goal is to determine why BIGANN requires drastically more
+traversal to approach high recall and why the behavior becomes a target
+failure at 10M.  Extending FAVOR from bitsets to UDF filters remains
+lower-priority future work.
+
+* References
+
+1. Junjie Song et al.  [[https://arxiv.org/abs/2605.07770][FAVOR: Efficient
+   Filter-Agnostic Vector ANNS Based on Selectivity-Aware Exclusion
+   Distances]].  arXiv:2605.07770, 2026.
+2. Hiroyuki Ootomo et al.  [[https://arxiv.org/abs/2308.15136][CAGRA: Highly
+   Parallel Graph Construction and Approximate Nearest Neighbor Search for
+   GPUs]].  ICDE 2024; arXiv:2308.15136v2.
+
+* Appendix A: implementation and delta-d details
+
+** Public API and compatibility
+
+The FAVOR implementation appends =filter_mode= and =favor_delta_d= to
+=cagra::search_params=.  =filter_mode= defaults to
+=filtering_mode::DEFAULT=, preserving existing search behavior unless FAVOR is
+explicitly requested.  The delta-d API supports =float=, =half=, =int8_t=, and
+=uint8_t= dense CAGRA datasets:
+
+#+begin_src cpp
+auto dd_params = cagra::favor_delta_d_params{10, 64, 2};
+float delta_d = cagra::compute_favor_delta_d(res, dd_params, index);
+cagra::save_favor_delta_d(res, sidecar_path, dd_params, index, delta_d);
+float checked =
+  cagra::load_favor_delta_d(res, sidecar_path, dd_params, index);
+
+cagra::search_params params;
+params.filter_mode   = cagra::filtering_mode::FAVOR;
+params.favor_delta_d = checked;
+#+end_src
+
+FAVOR rejects a missing or non-finite delta-d value and unsupported filters.
+The implementation evaluated in this report supports only bitset filters.
+The default kernel, =AUTO= routing, and explicit default filtering remain
+available.  The MULTI_CTA adjustment introduces no new public knob.
+
+** GPU search path
+
+One distance-computation team maps the source ID and checks the bitset.  The
+pass/fail result is shared within that team, the penalty is applied before the
+candidate distance is written, and no separate penalty buffer is used.
+Rejected nodes remain eligible during traversal, while final result
+compaction removes them.
+
+For =MULTI_CTA=, each CTA computes the same query penalty from batch-shared
+selectivity, configured =itopk=, and delta-d.  The planner independently uses
+the selectivity-adjusted =itopk= expression to choose traversal breadth and
+CTA count.  This separates the established penalty from the extra parallel
+search breadth required by small batches.
+
+** Delta-d algorithm and stored values
+
+The calculation runs against an already-built, attached dense CAGRA index.
+For every root, bounded BFS discovery is deterministic and deduplicates
+candidates before distance selection.  Roots with fewer than =beta= candidates
+do not contribute to the mean.  Loading never silently recomputes the value:
+metadata, graph/dataset fingerprints, and the scalar must validate.
+
+The stored values are 1087.32 for SIFT-1M, 0.0144914 for GIST-1M, 1376.73
+for BIGANN-1M, 1078.06 for BIGANN-10M, 0.0142445 for MSTuring-1M, and
+0.0129972 for MSTuring-10M.  All use alpha 10, beta 64, and BFS depth 2.
+Their scale depends on dtype and distance scale, so values should not be
+compared directly across datasets.
+
+* Appendix B: reproduction
+
+Use the existing =cuvs= micromamba environment.  Build with all host threads
+and run the focused test:
+
+#+begin_src sh
+PARALLEL_LEVEL="$(nproc)" micromamba run -n cuvs \
+  ./build.sh libcuvs tests bench-ann -n \
+  --limit-tests=NEIGHBORS_ANN_CAGRA_FAVOR_SEARCH_TEST \
+  --limit-bench-ann=CUVS_CAGRA_ANN_BENCH
+
+micromamba run -n cuvs env LD_PRELOAD="$PWD/cpp/build/libcuvs.so" \
+  ./cpp/build/gtests/NEIGHBORS_ANN_CAGRA_FAVOR_SEARCH_TEST
+#+end_src
+
+The required order is: generate a dataset configuration, build the degree-32
+CAGRA graph with intermediate degree 64, attach the dense dataset, compute and
+save delta-d with =CAGRA_FAVOR_COMPARE=, and then run
+=benchmarks/favor/run_benchmarks.sh=.  The canonical sweep uses selectivities
+1/10/50/90 and =itopk= 32/64/128/256/512.  =SINGLE_CTA= uses batches 10 and
+10,000 with search widths 1/2/4; =MULTI_CTA= uses batch size 1 and width 1.
+Dataset-specific commands and paths are documented in
+=benchmarks/favor/README.org=.
+
+Regenerate the =SINGLE_CTA= plots with =plot_results.py= using
+=--cta-mode SINGLE_CTA --zero-y=.  Analyze the canonical and supplemental
+=MULTI_CTA= results and regenerate its fixed-recall plots with:
+
+#+begin_src sh
+micromamba run -n cuvs python benchmarks/favor/analyze_target_recall.py \
+  --result-root benchmarks/favor/results_multi_cta_adjusted_bs1 \
+  --result-root benchmarks/favor/results_multi_cta_recall99/waves \
+  --output-dir benchmarks/favor/results_multi_cta_recall99/analysis \
+  --target-recall 0.99 \
+  --max-extrapolation-distance 0.005
+#+end_src
+
+The resulting =qps_at_target_recall.csv= records the interpolation or
+extrapolation endpoints, estimated QPS, and within-dataset improvement for
+every selectivity.  Export the report locally:
+
+#+begin_src sh
+pandoc -f org -t docx --standalone --toc --toc-depth=2 \
+  --resource-path=benchmarks/favor \
+  -o benchmarks/favor/FAVOR_CAGRA_SINGLE_MULTI_CTA_PERFORMANCE_REPORT_V2.docx \
+  benchmarks/favor/FAVOR_CAGRA_SINGLE_MULTI_CTA_PERFORMANCE_REPORT_V2.org
+#+end_src
+
+* Appendix C: complete Pareto frontier catalog
+
+The catalog embeds 48 plots.  The 24 =SINGLE_CTA= figures contain canonical
+large-batch QPS and batch-10 latency.  The 24 =MULTI_CTA= figures combine the
+canonical and targeted supplemental points, show batch-size-1 QPS, and mark
+the 0.99 comparison when available.  Every dataset includes 1%, 10%, 50%,
+and 90% selectivity.
+
+** SINGLE-CTA
+
+*** SIFT-1M
+
+[[file:report_v2/single/sift/plots/sift_selectivity_01.png]]
+[[file:report_v2/single/sift/plots/sift_selectivity_10.png]]
+[[file:report_v2/single/sift/plots/sift_selectivity_50.png]]
+[[file:report_v2/single/sift/plots/sift_selectivity_90.png]]
+
+*** GIST-1M
+
+[[file:report_v2/single/gist/plots/gist_selectivity_01.png]]
+[[file:report_v2/single/gist/plots/gist_selectivity_10.png]]
+[[file:report_v2/single/gist/plots/gist_selectivity_50.png]]
+[[file:report_v2/single/gist/plots/gist_selectivity_90.png]]
+
+*** BIGANN-1M
+
+[[file:report_v2/single/bigann1m/plots/bigann1m_selectivity_01.png]]
+[[file:report_v2/single/bigann1m/plots/bigann1m_selectivity_10.png]]
+[[file:report_v2/single/bigann1m/plots/bigann1m_selectivity_50.png]]
+[[file:report_v2/single/bigann1m/plots/bigann1m_selectivity_90.png]]
+
+*** BIGANN-10M
+
+[[file:report_v2/single/bigann10m/plots/bigann10m_selectivity_01.png]]
+[[file:report_v2/single/bigann10m/plots/bigann10m_selectivity_10.png]]
+[[file:report_v2/single/bigann10m/plots/bigann10m_selectivity_50.png]]
+[[file:report_v2/single/bigann10m/plots/bigann10m_selectivity_90.png]]
+
+*** MSTuring-1M
+
+[[file:report_v2/single/msturing1m/plots/msturing1m_selectivity_01.png]]
+[[file:report_v2/single/msturing1m/plots/msturing1m_selectivity_10.png]]
+[[file:report_v2/single/msturing1m/plots/msturing1m_selectivity_50.png]]
+[[file:report_v2/single/msturing1m/plots/msturing1m_selectivity_90.png]]
+
+*** MSTuring-10M
+
+[[file:report_v2/single/msturing10m/plots/msturing10m_selectivity_01.png]]
+[[file:report_v2/single/msturing10m/plots/msturing10m_selectivity_10.png]]
+[[file:report_v2/single/msturing10m/plots/msturing10m_selectivity_50.png]]
+[[file:report_v2/single/msturing10m/plots/msturing10m_selectivity_90.png]]
+
+** MULTI-CTA
+
+*** SIFT-1M
+
+[[file:report_v2/multi/sift/plots/sift_selectivity_01.png]]
+[[file:report_v2/multi/sift/plots/sift_selectivity_10.png]]
+[[file:report_v2/multi/sift/plots/sift_selectivity_50.png]]
+[[file:report_v2/multi/sift/plots/sift_selectivity_90.png]]
+
+*** GIST-1M
+
+[[file:report_v2/multi/gist/plots/gist_selectivity_01.png]]
+[[file:report_v2/multi/gist/plots/gist_selectivity_10.png]]
+[[file:report_v2/multi/gist/plots/gist_selectivity_50.png]]
+[[file:report_v2/multi/gist/plots/gist_selectivity_90.png]]
+
+*** BIGANN-1M
+
+[[file:report_v2/multi/bigann1m/plots/bigann1m_selectivity_01.png]]
+[[file:report_v2/multi/bigann1m/plots/bigann1m_selectivity_10.png]]
+[[file:report_v2/multi/bigann1m/plots/bigann1m_selectivity_50.png]]
+[[file:report_v2/multi/bigann1m/plots/bigann1m_selectivity_90.png]]
+
+*** BIGANN-10M
+
+[[file:report_v2/multi/bigann10m/plots/bigann10m_selectivity_01.png]]
+[[file:report_v2/multi/bigann10m/plots/bigann10m_selectivity_10.png]]
+[[file:report_v2/multi/bigann10m/plots/bigann10m_selectivity_50.png]]
+[[file:report_v2/multi/bigann10m/plots/bigann10m_selectivity_90.png]]
+
+*** MSTuring-1M
+
+[[file:report_v2/multi/msturing1m/plots/msturing1m_selectivity_01.png]]
+[[file:report_v2/multi/msturing1m/plots/msturing1m_selectivity_10.png]]
+[[file:report_v2/multi/msturing1m/plots/msturing1m_selectivity_50.png]]
+[[file:report_v2/multi/msturing1m/plots/msturing1m_selectivity_90.png]]
+
+*** MSTuring-10M
+
+[[file:report_v2/multi/msturing10m/plots/msturing10m_selectivity_01.png]]
+[[file:report_v2/multi/msturing10m/plots/msturing10m_selectivity_10.png]]
+[[file:report_v2/multi/msturing10m/plots/msturing10m_selectivity_50.png]]
+[[file:report_v2/multi/msturing10m/plots/msturing10m_selectivity_90.png]]

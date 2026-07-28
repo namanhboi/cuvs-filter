@@ -72,15 +72,19 @@ class CagraFavorSearchTest : public ::testing::Test {
     return cuvs::neighbors::filtering::bitset_filter<uint32_t, int64_t>(bitsets.back().view());
   }
 
-  auto run(cagra::search_params params, cuvs::neighbors::filtering::base_filter const& filter)
+  auto run(cagra::search_params params,
+           cuvs::neighbors::filtering::base_filter const& filter,
+           int64_t num_queries = kQueries)
     -> search_result
   {
-    auto neighbors = raft::make_device_matrix<uint32_t, int64_t>(res, kQueries, k);
-    auto distances = raft::make_device_matrix<float, int64_t>(res, kQueries, k);
+    auto neighbors = raft::make_device_matrix<uint32_t, int64_t>(res, num_queries, k);
+    auto distances = raft::make_device_matrix<float, int64_t>(res, num_queries, k);
+    auto query_view =
+      raft::make_device_matrix_view<const float, int64_t>(queries->data_handle(), num_queries, kDim);
     cagra::search(res,
                   params,
                   *index,
-                  raft::make_const_mdspan(queries->view()),
+                  query_view,
                   neighbors.view(),
                   distances.view(),
                   filter);
@@ -101,6 +105,15 @@ class CagraFavorSearchTest : public ::testing::Test {
     result.itopk_size        = 64;
     result.max_queries       = 3;
     result.thread_block_size = 256;
+    return result;
+  }
+
+  static auto multi_cta_params() -> cagra::search_params
+  {
+    auto result         = params();
+    result.algo         = cagra::search_algo::MULTI_CTA;
+    result.search_width = 1;
+    result.max_queries  = 1;
     return result;
   }
 
@@ -162,15 +175,19 @@ class CagraFavorUint8SearchTest : public ::testing::Test {
     return cuvs::neighbors::filtering::bitset_filter<uint32_t, int64_t>(bitsets.back().view());
   }
 
-  auto run(cagra::search_params params, cuvs::neighbors::filtering::base_filter const& filter)
+  auto run(cagra::search_params params,
+           cuvs::neighbors::filtering::base_filter const& filter,
+           int64_t num_queries = kQueries)
     -> search_result
   {
-    auto neighbors = raft::make_device_matrix<uint32_t, int64_t>(res, kQueries, k);
-    auto distances = raft::make_device_matrix<float, int64_t>(res, kQueries, k);
+    auto neighbors = raft::make_device_matrix<uint32_t, int64_t>(res, num_queries, k);
+    auto distances = raft::make_device_matrix<float, int64_t>(res, num_queries, k);
+    auto query_view = raft::make_device_matrix_view<const uint8_t, int64_t>(
+      queries->data_handle(), num_queries, kDim);
     cagra::search(res,
                   params,
                   *index,
-                  raft::make_const_mdspan(queries->view()),
+                  query_view,
                   neighbors.view(),
                   distances.view(),
                   filter);
@@ -191,6 +208,15 @@ class CagraFavorUint8SearchTest : public ::testing::Test {
     result.itopk_size        = 64;
     result.max_queries       = 3;
     result.thread_block_size = 256;
+    return result;
+  }
+
+  static auto multi_cta_params() -> cagra::search_params
+  {
+    auto result         = params();
+    result.algo         = cagra::search_algo::MULTI_CTA;
+    result.search_width = 1;
+    result.max_queries  = 1;
     return result;
   }
 
@@ -335,6 +361,92 @@ TEST_F(CagraFavorUint8SearchTest, ZeroPenaltyCompactsRejectedRows)
   favor_params.favor_delta_d = 0.0f;
 
   auto result = run(favor_params, filter);
+  for (auto neighbor : result.neighbors) {
+    ASSERT_NE(neighbor, std::numeric_limits<uint32_t>::max());
+    EXPECT_GE(neighbor, static_cast<uint32_t>(kRows / 2));
+  }
+}
+
+TEST_F(CagraFavorSearchTest, MultiCtaBatchOneAcceptAllMatchesDefault)
+{
+  auto filter                = make_filter(0);
+  auto default_params        = multi_cta_params();
+  auto favor_params          = default_params;
+  favor_params.filter_mode   = cagra::filtering_mode::FAVOR;
+  favor_params.favor_delta_d = 100.0f;
+
+  auto expected = run(default_params, filter, 1);
+  auto actual   = run(favor_params, filter, 1);
+  EXPECT_EQ(expected.neighbors, actual.neighbors);
+  EXPECT_EQ(expected.distances, actual.distances);
+}
+
+TEST_F(CagraFavorSearchTest, MultiCtaBatchOneReturnsOnlyPassingRows)
+{
+  auto filter                = make_filter(kRows / 2);
+  auto favor_params          = multi_cta_params();
+  favor_params.filter_mode   = cagra::filtering_mode::FAVOR;
+  favor_params.favor_delta_d = 100.0f;
+
+  auto result = run(favor_params, filter, 1);
+  for (auto neighbor : result.neighbors) {
+    ASSERT_NE(neighbor, std::numeric_limits<uint32_t>::max());
+    EXPECT_GE(neighbor, static_cast<uint32_t>(kRows / 2));
+  }
+}
+
+TEST_F(CagraFavorSearchTest, MultiCtaAdjustedTraversalReturnsOnlyPassingRows)
+{
+  auto filter                 = make_filter(kRows / 2);
+  auto favor_params           = multi_cta_params();
+  favor_params.itopk_size     = 32;
+  favor_params.filtering_rate = 0.5;
+  favor_params.filter_mode    = cagra::filtering_mode::FAVOR;
+  favor_params.favor_delta_d  = 100.0f;
+
+  auto result = run(favor_params, filter, 1);
+  for (auto neighbor : result.neighbors) {
+    ASSERT_NE(neighbor, std::numeric_limits<uint32_t>::max());
+    EXPECT_GE(neighbor, static_cast<uint32_t>(kRows / 2));
+  }
+}
+
+TEST_F(CagraFavorSearchTest, MultiCtaBatchOneZeroPenaltyCompactsRejectedRows)
+{
+  auto filter                = make_filter(kRows / 2);
+  auto favor_params          = multi_cta_params();
+  favor_params.filter_mode   = cagra::filtering_mode::FAVOR;
+  favor_params.favor_delta_d = 0.0f;
+
+  auto result = run(favor_params, filter, 1);
+  for (auto neighbor : result.neighbors) {
+    ASSERT_NE(neighbor, std::numeric_limits<uint32_t>::max());
+    EXPECT_GE(neighbor, static_cast<uint32_t>(kRows / 2));
+  }
+}
+
+TEST_F(CagraFavorUint8SearchTest, MultiCtaBatchOneAcceptAllMatchesDefault)
+{
+  auto filter                = make_filter(0);
+  auto default_params        = multi_cta_params();
+  auto favor_params          = default_params;
+  favor_params.filter_mode   = cagra::filtering_mode::FAVOR;
+  favor_params.favor_delta_d = 100.0f;
+
+  auto expected = run(default_params, filter, 1);
+  auto actual   = run(favor_params, filter, 1);
+  EXPECT_EQ(expected.neighbors, actual.neighbors);
+  EXPECT_EQ(expected.distances, actual.distances);
+}
+
+TEST_F(CagraFavorUint8SearchTest, MultiCtaBatchOneReturnsOnlyPassingRows)
+{
+  auto filter                = make_filter(kRows / 2);
+  auto favor_params          = multi_cta_params();
+  favor_params.filter_mode   = cagra::filtering_mode::FAVOR;
+  favor_params.favor_delta_d = 100.0f;
+
+  auto result = run(favor_params, filter, 1);
   for (auto neighbor : result.neighbors) {
     ASSERT_NE(neighbor, std::numeric_limits<uint32_t>::max());
     EXPECT_GE(neighbor, static_cast<uint32_t>(kRows / 2));

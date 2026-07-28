@@ -177,7 +177,11 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_favor_distance_to_random_nodes_jit(
   const SourceIndexT* source_indices_ptr,
   const uint32_t query_id,
   cagra_sample_filter<SourceIndexT> filter_payload,
-  const DistanceT favor_penalty)
+  const DistanceT favor_penalty,
+  IndexT* __restrict__ traversed_hash_ptr = nullptr,
+  const uint32_t traversed_hash_bitlen     = 0,
+  const uint32_t block_id                  = 0,
+  const uint32_t num_blocks                = 1)
 {
   compute_distance_to_random_nodes_jit_impl<true, IndexT, DistanceT, DataT, SourceIndexT>(
     result_indices_ptr,
@@ -190,10 +194,10 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_favor_distance_to_random_nodes_jit(
     num_seeds,
     visited_hash_ptr,
     visited_hash_bitlen,
-    static_cast<IndexT*>(nullptr),
-    0,
-    0,
-    1,
+    traversed_hash_ptr,
+    traversed_hash_bitlen,
+    block_id,
+    num_blocks,
     graph_size,
     source_indices_ptr,
     query_id,
@@ -355,7 +359,11 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_favor_distance_to_child_nodes_jit(
   const SourceIndexT* source_indices_ptr,
   const uint32_t query_id,
   cagra_sample_filter<SourceIndexT> filter_payload,
-  const DistanceT favor_penalty)
+  const DistanceT favor_penalty,
+  IndexT* __restrict__ traversed_hashmap_ptr = nullptr,
+  const uint32_t traversed_hash_bitlen       = 0,
+  int* __restrict__ result_position          = nullptr,
+  const int max_result_position              = 0)
 {
   compute_distance_to_child_nodes_jit_impl<true,
                                            IndexT,
@@ -369,13 +377,13 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_favor_distance_to_child_nodes_jit(
                                                                    knn_k,
                                                                    visited_hashmap_ptr,
                                                                    visited_hash_bitlen,
-                                                                   static_cast<IndexT*>(nullptr),
-                                                                   0,
+                                                                   traversed_hashmap_ptr,
+                                                                   traversed_hash_bitlen,
                                                                    parent_indices,
                                                                    internal_topk_list,
                                                                    search_width,
-                                                                   nullptr,
-                                                                   0,
+                                                                   result_position,
+                                                                   max_result_position,
                                                                    source_indices_ptr,
                                                                    query_id,
                                                                    filter_payload,

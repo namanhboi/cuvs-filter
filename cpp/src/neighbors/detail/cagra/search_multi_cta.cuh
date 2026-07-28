@@ -58,6 +58,8 @@ struct search
   using DISTANCE_T = typename base_type::DISTANCE_T;
 
   using base_type::algo;
+  using base_type::configured_itopk_size;
+  using base_type::filter_mode;
   using base_type::hashmap_max_fill_rate;
   using base_type::hashmap_min_bitlen;
   using base_type::hashmap_mode;
@@ -122,6 +124,11 @@ struct search
     search_width                            = 1;
     RAFT_LOG_DEBUG("params.itopk_size: %lu", (uint64_t)params.itopk_size);
     RAFT_LOG_DEBUG("global_itopk_size: %lu", (uint64_t)global_itopk_size);
+    if (filter_mode == filtering_mode::FAVOR) {
+      RAFT_LOG_DEBUG("# FAVOR configured_itopk_size: %lu, traversal_itopk_size: %lu",
+                     static_cast<uint64_t>(configured_itopk_size),
+                     static_cast<uint64_t>(global_itopk_size));
+    }
     num_cta_per_query =
       max(params.search_width, raft::ceildiv(global_itopk_size, (size_t)multi_cta_itopk_size));
     result_buffer_size = itopk_size + (search_width * graph_degree);
@@ -136,6 +143,7 @@ struct search
       sizeof(INDEX_T) * hashmap::get_size(small_hash_bitlen) +  // local_visited_hashmap_ptr
       sizeof(INDEX_T) * search_width +                          // parent_indices_buffer
       sizeof(int);                                              // result_position
+    if (filter_mode == filtering_mode::FAVOR) { smem_size += sizeof(DISTANCE_T); }
     RAFT_LOG_DEBUG("# smem_size: %u", smem_size);
 
     //
@@ -239,6 +247,7 @@ struct search
                    hashmap.data(),
                    num_cta_per_query,
                    num_seeds,
+                   static_cast<uint32_t>(configured_itopk_size),
                    sample_filter,
                    stream);
     RAFT_CUDA_TRY(cudaPeekAtLastError());

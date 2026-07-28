@@ -35,6 +35,7 @@ void select_and_run(const dataset_descriptor_host<DataT, IndexT, DistanceT>& dat
                     IndexT* traversed_hashmap_ptr,
                     uint32_t num_cta_per_query,
                     uint32_t num_seeds,
+                    uint32_t configured_itopk_size,
                     SampleFilterT sample_filter,
                     cudaStream_t stream);
 

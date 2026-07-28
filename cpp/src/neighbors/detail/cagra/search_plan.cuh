@@ -102,13 +102,15 @@ struct search_plan_impl_base : public search_params {
   int64_t dim;
   int64_t graph_degree;
   uint32_t topk;
+  size_t configured_itopk_size;
   search_plan_impl_base(
     search_params params, int64_t dim, int64_t dataset_size, int64_t graph_degree, uint32_t topk)
     : search_params(params),
       dim(dim),
       dataset_size(dataset_size),
       graph_degree(graph_degree),
-      topk(topk)
+      topk(topk),
+      configured_itopk_size(params.itopk_size)
   {
     if (filter_mode == filtering_mode::FAVOR && algo == search_algo::AUTO) {
       algo = search_algo::SINGLE_CTA;
@@ -224,6 +226,9 @@ struct search_plan_impl : public search_plan_impl_base {
         "# max_iterations is increased from %lu to %u.", max_iterations, _max_iterations);
       max_iterations = _max_iterations;
     }
+    // MULTI_CTA needs enough independent traversals to compensate for the fraction of rows
+    // rejected by the filter. FAVOR uses the same adjusted traversal breadth as default
+    // filtering, while configured_itopk_size retains the user-supplied value for its penalty.
     if (algo == search_algo::MULTI_CTA && (0.0 < filtering_rate && filtering_rate < 1.0)) {
       size_t adjusted_itopk_size =
         (size_t)((float)topk / (1.0 - filtering_rate) +
@@ -231,7 +236,7 @@ struct search_plan_impl : public search_plan_impl_base {
       if (adjusted_itopk_size % 32) { adjusted_itopk_size += 32 - (adjusted_itopk_size % 32); }
       if (itopk_size < adjusted_itopk_size) {
         RAFT_LOG_DEBUG(
-          "# internal_topk is increased from %lu to %lu, considering fintering rate %f.",
+          "# internal_topk is increased from %lu to %lu, considering filtering rate %f.",
           itopk_size,
           adjusted_itopk_size,
           filtering_rate);
@@ -399,8 +404,8 @@ struct search_plan_impl : public search_plan_impl_base {
       error_message += "An invalid kernel mode has been given: " + std::to_string((int)algo) + "";
     }
     if (filter_mode == filtering_mode::FAVOR) {
-      if (algo != search_algo::SINGLE_CTA) {
-        error_message += "FAVOR filtering currently supports only SINGLE_CTA. ";
+      if (algo != search_algo::SINGLE_CTA && algo != search_algo::MULTI_CTA) {
+        error_message += "FAVOR filtering supports only SINGLE_CTA and MULTI_CTA. ";
       }
       if (persistent) { error_message += "FAVOR filtering does not support persistent search. "; }
       if (!std::isfinite(favor_delta_d) || favor_delta_d < 0.0f) {

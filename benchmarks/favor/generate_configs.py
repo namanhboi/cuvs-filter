@@ -11,6 +11,7 @@ from pathlib import Path
 DEFAULT_SELECTIVITIES = (1, 10, 50, 90)
 DEFAULT_ITOPK_VALUES = (32, 64, 128, 256, 512)
 DEFAULT_SEARCH_WIDTHS = (1, 2, 4)
+DEFAULT_BATCH_SIZES = (10, 10000)
 
 
 def main() -> None:
@@ -36,21 +37,52 @@ def main() -> None:
     parser.add_argument(
         "--search-widths", type=int, nargs="+", default=DEFAULT_SEARCH_WIDTHS
     )
+    parser.add_argument(
+        "--batch-sizes", type=int, nargs="+", default=DEFAULT_BATCH_SIZES
+    )
+    parser.add_argument(
+        "--algo", choices=("single_cta", "multi_cta"), default="single_cta"
+    )
+    parser.add_argument(
+        "--modes",
+        nargs="+",
+        choices=("default", "favor"),
+        default=("default", "favor"),
+        help="filtering methods to include (default: both)",
+    )
+    parser.add_argument(
+        "--deduplicate-multi-cta",
+        action="store_true",
+        help="omit search widths that produce an already-covered CTA count for the same itopk",
+    )
     args = parser.parse_args()
     selectivities = tuple(dict.fromkeys(args.selectivities))
     if not selectivities or any(not 1 <= value <= 100 for value in selectivities):
         raise ValueError("selectivities must be whole percentages in [1, 100]")
+    batch_sizes = tuple(dict.fromkeys(args.batch_sizes))
+    if not batch_sizes or any(value <= 0 for value in batch_sizes):
+        raise ValueError("batch sizes must be positive")
     args.output_dir.mkdir(parents=True, exist_ok=True)
     delta_d_file = args.delta_d_file or f"{args.dataset_name}/{args.graph_file}.delta_d"
 
     for selectivity in selectivities:
-        for batch_size in (10, 10000):
+        for batch_size in batch_sizes:
             search_params = []
-            for mode in ("default", "favor"):
+            for mode in tuple(dict.fromkeys(args.modes)):
+                covered_cta_counts: dict[int, set[int]] = {}
                 for itopk in args.itopk_values:
+                    covered_cta_counts[itopk] = set()
                     for width in args.search_widths:
+                        effective_cta_count = max(width, (itopk + 31) // 32)
+                        if (
+                            args.algo == "multi_cta"
+                            and args.deduplicate_multi_cta
+                            and effective_cta_count in covered_cta_counts[itopk]
+                        ):
+                            continue
+                        covered_cta_counts[itopk].add(effective_cta_count)
                         param = {
-                            "algo": "single_cta",
+                            "algo": args.algo,
                             "filter_mode": mode,
                             "itopk": itopk,
                             "search_width": width,

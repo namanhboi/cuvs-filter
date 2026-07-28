@@ -1,0 +1,87 @@
+#+TITLE: CAGRA-Scaled FAVOR Penalty Plan
+#+OPTIONS: toc:2 num:t
+
+* Summary
+
+Keep the existing fused FAVOR search kernels, but bound the HNSW-derived
+penalty using a statistic measured in CAGRA's local candidate-ordering scale:
+
+#+begin_example
+D = min(D_reference,
+        c * local_gap / max(1 - P_short, 1 / B)^gamma)
+#+end_example
+
+=D_reference= is the current FAVOR penalty.  =local_gap= measures adjacent
+distance differences in sampled CAGRA graph neighborhoods.  =P_short= is
+=Pr[Binomial(B, s) < k]=, where =s= is selectivity, =B= is the actual traversal
+=itopk=, and =k= is the requested result count.  The bound relaxes for extremely
+sparse filters, preserving FAVOR's 1% behavior, but limits destructive
+candidate reordering once enough passing candidates are likely.
+
+* Index-time statistic and formula selection
+
+- Extend the existing =delta_d= GPU calculation so the distance work is reused:
+  - deterministically sample at most 65,536 graph roots;
+  - use the existing two-hop neighborhood and sorted ranks 10--64;
+  - collect strictly positive gaps =d[r+1] - d[r]= for ranks 10--63; and
+  - use existing CUB selection and sorting primitives to calculate the 5th,
+    10th, 25th, and 50th percentiles.
+- Limit temporary gap storage to approximately 14 MB for 65,536 roots.  This
+  storage exists only while preparing the index statistic.
+- Evaluate the following grid on SIFT-1M, GIST-1M, BIGANN-1M, and MSTuring-1M:
+  - local-gap percentile: 5, 10, 25, or 50;
+  - =c=: 0.125, 0.25, 0.5, or 1.0; and
+  - =gamma=: 1 or 2.
+- Cover selectivities 1, 2, 3, 4, 5, 6, 7, 8, 10, 50, and 90%.
+- A candidate is feasible only when:
+  - BIGANN-1M's 4% and 10% collapse is removed;
+  - 1% recall remains within 0.025 absolute of current FAVOR; and
+  - no previously successful calibration case loses more than 0.025 absolute
+    recall relative to the stronger of current FAVOR and default CAGRA.
+- Among feasible candidates, choose the one with the highest geometric-mean
+  target-recall performance.
+- Freeze the selected percentile, =c=, and =gamma= before testing BIGANN-10M
+  and MSTuring-10M.  Do not retune the formula after viewing either holdout.
+
+* Runtime and compatibility
+
+- Calculate =P_short= and the final scalar penalty once on the host before the
+  search launch using a numerically stable binomial-CDF recurrence.
+- Use the actual, selectivity-adjusted traversal =itopk= for =B=.  Preserve the
+  configured-=itopk= behavior in =D_reference= for compatibility.
+- Pass the completed scalar through the existing kernel argument and shared
+  initialization.  Do not add a device buffer, per-query history, or another
+  synchronization phase.
+- Add explicit =REFERENCE= and =CAGRA_SCALED= penalty modes.  Existing FAVOR
+  calls default to =REFERENCE=.
+- Add a versioned FAVOR-statistics sidecar containing the existing =delta_d=,
+  the selected local gap, and its calibration metadata.  Preserve the current
+  =.delta_d= sidecar and APIs.
+- Add optional cuVS-bench fields for the scaled mode and statistics sidecar.
+  Existing configurations retain their current behavior.
+- Treat the new fields as source- and behavior-compatible additions.  Document
+  that growing the public parameter struct can change binary ABI.
+
+* Validation
+
+- Compare the GPU local-gap statistic with a deterministic CPU reference for
+  float and uint8 inputs, including duplicate distances, zero gaps, small
+  graphs, and every supported distance metric.
+- Test statistics-sidecar round trips, version rejection, graph fingerprints,
+  invalid values, and legacy sidecar compatibility.
+- Test formula invariants: finite and nonnegative output, =D <= D_reference=,
+  zero-selectivity skipping, accept-all behavior, binomial underflow, and
+  monotonic relaxation as =P_short= increases.
+- Re-run SINGLE_CTA and MULTI_CTA FAVOR tests, including default-path equality,
+  empty filters, zero penalty, and final result compaction.
+- Produce Pareto frontiers comparing default CAGRA, reference FAVOR, and
+  CAGRA-scaled FAVOR:
+  - SINGLE_CTA uses batch 10,000, =itopk= 32/64/128/256/512, and search width
+    1/2/4.
+  - MULTI_CTA uses batch 1 and the same canonical sweep, extending =itopk= to
+    16,384 only when required to bracket 0.99 recall.
+  - Interpolate only when the target recall is bracketed.  Otherwise report the
+    highest measured common recall without an improvement percentage.
+- Accept the formula only when it repairs BIGANN on both scales, retains the
+  current 1% advantage, stays within the 0.025 recall limit, adds no more than
+  2% fixed-configuration runtime overhead, and leaves default CAGRA unchanged.

@@ -138,6 +138,34 @@ using search_multi_cta_kernel_func_t =
        const std::uint32_t,
        cagra_sample_filter<SourceIndexT>);
 
+template <typename DataT, typename IndexT, typename DistanceT, typename SourceIndexT>
+using search_multi_cta_favor_kernel_func_t =
+  void(IndexT* const,
+       DistanceT* const,
+       const dataset_descriptor_base_t<DataT, IndexT, DistanceT>*,
+       const DataT* const,
+       const IndexT* const,
+       const std::uint32_t,
+       const std::uint32_t,
+       const SourceIndexT*,
+       const unsigned,
+       const uint64_t,
+       const IndexT*,
+       const std::uint32_t,
+       const std::uint32_t,
+       IndexT* const,
+       const std::uint32_t,
+       const std::uint32_t,
+       const std::uint32_t,
+       const std::uint32_t,
+       std::uint32_t* const,
+       const IndexT,
+       const std::uint32_t,
+       cagra_sample_filter<SourceIndexT>,
+       const float,
+       const float,
+       const std::uint32_t);
+
 }  // namespace multi_cta_search
 
 namespace multi_kernel_search {

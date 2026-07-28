@@ -28,8 +28,10 @@ namespace cuvs::neighbors::cagra::detail::multi_cta_search {
 
 using cuvs::neighbors::cagra::detail::device::compute_distance_to_child_nodes_jit;
 using cuvs::neighbors::cagra::detail::device::compute_distance_to_random_nodes_jit;
+using cuvs::neighbors::cagra::detail::device::compute_favor_distance_to_child_nodes_jit;
+using cuvs::neighbors::cagra::detail::device::compute_favor_distance_to_random_nodes_jit;
 using cuvs::neighbors::detail::sample_filter;
-template <typename DataT, typename IndexT, typename DistanceT, typename SourceIndexT>
+template <bool FAVOR, typename DataT, typename IndexT, typename DistanceT, typename SourceIndexT>
 __device__ void search_kernel_jit(
   IndexT* const result_indices_ptr,       // [num_queries, num_cta_per_query, itopk_size]
   DistanceT* const result_distances_ptr,  // [num_queries, num_cta_per_query, itopk_size]
@@ -52,7 +54,10 @@ __device__ void search_kernel_jit(
   uint32_t* const num_executed_iterations, /* stats */
   const IndexT graph_size,
   const uint32_t query_id_offset,  // Offset to add to query_id when calling filter
-  cagra_sample_filter<SourceIndexT> filter_payload)
+  cagra_sample_filter<SourceIndexT> filter_payload,
+  const float filtering_rate          = 0.0f,
+  const float favor_delta_d            = 0.0f,
+  const uint32_t configured_itopk_size = 0)
 {
   using DATA_T     = DataT;
   using INDEX_T    = IndexT;
@@ -110,12 +115,25 @@ __device__ void search_kernel_jit(
   auto* __restrict__ parent_indices_buffer =
     reinterpret_cast<INDEX_T*>(local_visited_hashmap_ptr + hashmap::get_size(visited_hash_bitlen));
   auto* __restrict__ result_position = reinterpret_cast<int*>(parent_indices_buffer + 1);
+  DISTANCE_T* favor_penalty           = nullptr;
+  if constexpr (FAVOR) {
+    favor_penalty = reinterpret_cast<DISTANCE_T*>(result_position + 1);
+  }
 
   INDEX_T* const local_traversed_hashmap_ptr =
     traversed_hashmap_ptr + (hashmap::get_size(traversed_hash_bitlen) * query_id);
 
   constexpr INDEX_T invalid_index    = ~static_cast<INDEX_T>(0);
   constexpr INDEX_T index_msb_1_mask = utils::gen_index_msb_1_mask<INDEX_T>::value;
+
+  if constexpr (FAVOR) {
+    if (threadIdx.x == 0) {
+      const float selectivity = 1.0f - filtering_rate;
+      const float ef          = static_cast<float>(configured_itopk_size);
+      favor_penalty[0]        = static_cast<DISTANCE_T>(
+        filtering_rate * (ef - selectivity) * favor_delta_d / (2.0f * selectivity * ef));
+    }
+  }
 
   for (unsigned i = threadIdx.x; i < result_buffer_size_32; i += blockDim.x) {
     result_indices_buffer[i]   = invalid_index;
@@ -131,21 +149,44 @@ __device__ void search_kernel_jit(
   uint32_t block_id                   = cta_id + (num_cta_per_query * query_id);
   uint32_t num_blocks                 = num_cta_per_query * num_queries;
 
-  compute_distance_to_random_nodes_jit<IndexT, DistanceT, DataT>(result_indices_buffer,
-                                                                 result_distances_buffer,
-                                                                 smem_desc,
-                                                                 graph_degree,
-                                                                 num_distilation,
-                                                                 rand_xor_mask,
-                                                                 local_seed_ptr,
-                                                                 num_seeds,
-                                                                 local_visited_hashmap_ptr,
-                                                                 visited_hash_bitlen,
-                                                                 local_traversed_hashmap_ptr,
-                                                                 traversed_hash_bitlen,
-                                                                 block_id,
-                                                                 num_blocks,
-                                                                 graph_size);
+  if constexpr (FAVOR) {
+    compute_favor_distance_to_random_nodes_jit<IndexT, DistanceT, DataT, SourceIndexT>(
+      result_indices_buffer,
+      result_distances_buffer,
+      smem_desc,
+      graph_degree,
+      num_distilation,
+      rand_xor_mask,
+      local_seed_ptr,
+      num_seeds,
+      local_visited_hashmap_ptr,
+      visited_hash_bitlen,
+      graph_size,
+      source_indices_ptr,
+      query_id + query_id_offset,
+      filter_payload,
+      favor_penalty[0],
+      local_traversed_hashmap_ptr,
+      traversed_hash_bitlen,
+      block_id,
+      num_blocks);
+  } else {
+    compute_distance_to_random_nodes_jit<IndexT, DistanceT, DataT>(result_indices_buffer,
+                                                                   result_distances_buffer,
+                                                                   smem_desc,
+                                                                   graph_degree,
+                                                                   num_distilation,
+                                                                   rand_xor_mask,
+                                                                   local_seed_ptr,
+                                                                   num_seeds,
+                                                                   local_visited_hashmap_ptr,
+                                                                   visited_hash_bitlen,
+                                                                   local_traversed_hashmap_ptr,
+                                                                   traversed_hash_bitlen,
+                                                                   block_id,
+                                                                   num_blocks,
+                                                                   graph_size);
+  }
   __syncthreads();
   _CLK_REC(clk_compute_1st_distance);
 
@@ -225,20 +266,42 @@ __device__ void search_kernel_jit(
     __syncthreads();
 
     // Compute the norms between child nodes and query node using JIT version
-    compute_distance_to_child_nodes_jit<IndexT, DistanceT, DataT, 0>(result_indices_buffer,
-                                                                     result_distances_buffer,
-                                                                     smem_desc,
-                                                                     knn_graph,
-                                                                     graph_degree,
-                                                                     local_visited_hashmap_ptr,
-                                                                     visited_hash_bitlen,
-                                                                     local_traversed_hashmap_ptr,
-                                                                     traversed_hash_bitlen,
-                                                                     parent_indices_buffer,
-                                                                     result_indices_buffer,
-                                                                     1,
-                                                                     result_position,
-                                                                     result_buffer_size_32);
+    if constexpr (FAVOR) {
+      compute_favor_distance_to_child_nodes_jit<IndexT, DistanceT, DataT, SourceIndexT, 0>(
+        result_indices_buffer,
+        result_distances_buffer,
+        smem_desc,
+        knn_graph,
+        graph_degree,
+        local_visited_hashmap_ptr,
+        visited_hash_bitlen,
+        parent_indices_buffer,
+        result_indices_buffer,
+        1,
+        source_indices_ptr,
+        query_id + query_id_offset,
+        filter_payload,
+        favor_penalty[0],
+        local_traversed_hashmap_ptr,
+        traversed_hash_bitlen,
+        result_position,
+        result_buffer_size_32);
+    } else {
+      compute_distance_to_child_nodes_jit<IndexT, DistanceT, DataT, 0>(result_indices_buffer,
+                                                                       result_distances_buffer,
+                                                                       smem_desc,
+                                                                       knn_graph,
+                                                                       graph_degree,
+                                                                       local_visited_hashmap_ptr,
+                                                                       visited_hash_bitlen,
+                                                                       local_traversed_hashmap_ptr,
+                                                                       traversed_hash_bitlen,
+                                                                       parent_indices_buffer,
+                                                                       result_indices_buffer,
+                                                                       1,
+                                                                       result_position,
+                                                                       result_buffer_size_32);
+    }
     __syncthreads();
 
     // Check the state of the nodes in the result buffer which were not updated
@@ -255,20 +318,23 @@ __device__ void search_kernel_jit(
     __syncthreads();
     _CLK_REC(clk_compute_distance);
 
-    // Filtering - use extern sample_filter function (linked via JIT LTO)
-    for (unsigned p = threadIdx.x; p < 1; p += blockDim.x) {
-      if (parent_indices_buffer[p] != invalid_index) {
-        const auto parent_id = result_indices_buffer[parent_indices_buffer[p]] & ~index_msb_1_mask;
-        if (!sample_filter<SourceIndexT>(query_id + query_id_offset,
-                                         to_source_index(parent_id),
-                                         filter_payload.sample_filter_data())) {
-          // If the parent must not be in the resulting top-k list, remove from the parent list
-          result_distances_buffer[parent_indices_buffer[p]] = utils::get_max_value<DISTANCE_T>();
-          result_indices_buffer[parent_indices_buffer[p]]   = invalid_index;
+    if constexpr (!FAVOR) {
+      // Default filtering invalidates expanded parents after their children have been scored.
+      for (unsigned p = threadIdx.x; p < 1; p += blockDim.x) {
+        if (parent_indices_buffer[p] != invalid_index) {
+          const auto parent_id =
+            result_indices_buffer[parent_indices_buffer[p]] & ~index_msb_1_mask;
+          if (!sample_filter<SourceIndexT>(query_id + query_id_offset,
+                                           to_source_index(parent_id),
+                                           filter_payload.sample_filter_data())) {
+            result_distances_buffer[parent_indices_buffer[p]] =
+              utils::get_max_value<DISTANCE_T>();
+            result_indices_buffer[parent_indices_buffer[p]] = invalid_index;
+          }
         }
       }
+      __syncthreads();
     }
-    __syncthreads();
 
     iter++;
   }

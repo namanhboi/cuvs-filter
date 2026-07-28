@@ -17,6 +17,10 @@ selectivities=${FAVOR_SELECTIVITIES:-"1 10 50 90"}
 itopk_values=${FAVOR_ITOPK_VALUES:-"32 64 128 256 512"}
 search_widths=${FAVOR_SEARCH_WIDTHS:-"1 2 4"}
 batch_sizes=${FAVOR_BATCH_SIZES:-"10 10000"}
+search_algo=${FAVOR_SEARCH_ALGO:-"single_cta"}
+deduplicate_multi_cta=${FAVOR_DEDUPLICATE_MULTI_CTA:-0}
+benchmark_min_time=${FAVOR_BENCHMARK_MIN_TIME:-"0.2s"}
+benchmark_modes=${FAVOR_BENCHMARK_MODES:-"default favor"}
 bench_bin="${repo_dir}/cpp/build/bench/ann/CUVS_CAGRA_ANN_BENCH"
 build_libcuvs="${repo_dir}/cpp/build/libcuvs.so"
 config_dir="${result_dir}/configs"
@@ -38,12 +42,18 @@ generate_args=(
   --selectivities ${selectivities}
   --itopk-values ${itopk_values}
   --search-widths ${search_widths}
+  --batch-sizes ${batch_sizes}
+  --algo="${search_algo}"
+  --modes ${benchmark_modes}
 )
 if [[ "${subset_size}" -gt 0 ]]; then
   generate_args+=(--subset-size="${subset_size}")
 fi
 if [[ -n "${favor_delta_d}" ]]; then
   generate_args+=(--favor-delta-d="${favor_delta_d}")
+fi
+if [[ "${deduplicate_multi_cta}" == 1 ]]; then
+  generate_args+=(--deduplicate-multi-cta)
 fi
 python "${repo_dir}/benchmarks/favor/generate_configs.py" "${generate_args[@]}"
 
@@ -89,7 +99,7 @@ for selectivity_value in ${selectivities}; do
       --data_prefix="${data_dir}" \
       --index_prefix="${data_dir}" \
       --benchmark_repetitions=1 \
-      --benchmark_min_time=0.2s \
+      --benchmark_min_time="${benchmark_min_time}" \
       --benchmark_min_warmup_time=0.1 \
       --benchmark_report_aggregates_only=false \
       --benchmark_out_format=json \
@@ -114,4 +124,14 @@ if [[ " ${batch_sizes} " == *" 10 "* && " ${batch_sizes} " == *" 10000 "* ]]; th
     --result-prefix="${result_prefix}" \
     --plot-title="${plot_title}" \
     --selectivities ${selectivities}
+elif [[ $(wc -w <<<"${batch_sizes}") -eq 1 ]]; then
+  python "${repo_dir}/benchmarks/favor/plot_results.py" \
+    --result-dir "${result_dir}" \
+    --result-prefix="${result_prefix}" \
+    --plot-title="${plot_title}" \
+    --selectivities ${selectivities} \
+    --latency-derived-qps \
+    --latency-batch-size="${batch_sizes}" \
+    --latency-unit=us \
+    --algo-label="${search_algo^^}"
 fi

@@ -27,9 +27,10 @@ struct CagraMultiCtaSearchPlanner
                              uint32_t /*dataset_block_dim*/,
                              bool /*is_vpq*/,
                              uint32_t /*pq_bits*/,
-                             uint32_t /*pq_len*/)
+                             uint32_t /*pq_len*/,
+                             bool favor = false)
     : CagraPlannerBase<DataTag, IndexTag, DistanceTag, QueryTag, CodebookTag, SampleFilterJitTag>(
-        "search_multi_cta", launcher_jit_cache)
+        favor ? "search_multi_cta_favor" : "search_multi_cta", launcher_jit_cache)
   {
   }
 
@@ -37,6 +38,12 @@ struct CagraMultiCtaSearchPlanner
   {
     this->template add_static_fragment<
       fragment_tag_search_multi_cta<DataTag, SourceIndexTag, IndexTag, DistanceTag>>();
+  }
+
+  void add_search_multi_cta_favor_kernel_fragment()
+  {
+    this->template add_static_fragment<
+      fragment_tag_search_multi_cta_favor<DataTag, SourceIndexTag, IndexTag, DistanceTag>>();
   }
 };
 
