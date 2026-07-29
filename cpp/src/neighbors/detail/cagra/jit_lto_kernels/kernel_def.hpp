@@ -78,6 +78,8 @@ using search_single_cta_favor_kernel_func_t =
        const IndexT,
        cagra_sample_filter<SourceIndexT>,
        const float,
+       const float,
+       const std::uint32_t,
        const float);
 
 namespace single_cta_search {
@@ -163,6 +165,8 @@ using search_multi_cta_favor_kernel_func_t =
        const std::uint32_t,
        cagra_sample_filter<SourceIndexT>,
        const float,
+       const float,
+       const std::uint32_t,
        const float,
        const std::uint32_t);
 

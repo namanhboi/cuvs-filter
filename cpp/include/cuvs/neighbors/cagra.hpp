@@ -282,6 +282,15 @@ enum class filtering_mode : uint32_t {
   FAVOR = 1,
 };
 
+enum class favor_penalty_mode : uint32_t {
+  /** The penalty formula used by the reference FAVOR implementation. */
+  REFERENCE = 0,
+  /** Cap the reference penalty using query/CTA-local distance spacing. */
+  CAGRA_QUERY_LOCAL = 1,
+  /** Also cap each candidate's penalty by its current local-top-k retention margin. */
+  CAGRA_RETENTION_SAFE = 2,
+};
+
 enum class hash_mode { HASH = 0, SMALL = 1, AUTO = 100 };
 
 enum class internal_dtype { F16 = 0, E5M2 = 1 };
@@ -363,11 +372,17 @@ struct search_params : cuvs::neighbors::search_params {
    */
   float filtering_rate = -1.0;
 
-  /** Filtering implementation. FAVOR currently supports bitset filters with SINGLE_CTA only. */
+  /** Filtering implementation. FAVOR supports bitset filters with SINGLE_CTA and MULTI_CTA. */
   filtering_mode filter_mode = filtering_mode::DEFAULT;
 
   /** Dataset/graph-specific FAVOR delta-d statistic. Required when filter_mode is FAVOR. */
   float favor_delta_d = -1.0f;
+
+  /** FAVOR penalty formula. REFERENCE preserves the original behavior. */
+  favor_penalty_mode favor_penalty = favor_penalty_mode::REFERENCE;
+
+  /** Dimensionless multiplier applied to the query/CTA-local distance gap. */
+  float favor_penalty_lambda = 1.0f;
 
   /** Data type of the query vector and codebook table on shared memory. Currently, only VPQ
    * supports FP8. **/

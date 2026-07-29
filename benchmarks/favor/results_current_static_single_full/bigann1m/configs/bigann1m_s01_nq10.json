@@ -1,0 +1,90 @@
+{
+  "dataset": {
+    "name": "bigann-1M-s01",
+    "base_file": "bigann-1M/base.10M.u8bin",
+    "query_file": "bigann-1M/query.public.10K.u8bin",
+    "groundtruth_neighbors_file": "bigann-1M/favor/groundtruth_s01.ibin",
+    "filter_bitset_file": "bigann-1M/favor/filter_s01.bin",
+    "distance": "euclidean",
+    "dtype": "uint8",
+    "subset_size": 1000000
+  },
+  "search_basic_param": {
+    "batch_size": 10,
+    "k": 10
+  },
+  "index": [
+    {
+      "name": "cagra-g32-ig64",
+      "algo": "cuvs_cagra",
+      "file": "bigann-1M/cagra_g32_ig64.index",
+      "build_param": {
+        "graph_build_algo": "NN_DESCENT",
+        "graph_degree": 32,
+        "intermediate_graph_degree": 64
+      },
+      "search_params": [
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "itopk": 256,
+          "search_width": 1,
+          "favor_delta_d_file": "datasets/bigann-1M/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "itopk": 256,
+          "search_width": 2,
+          "favor_delta_d_file": "datasets/bigann-1M/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "itopk": 256,
+          "search_width": 4,
+          "favor_delta_d_file": "datasets/bigann-1M/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "itopk": 512,
+          "search_width": 1,
+          "favor_delta_d_file": "datasets/bigann-1M/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "itopk": 512,
+          "search_width": 2,
+          "favor_delta_d_file": "datasets/bigann-1M/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "itopk": 512,
+          "search_width": 4,
+          "favor_delta_d_file": "datasets/bigann-1M/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2
+        }
+      ]
+    }
+  ]
+}

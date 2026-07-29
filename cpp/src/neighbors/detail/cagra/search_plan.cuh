@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include "favor_penalty.cuh"
 #include "hashmap.hpp"
 
 #include <cuvs/neighbors/common.hpp>
@@ -103,6 +104,7 @@ struct search_plan_impl_base : public search_params {
   int64_t graph_degree;
   uint32_t topk;
   size_t configured_itopk_size;
+  float favor_penalty_distance = 0.0f;
   search_plan_impl_base(
     search_params params, int64_t dim, int64_t dataset_size, int64_t graph_degree, uint32_t topk)
     : search_params(params),
@@ -181,11 +183,31 @@ struct search_plan_impl : public search_plan_impl_base {
   {
     adjust_search_params();
     check_params();
+    calculate_favor_penalty();
     calc_hashmap_params(res);
     if (!persistent) {  // Persistent kernel does not provide this functionality
       num_executed_iterations.resize(max_queries, raft::resource::get_cuda_stream(res));
     }
     RAFT_LOG_DEBUG("# algo = %d", static_cast<int>(algo));
+  }
+
+  void calculate_favor_penalty()
+  {
+    if (filter_mode != filtering_mode::FAVOR) {
+      favor_penalty_distance = 0.0f;
+      return;
+    }
+    // Preserve the exact effective-ef convention of the original kernels: SINGLE_CTA used the
+    // rounded traversal itopk, whereas MULTI_CTA used the user-configured global itopk.
+    auto const reference_itopk =
+      algo == search_algo::MULTI_CTA ? configured_itopk_size : itopk_size;
+    favor_penalty_distance =
+      favor_reference_penalty(filtering_rate, reference_itopk, favor_delta_d);
+    // Kernel launchers already carry the plan's private search_params copy. Reuse its historical
+    // delta-d slot for the reference upper bound. Query-local modes derive their final CTA scalar
+    // from this upper bound after the initial local candidate ordering.
+    favor_delta_d = favor_penalty_distance;
+    RAFT_LOG_DEBUG("# FAVOR reference penalty distance: %g", favor_penalty_distance);
   }
 
   virtual ~search_plan_impl() {}
@@ -413,6 +435,14 @@ struct search_plan_impl : public search_plan_impl_base {
       }
       if (!(filtering_rate >= 0.0f && filtering_rate < 1.0f)) {
         error_message += "FAVOR filtering requires an exact filtering rate in [0, 1). ";
+      }
+      if (favor_penalty != favor_penalty_mode::REFERENCE &&
+          favor_penalty != favor_penalty_mode::CAGRA_QUERY_LOCAL &&
+          favor_penalty != favor_penalty_mode::CAGRA_RETENTION_SAFE) {
+        error_message += "Invalid FAVOR penalty mode. ";
+      }
+      if (!std::isfinite(favor_penalty_lambda) || favor_penalty_lambda <= 0.0f) {
+        error_message += "`favor_penalty_lambda` must be finite and positive. ";
       }
     }
     if (thread_block_size != 0 && thread_block_size != 64 && thread_block_size != 128 &&

@@ -16,15 +16,26 @@ favor_delta_d=${FAVOR_DELTA_D:-}
 selectivities=${FAVOR_SELECTIVITIES:-"1 10 50 90"}
 itopk_values=${FAVOR_ITOPK_VALUES:-"32 64 128 256 512"}
 search_widths=${FAVOR_SEARCH_WIDTHS:-"1 2 4"}
+max_iterations=${FAVOR_MAX_ITERATIONS:-"0"}
+thread_block_sizes=${FAVOR_THREAD_BLOCK_SIZES:-"0"}
+search_cells=${FAVOR_SEARCH_CELLS:-}
 batch_sizes=${FAVOR_BATCH_SIZES:-"10 10000"}
 search_algo=${FAVOR_SEARCH_ALGO:-"single_cta"}
 deduplicate_multi_cta=${FAVOR_DEDUPLICATE_MULTI_CTA:-0}
 benchmark_min_time=${FAVOR_BENCHMARK_MIN_TIME:-"0.2s"}
+benchmark_warmup_time=${FAVOR_BENCHMARK_WARMUP_TIME:-"0.1"}
 benchmark_modes=${FAVOR_BENCHMARK_MODES:-"default favor"}
+penalty_lambdas=${FAVOR_PENALTY_LAMBDAS:-"1"}
+benchmark_repetitions=${FAVOR_BENCHMARK_REPETITIONS:-1}
 bench_bin="${repo_dir}/cpp/build/bench/ann/CUVS_CAGRA_ANN_BENCH"
 build_libcuvs="${repo_dir}/cpp/build/libcuvs.so"
 config_dir="${result_dir}/configs"
 mkdir -p "${config_dir}" "${result_dir}/raw"
+
+if ! [[ "${benchmark_repetitions}" =~ ^[1-9][0-9]*$ ]]; then
+  echo "FAVOR_BENCHMARK_REPETITIONS must be a positive integer." >&2
+  exit 1
+fi
 
 if [[ ! -x "${bench_bin}" || ! -f "${build_libcuvs}" ]]; then
   echo "Build artifacts are missing; run ./build.sh libcuvs bench-ann -n first." >&2
@@ -39,13 +50,19 @@ generate_args=(
   --query-file="${query_file}"
   --dtype="${dtype}"
   --delta-d-file="${data_dir}/${dataset_name}/cagra_g32_ig64.index.delta_d"
+  --penalty-lambdas ${penalty_lambdas}
   --selectivities ${selectivities}
   --itopk-values ${itopk_values}
   --search-widths ${search_widths}
+  --max-iterations ${max_iterations}
+  --thread-block-sizes ${thread_block_sizes}
   --batch-sizes ${batch_sizes}
   --algo="${search_algo}"
   --modes ${benchmark_modes}
 )
+if [[ -n "${search_cells}" ]]; then
+  generate_args+=(--search-cells ${search_cells})
+fi
 if [[ "${subset_size}" -gt 0 ]]; then
   generate_args+=(--subset-size="${subset_size}")
 fi
@@ -98,9 +115,9 @@ for selectivity_value in ${selectivities}; do
       --threads=1 \
       --data_prefix="${data_dir}" \
       --index_prefix="${data_dir}" \
-      --benchmark_repetitions=1 \
+      --benchmark_repetitions="${benchmark_repetitions}" \
       --benchmark_min_time="${benchmark_min_time}" \
-      --benchmark_min_warmup_time=0.1 \
+      --benchmark_min_warmup_time="${benchmark_warmup_time}" \
       --benchmark_report_aggregates_only=false \
       --benchmark_out_format=json \
       --benchmark_out="${result_file}" \

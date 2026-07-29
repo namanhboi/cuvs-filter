@@ -154,7 +154,7 @@ struct search
     }
 
     smem_size = base_smem_size + additional_smem_size;
-    if (filter_mode == filtering_mode::FAVOR) { smem_size += sizeof(DISTANCE_T); }
+    if (filter_mode == filtering_mode::FAVOR) { smem_size += 2 * sizeof(DISTANCE_T); }
 
     uint32_t block_size = thread_block_size;
     if (block_size == 0) {

@@ -1,6 +1,13 @@
 #+TITLE: CAGRA-Scaled FAVOR Penalty Plan
 #+OPTIONS: toc:2 num:t
 
+#+begin_quote
+This is the earlier graph-statistics experiment and is retained as historical
+context.  It was not selected.  The implemented query-local/retention-safe
+design and its results are documented in
+[[file:CAGRA_QUERY_LOCAL_PENALTY_PLAN_AND_RESULTS.org]].
+#+end_quote
+
 * Summary
 
 Keep the existing fused FAVOR search kernels, but bound the HNSW-derived
@@ -85,3 +92,91 @@ candidate reordering once enough passing candidates are likely.
 - Accept the formula only when it repairs BIGANN on both scales, retains the
   current 1% advantage, stays within the 0.025 recall limit, adds no more than
   2% fixed-configuration runtime overhead, and leaves default CAGRA unchanged.
+
+* Implementation status
+
+The experiment is implemented as an opt-in path.  Existing FAVOR callers still
+select =REFERENCE= by default and existing =.delta_d= sidecars are unchanged.
+The new =CAGRA_SCALED= mode:
+
+- computes the binomial shortfall probability and final penalty once while
+  constructing the host search plan;
+- reuses the existing launcher argument and the kernels' existing shared
+  initialization, adding no device buffer or synchronization;
+- computes delta-d and four local-gap percentiles in one GPU neighborhood pass;
+- saves those values in a separately versioned =.favor_stats= sidecar bound to
+  the graph and logical dataset;
+- lets cuVS-bench select the percentile, scale, and exponent; and
+- supports three-way Pareto plots for default CAGRA, reference FAVOR, and
+  CAGRA-scaled FAVOR.
+
+The gap sampler allocates one approximately 14 MB raw-gap array and one
+approximately 14 MB compacted array at the 65,536-root limit.  CUB temporary
+workspace is additional and exists only during index preparation.  Search-time
+memory use is unchanged.
+
+The relevant files are:
+
+- =cpp/src/neighbors/detail/cagra/favor_penalty.cuh= for the host formula;
+- =cpp/src/neighbors/cagra_favor_delta_d.cu= for graph statistics and sidecars;
+- =cpp/src/neighbors/detail/cagra/search_plan.cuh= for mode selection;
+- the two FAVOR JIT kernel headers for publishing the completed scalar; and
+- =benchmarks/favor/generate_configs.py=,
+  =calibrate_scaled_penalty.sh=, =run_benchmarks.sh=, and =plot_results.py= for
+  the experiment.
+
+* Initial calibration verdict
+
+The planned 32-formula family was screened at 1%, 4%, and 10% selectivity with
+the canonical SINGLE_CTA sweep.  This was a one-run, no-warmup recall screen;
+its timings are not used for performance claims.
+
+- On SIFT-1M, multiple formulas retained the strongest measured recall at all
+  three selectivities.
+- On BIGANN-1M, =q5, c=0.125= repaired the 4% collapse: its maximum measured
+  recall was 0.95, matching default CAGRA, while reference FAVOR reached only
+  0.072.
+- No candidate repaired BIGANN-1M at 10%.  The best candidate reached 0.87,
+  reference FAVOR reached 0.86, and default CAGRA reached 1.00.
+
+Therefore no candidate satisfies the predeclared feasibility rules.  No
+formula has been frozen, the 10M holdouts have not been used for tuning, and
+the scaled mode must remain experimental.  The result suggests that a single
+static scalar cannot simultaneously provide enough penalty to prevent rejected
+rows from diluting the candidate set and avoid the route-locking behavior seen
+with a larger penalty.
+
+* Reproduction
+
+Build the modified library, focused tests, and benchmark with all available CPU
+threads:
+
+#+begin_src sh
+PARALLEL_LEVEL="$(nproc)" ./build.sh libcuvs bench-ann -n \
+  --limit-bench-ann=CUVS_CAGRA_ANN_BENCH
+ninja -C cpp/build -j"$(nproc)" \
+  NEIGHBORS_ANN_CAGRA_FAVOR_DELTA_D_TEST \
+  NEIGHBORS_ANN_CAGRA_FAVOR_SEARCH_TEST
+LD_PRELOAD="$PWD/cpp/build/libcuvs.so" \
+  cpp/build/gtests/NEIGHBORS_ANN_CAGRA_FAVOR_DELTA_D_TEST
+LD_PRELOAD="$PWD/cpp/build/libcuvs.so" \
+  cpp/build/gtests/NEIGHBORS_ANN_CAGRA_FAVOR_SEARCH_TEST
+#+end_src
+
+Generate a statistics sidecar with =CAGRA_FAVOR_COMPARE= after loading the
+dataset and serialized graph.  The example writes both the compatible
+=.delta_d= file and the new =.favor_stats= file.
+
+Run the complete grid for one training dataset:
+
+#+begin_src sh
+FAVOR_BENCHMARK_MIN_TIME=0.001s \
+FAVOR_BENCHMARK_WARMUP_TIME=0 \
+benchmarks/favor/calibrate_scaled_penalty.sh \
+  datasets benchmarks/favor/results_cagra_scaled_calibration/sift \
+  sift-128-euclidean sift SIFT-1M query.fbin base.fbin float 0
+#+end_src
+
+The short minimum time is suitable only for formula recall screening.  Once a
+formula is selected, rerun =run_benchmarks.sh= with its normal warmup and
+minimum time before comparing latency or throughput.

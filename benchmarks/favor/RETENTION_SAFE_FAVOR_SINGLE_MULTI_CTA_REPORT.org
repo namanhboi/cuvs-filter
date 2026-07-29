@@ -1,0 +1,368 @@
+#+TITLE: FAVOR Filtering for CAGRA
+#+SUBTITLE: Four-Way SINGLE_CTA and MULTI_CTA Performance Evaluation
+#+AUTHOR: Nam Anh Dang
+#+DATE: 2026-07-29
+#+OPTIONS: toc:2 num:t
+
+* Abstract
+
+This report evaluates FAVOR-style bitset filtering in CAGRA across two search
+modes and four method/run identities: current default CAGRA, current static
+FAVOR, retention-safe FAVOR, and the committed static FAVOR measurements from
+the earlier performance report.  The evaluation covers SIFT-1M, GIST-1M,
+BIGANN-1M, BIGANN-10M, MSTuring-1M, and MSTuring-10M at 1%, 10%, 50%, and 90%
+passing selectivity.
+
+The four-way comparison separates two effects that were previously mixed
+together.  Static FAVOR provides the strongest =SINGLE_CTA= recall improvement
+at 1% on SIFT and BIGANN, but its fixed penalty causes a severe BIGANN failure
+at 10%.  Retention-safe FAVOR repairs that failure and stays close to default
+CAGRA's saturated throughput, although it gives back some of the static
+method's 1% advantage.  In =MULTI_CTA=, retention-safe FAVOR preserves high
+recall and usually provides a substantially better batch-size-1 QPS/latency
+frontier.  On BIGANN at 10%, it reaches approximately 0.99 recall while both
+static FAVOR measurements collapse.
+
+The committed curve is a historical measurement, not a fourth algorithm.
+Showing it alongside a current static run makes performance drift visible
+without merging measurements from different code and benchmark runs.
+
+* Methods
+
+** Default filtered CAGRA
+
+Default CAGRA checks the bitset during graph traversal and invalidates nodes
+that fail the filter.  This strictly enforces the predicate but prevents a
+rejected node from serving as a route to passing nodes elsewhere in the graph.
+The loss of routing nodes is most important when passing rows are rare.
+
+** Static FAVOR
+
+Static FAVOR keeps rejected nodes available for traversal and adds one
+batch-wide penalty to their distances:
+
+#+begin_example
+D_static = C(s,E) * delta_d
+score(v) = distance(v) + D_static
+#+end_example
+
+Here =s= is passing selectivity, =E= is the internal traversal top-k, and
+=delta_d= is a graph-bound dataset distance-spacing statistic.  The current
+static and committed static curves use this same strategy.  The former was
+measured with the current build; the latter is loaded from the raw files used
+by the old report.
+
+** Retention-safe FAVOR
+
+Retention-safe FAVOR limits the static penalty using the current query and the
+CTA's retained candidate boundary:
+
+#+begin_example
+D_query = C(s,E) * min(delta_d, lambda * g_q)
+
+D_effective(v) = min(
+    D_query,
+    0.5 * max(tau - distance(v), 0)
+)
+
+score(v) = distance(v) + D_effective(v)
+#+end_example
+
+=g_q= is the distance spacing observed for the query's initial candidates,
+=tau= is the worst finite distance currently retained by the CTA, and
+=lambda= is 1 in this evaluation.  The bound demotes a rejected candidate
+without allowing the penalty alone to push a potentially useful routing node
+arbitrarily far outside the retained set.
+
+** GPU implementation
+
+Both FAVOR modes are bitset-only and use exact selectivity shared by the query
+batch.  The filter test is fused into neighbor-distance computation.  The lane
+that owns the completed team distance reads the packed bitset, applies the
+selected penalty when the row fails, and writes the candidate once.  Bitset
+metadata is loaded once per CTA, common one-dimensional filters use direct
+32-bit word addressing, and the GPU read-only path is used for word loads.
+There is no separate penalty kernel or additional global candidate buffer.
+
+Rejected nodes may participate in traversal, but final compaction still
+returns only passing rows.  Default CAGRA and static FAVOR remain separate
+compile-time paths; selecting retention-safe FAVOR does not change either
+default behavior or the public API.
+
+* Benchmark methodology
+
+** Why cuVS-bench was changed
+
+The original filtered benchmark generated a random predicate and removed
+rejected rows from the ordinary, limited-length ground-truth list.  That is
+incorrect: after filtering those few neighbors, a closer passing vector may
+exist elsewhere in the full dataset and never appear in the filtered list.
+
+The correct procedure is to apply the exact bitset to the entire dataset and
+compute the true top ten passing vectors for every query.  The benchmark now
+loads this precomputed filtered ground truth together with the same persistent
+bitset used by both search methods.  Its new FAVOR and delta-d settings are
+optional, so old benchmark configurations continue to select default CAGRA.
+
+** Experimental setup
+
+All experiments ran on one NVIDIA A30 with 24 GB of device memory.  Every
+dataset uses a prebuilt CAGRA graph with maximum degree 32 and intermediate
+degree 64.  Delta-d is loaded from the sidecar bound to that graph.  Recall is
+Recall@10, and every configuration has one recorded run after warm-up.
+
+=SINGLE_CTA= throughput uses 10,000-query batches; latency uses batches of ten
+queries.  Its plots mark Recall@10 = 0.90.  =MULTI_CTA= uses a batch size of
+one and marks Recall@10 = 0.99.  Its plotted QPS is the reciprocal of
+single-query latency and is not saturated large-batch throughput.  Target
+values are interpolated only where a method's measured Pareto frontier
+brackets the target.
+
+The current-static =SINGLE_CTA= sweep uses the same per-selectivity search
+cells as the retention-safe sweep, including its refined near-target cells.
+The committed curves reuse the old report's raw measurements.  They are
+included as historical evidence and should not be interpreted as a controlled
+same-run speed comparison.
+
+* SINGLE_CTA findings
+
+** 1% selectivity
+
+Static FAVOR retains the original rare-filter strength.  Current static FAVOR
+reaches 0.90 recall on SIFT-1M, BIGANN-1M, and BIGANN-10M, while default CAGRA
+does not reach 0.90 on any dataset.  Retention-safe FAVOR reaches 0.90 only on
+SIFT in the current sweep; its two caps are too conservative to preserve the
+full static advantage on BIGANN.  Neither FAVOR formulation reaches 0.90 on
+GIST or either MSTuring scale.
+
+#+CAPTION: SINGLE_CTA at 1% selectivity on SIFT-1M.
+[[file:results_four_way_comparison/single/sift/plots/sift_selectivity_01.png]]
+
+** 10% selectivity
+
+This is the clearest difference between the formulas.  Current static FAVOR
+reaches maximum recall of only about 0.56 on BIGANN-1M and 0.41 on BIGANN-10M;
+the committed static curve shows the same failure at approximately 0.83 and
+0.72.  Retention-safe FAVOR reaches 0.90 on both scales and restores a frontier
+near default CAGRA.  At the interpolated 0.90 point its throughput is about
+3% below default on BIGANN-1M and 1% below default on BIGANN-10M.
+
+Outside BIGANN, all current methods reach the useful recall region.  Static
+and retention-safe FAVOR are generally close to default throughput, with the
+exact ordering depending on the dataset and operating point.
+
+#+CAPTION: SINGLE_CTA at 10% selectivity on BIGANN-10M.
+[[file:results_four_way_comparison/single/bigann10m/plots/bigann10m_selectivity_10.png]]
+
+** 50% selectivity
+
+At 50%, retention-safe FAVOR mostly tracks the default CAGRA frontier.  Its
+interpolated throughput at 0.90 is slightly higher on GIST and MSTuring-1M and
+slightly lower on the remaining datasets.  Current static FAVOR loses recall
+more visibly on BIGANN, especially at the focused current search cells.  The
+historical curve spans a broader sweep and must not be used as a same-run
+throughput control.
+
+#+CAPTION: SINGLE_CTA at 50% selectivity on GIST-1M.
+[[file:results_four_way_comparison/single/gist/plots/gist_selectivity_50.png]]
+
+** 90% selectivity
+
+The default and retention-safe frontiers remain close at 90%.  Retention-safe
+FAVOR is slightly faster on GIST, approximately equal on MSTuring, and slower
+on SIFT and BIGANN at the interpolated 0.90 operating point.  Static FAVOR
+offers no consistent advantage when most rows already pass the filter.
+
+#+CAPTION: SINGLE_CTA at 90% selectivity on MSTuring-10M.
+[[file:results_four_way_comparison/single/msturing10m/plots/msturing10m_selectivity_90.png]]
+
+* MULTI_CTA findings
+
+** 1% selectivity
+
+=MULTI_CTA= supplies several independent traversals for one query, reducing
+the chance that filtering traps the search in one region.  Static and
+retention-safe FAVOR both provide strong batch-size-1 frontiers on SIFT and
+BIGANN.  Retention-safe FAVOR reaches 0.99 on both BIGANN scales and gives
+approximately 2,368 QPS on BIGANN-10M versus 1,715 QPS for default at the
+interpolated target.  GIST and MSTuring remain dataset-dependent near 0.99,
+but FAVOR generally retains a latency advantage at comparable high recall.
+
+#+CAPTION: MULTI_CTA at 1% selectivity on SIFT-1M.
+[[file:results_four_way_comparison/multi/sift/plots/sift_selectivity_01.png]]
+
+** 10% selectivity
+
+The BIGANN static-penalty failure persists in =MULTI_CTA=: current and
+committed static FAVOR remain far below 0.99.  Retention-safe FAVOR removes
+the failure.  At the interpolated 0.99 target, it provides approximately
+2,702 QPS versus 2,086 for default on BIGANN-1M and 2,561 versus 1,934 on
+BIGANN-10M.  SIFT, GIST, and both MSTuring scales also retain favorable
+batch-size-1 frontiers.
+
+#+CAPTION: MULTI_CTA at 10% selectivity on BIGANN-10M.
+[[file:results_four_way_comparison/multi/bigann10m/plots/bigann10m_selectivity_10.png]]
+
+** 50% selectivity
+
+Retention-safe FAVOR reaches or approaches the same high-recall envelope as
+default while producing higher batch-size-1 QPS across the six evaluated
+datasets.  The benefit is a small-batch latency result, not evidence of higher
+saturated throughput.  Current static FAVOR is also competitive outside its
+BIGANN 10% failure region.
+
+#+CAPTION: MULTI_CTA at 50% selectivity on GIST-1M.
+[[file:results_four_way_comparison/multi/gist/plots/gist_selectivity_50.png]]
+
+** 90% selectivity
+
+The 90% behavior follows the 50% result: retention-safe FAVOR broadly
+preserves recall and reduces single-query latency.  The advantage is marginal
+in some cells but consistent enough to remain visible in the Pareto
+frontiers.  Historical static measurements sometimes stop short of the
+current 0.99 region because the old sweep had a lower traversal cap.
+
+#+CAPTION: MULTI_CTA at 90% selectivity on MSTuring-10M.
+[[file:results_four_way_comparison/multi/msturing10m/plots/msturing10m_selectivity_90.png]]
+
+* Interpretation and limitations
+
+The evidence supports a CAGRA-specific explanation for the BIGANN 10%
+failure.  A fixed dataset-scale penalty changes which nodes survive every
+local top-k operation.  On BIGANN, this can repeatedly preserve an
+unproductive ordering even though the graph and traversal breadth are
+sufficient for default CAGRA.  Retention-safe FAVOR ties the perturbation to
+the query's local spacing and current retention boundary, preventing the
+penalty alone from removing useful routes.
+
+The same bound explains the 1% tradeoff.  Rare predicates benefit from the
+large static preference once a passing node is discovered.  Limiting that
+preference protects traversal at 10%, but can be too conservative at 1%.
+Score-consistent initialization or a selectivity-dependent retention bound is
+therefore a more promising next step than further optimizing the static
+formula.
+
+These results use six dataset/scale combinations, one GPU, and one measured
+run per configuration.  They have no confidence intervals.  GIST contains
+1,000 distinct queries, so its 10,000-query workload repeats the query set ten
+times.  The historical static curves were measured in a different run and
+often use a wider parameter sweep; they show reproducibility and drift but do
+not support exact cross-run speedup claims.
+
+* Conclusion
+
+Static FAVOR remains the strongest evaluated =SINGLE_CTA= option for rare 1%
+filters, but its fixed penalty is not robust: BIGANN recall collapses at 10%.
+Retention-safe FAVOR trades some of that 1% strength for reliable traversal,
+repairs the BIGANN failure in both CTA modes, and performs particularly well
+for batch-size-1 =MULTI_CTA=.  No method dominates every dataset, selectivity,
+batch size, and recall target, so the four Pareto frontiers should be used
+instead of a single aggregate speedup.
+
+* Appendix A: complete SINGLE_CTA Pareto catalog
+
+Every figure contains batch-10,000 QPS and batch-10 latency.  The dashed
+vertical line marks Recall@10 = 0.90.
+
+** SIFT-1M
+
+[[file:results_four_way_comparison/single/sift/plots/sift_selectivity_01.png]]
+[[file:results_four_way_comparison/single/sift/plots/sift_selectivity_10.png]]
+[[file:results_four_way_comparison/single/sift/plots/sift_selectivity_50.png]]
+[[file:results_four_way_comparison/single/sift/plots/sift_selectivity_90.png]]
+
+** GIST-1M
+
+[[file:results_four_way_comparison/single/gist/plots/gist_selectivity_01.png]]
+[[file:results_four_way_comparison/single/gist/plots/gist_selectivity_10.png]]
+[[file:results_four_way_comparison/single/gist/plots/gist_selectivity_50.png]]
+[[file:results_four_way_comparison/single/gist/plots/gist_selectivity_90.png]]
+
+** BIGANN-1M
+
+[[file:results_four_way_comparison/single/bigann1m/plots/bigann1m_selectivity_01.png]]
+[[file:results_four_way_comparison/single/bigann1m/plots/bigann1m_selectivity_10.png]]
+[[file:results_four_way_comparison/single/bigann1m/plots/bigann1m_selectivity_50.png]]
+[[file:results_four_way_comparison/single/bigann1m/plots/bigann1m_selectivity_90.png]]
+
+** BIGANN-10M
+
+[[file:results_four_way_comparison/single/bigann10m/plots/bigann10m_selectivity_01.png]]
+[[file:results_four_way_comparison/single/bigann10m/plots/bigann10m_selectivity_10.png]]
+[[file:results_four_way_comparison/single/bigann10m/plots/bigann10m_selectivity_50.png]]
+[[file:results_four_way_comparison/single/bigann10m/plots/bigann10m_selectivity_90.png]]
+
+** MSTuring-1M
+
+[[file:results_four_way_comparison/single/msturing1m/plots/msturing1m_selectivity_01.png]]
+[[file:results_four_way_comparison/single/msturing1m/plots/msturing1m_selectivity_10.png]]
+[[file:results_four_way_comparison/single/msturing1m/plots/msturing1m_selectivity_50.png]]
+[[file:results_four_way_comparison/single/msturing1m/plots/msturing1m_selectivity_90.png]]
+
+** MSTuring-10M
+
+[[file:results_four_way_comparison/single/msturing10m/plots/msturing10m_selectivity_01.png]]
+[[file:results_four_way_comparison/single/msturing10m/plots/msturing10m_selectivity_10.png]]
+[[file:results_four_way_comparison/single/msturing10m/plots/msturing10m_selectivity_50.png]]
+[[file:results_four_way_comparison/single/msturing10m/plots/msturing10m_selectivity_90.png]]
+
+* Appendix B: complete MULTI_CTA Pareto catalog
+
+Every figure contains batch-size-1 query rate and single-query latency.  Both
+y-axes start at zero, and the dashed vertical line marks Recall@10 = 0.99.
+
+** SIFT-1M
+
+[[file:results_four_way_comparison/multi/sift/plots/sift_selectivity_01.png]]
+[[file:results_four_way_comparison/multi/sift/plots/sift_selectivity_10.png]]
+[[file:results_four_way_comparison/multi/sift/plots/sift_selectivity_50.png]]
+[[file:results_four_way_comparison/multi/sift/plots/sift_selectivity_90.png]]
+
+** GIST-1M
+
+[[file:results_four_way_comparison/multi/gist/plots/gist_selectivity_01.png]]
+[[file:results_four_way_comparison/multi/gist/plots/gist_selectivity_10.png]]
+[[file:results_four_way_comparison/multi/gist/plots/gist_selectivity_50.png]]
+[[file:results_four_way_comparison/multi/gist/plots/gist_selectivity_90.png]]
+
+** BIGANN-1M
+
+[[file:results_four_way_comparison/multi/bigann1m/plots/bigann1m_selectivity_01.png]]
+[[file:results_four_way_comparison/multi/bigann1m/plots/bigann1m_selectivity_10.png]]
+[[file:results_four_way_comparison/multi/bigann1m/plots/bigann1m_selectivity_50.png]]
+[[file:results_four_way_comparison/multi/bigann1m/plots/bigann1m_selectivity_90.png]]
+
+** BIGANN-10M
+
+[[file:results_four_way_comparison/multi/bigann10m/plots/bigann10m_selectivity_01.png]]
+[[file:results_four_way_comparison/multi/bigann10m/plots/bigann10m_selectivity_10.png]]
+[[file:results_four_way_comparison/multi/bigann10m/plots/bigann10m_selectivity_50.png]]
+[[file:results_four_way_comparison/multi/bigann10m/plots/bigann10m_selectivity_90.png]]
+
+** MSTuring-1M
+
+[[file:results_four_way_comparison/multi/msturing1m/plots/msturing1m_selectivity_01.png]]
+[[file:results_four_way_comparison/multi/msturing1m/plots/msturing1m_selectivity_10.png]]
+[[file:results_four_way_comparison/multi/msturing1m/plots/msturing1m_selectivity_50.png]]
+[[file:results_four_way_comparison/multi/msturing1m/plots/msturing1m_selectivity_90.png]]
+
+** MSTuring-10M
+
+[[file:results_four_way_comparison/multi/msturing10m/plots/msturing10m_selectivity_01.png]]
+[[file:results_four_way_comparison/multi/msturing10m/plots/msturing10m_selectivity_10.png]]
+[[file:results_four_way_comparison/multi/msturing10m/plots/msturing10m_selectivity_50.png]]
+[[file:results_four_way_comparison/multi/msturing10m/plots/msturing10m_selectivity_90.png]]
+
+* Reproduction
+
+The missing current static =SINGLE_CTA= data is stored under
+=results_current_static_single_full=.  Four-way figures and provenance-aware
+CSVs can be regenerated with:
+
+#+begin_src sh
+python benchmarks/favor/generate_four_way_plots.py
+#+end_src
+
+The generator reads current and historical result directories independently;
+it does not copy or merge their raw JSON files.  Existing plotting commands
+remain unchanged when no overlay series is supplied.

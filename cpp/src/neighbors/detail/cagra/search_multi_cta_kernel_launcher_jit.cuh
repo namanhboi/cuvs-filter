@@ -118,6 +118,10 @@ void select_and_run(const dataset_descriptor_host<DataT, IndexT, DistanceT>& dat
   const unsigned num_random_samplings_u    = static_cast<unsigned>(ps.num_random_samplings);
 
   if (favor) {
+    const auto favor_penalty_mode_value = static_cast<std::uint32_t>(ps.favor_penalty);
+    const auto favor_local_gap_multiplier =
+      favor_penalty_coefficient(ps.filtering_rate, configured_itopk_size) *
+      ps.favor_penalty_lambda;
     auto kernel_launcher = [&]() -> void {
       launcher->dispatch<multi_cta_search::
                            search_multi_cta_favor_kernel_func_t<DataT,
@@ -152,6 +156,8 @@ void select_and_run(const dataset_descriptor_host<DataT, IndexT, DistanceT>& dat
         filter_payload,
         ps.filtering_rate,
         ps.favor_delta_d,
+        favor_penalty_mode_value,
+        favor_local_gap_multiplier,
         configured_itopk_size);
     };
     cuvs::neighbors::detail::safely_launch_kernel_with_smem_size<

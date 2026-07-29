@@ -51,7 +51,9 @@ extern "C" __global__ __launch_bounds__(1024, 1) void search_single_cta_favor(
   const index_t graph_size,
   cagra_sample_filter_t filter_payload,
   const float filtering_rate,
-  const float favor_delta_d)
+  const float favor_delta_d,
+  const std::uint32_t favor_penalty_mode,
+  const float favor_local_gap_multiplier)
 {
   single_cta_search::search_favor_kernel_jit<k_topk_by_bitonic_sort,
                                              k_bitonic_sort_and_merge_multi_warps,
@@ -85,7 +87,9 @@ extern "C" __global__ __launch_bounds__(1024, 1) void search_single_cta_favor(
                                                              graph_size,
                                                              filter_payload,
                                                              filtering_rate,
-                                                             favor_delta_d);
+                                                             favor_delta_d,
+                                                             favor_penalty_mode,
+                                                             favor_local_gap_multiplier);
 }
 
 static_assert(
@@ -94,5 +98,4 @@ static_assert(
                                                        index_t,
                                                        distance_t,
                                                        source_index_t>>);
-
 }  // namespace cuvs::neighbors::cagra::detail

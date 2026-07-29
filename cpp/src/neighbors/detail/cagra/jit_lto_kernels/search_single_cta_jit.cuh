@@ -46,6 +46,8 @@ using cuvs::neighbors::cagra::detail::device::compute_distance_to_child_nodes_ji
 using cuvs::neighbors::cagra::detail::device::compute_distance_to_random_nodes_jit;
 using cuvs::neighbors::cagra::detail::device::compute_favor_distance_to_child_nodes_jit;
 using cuvs::neighbors::cagra::detail::device::compute_favor_distance_to_random_nodes_jit;
+using cuvs::neighbors::cagra::detail::device::
+  compute_favor_retention_safe_distance_to_child_nodes_jit;
 
 // JIT search_core - setup_workspace/compute_distance via function pointers
 template <bool FAVOR,
@@ -82,11 +84,24 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   const std::uint32_t query_id_offset,  // Offset to add to query_id when calling filter
   const dataset_descriptor_base_t<DataT, IndexT, DistanceT>* dataset_desc,
   cagra_sample_filter<SourceIndexT> filter_payload,
-  const float filtering_rate = 0.0f,
-  const float favor_delta_d  = 0.0f,
-  const IndexT graph_size    = 0)  // Original number of bits
+  const float filtering_rate                   = 0.0f,
+  const float favor_penalty_distance           = 0.0f,
+  const std::uint32_t favor_penalty_mode_value = 0,
+  const float favor_local_gap_multiplier       = 0.0f,
+  const IndexT graph_size                      = 0)  // Original number of bits
 {
   using LOAD_T = device::LOAD_128BIT_T;
+
+  cuvs::neighbors::detail::bitset_filter_data_t<SourceIndexT> favor_bitset{};
+  if constexpr (FAVOR) {
+    if (favor_penalty_mode_value == 2 && filter_payload.filter_data != nullptr) {
+      // The retention-safe path is bitset-only. Hoist its three metadata fields out of the
+      // iteration loop so candidate teams do not reload the payload for every graph expansion.
+      favor_bitset =
+        *static_cast<const cuvs::neighbors::detail::bitset_filter_data_t<SourceIndexT>*>(
+          filter_payload.filter_data);
+    }
+  }
 
   auto to_source_index = [source_indices_ptr](IndexT x) {
     return source_indices_ptr == nullptr ? static_cast<SourceIndexT>(x) : source_indices_ptr[x];
@@ -134,10 +149,12 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   auto* __restrict__ topk_ws = reinterpret_cast<std::uint32_t*>(parent_list_buffer + search_width);
   auto* terminate_flag       = reinterpret_cast<std::uint32_t*>(topk_ws + 3);
   DistanceT* favor_penalty   = nullptr;
+  DistanceT* favor_cutoff    = nullptr;
   std::uint32_t* smem_work_ptr;
   if constexpr (FAVOR) {
     favor_penalty = reinterpret_cast<DistanceT*>(terminate_flag + 1);
-    smem_work_ptr = reinterpret_cast<std::uint32_t*>(favor_penalty + 1);
+    favor_cutoff  = favor_penalty + 1;
+    smem_work_ptr = reinterpret_cast<std::uint32_t*>(favor_cutoff + 1);
   } else {
     smem_work_ptr = reinterpret_cast<std::uint32_t*>(terminate_flag + 1);
   }
@@ -149,10 +166,10 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
     terminate_flag[0] = 0;
     topk_ws[0]        = ~0u;
     if constexpr (FAVOR) {
-      const float selectivity = 1.0f - filtering_rate;
-      const float ef          = static_cast<float>(internal_topk);
-      favor_penalty[0]        = static_cast<DistanceT>(filtering_rate * (ef - selectivity) *
-                                                favor_delta_d / (2.0f * selectivity * ef));
+      favor_penalty[0] = favor_penalty_mode_value == 0
+                           ? static_cast<DistanceT>(favor_penalty_distance)
+                           : DistanceT{0};
+      favor_cutoff[0]  = raft::upper_bound<DistanceT>();
     }
   }
 
@@ -173,22 +190,42 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   // Get dataset_size directly from base descriptor
   IndexT dataset_size = smem_desc->size;
   if constexpr (FAVOR) {
-    compute_favor_distance_to_random_nodes_jit<IndexT, DistanceT, DataT, SourceIndexT>(
-      result_indices_buffer,
-      result_distances_buffer,
-      smem_desc,
-      result_buffer_size,
-      num_distilation,
-      rand_xor_mask,
-      local_seed_ptr,
-      num_seeds,
-      local_visited_hashmap_ptr,
-      hash_bitlen,
-      graph_size,
-      source_indices_ptr,
-      query_id + query_id_offset,
-      filter_payload,
-      favor_penalty[0]);
+    if (favor_penalty_mode_value == 0) {
+      compute_favor_distance_to_random_nodes_jit<IndexT, DistanceT, DataT, SourceIndexT>(
+        result_indices_buffer,
+        result_distances_buffer,
+        smem_desc,
+        result_buffer_size,
+        num_distilation,
+        rand_xor_mask,
+        local_seed_ptr,
+        num_seeds,
+        local_visited_hashmap_ptr,
+        hash_bitlen,
+        graph_size,
+        source_indices_ptr,
+        query_id + query_id_offset,
+        filter_payload,
+        favor_penalty[0]);
+    } else {
+      // Query-local modes intentionally start with an unpenalized ordering. Avoid bitset checks
+      // whose zero penalty cannot change that ordering.
+      compute_distance_to_random_nodes_jit<IndexT, DistanceT, DataT>(result_indices_buffer,
+                                                                     result_distances_buffer,
+                                                                     smem_desc,
+                                                                     result_buffer_size,
+                                                                     num_distilation,
+                                                                     rand_xor_mask,
+                                                                     local_seed_ptr,
+                                                                     num_seeds,
+                                                                     local_visited_hashmap_ptr,
+                                                                     hash_bitlen,
+                                                                     (IndexT*)nullptr,
+                                                                     0,
+                                                                     0,
+                                                                     1,
+                                                                     graph_size);
+    }
   } else {
     compute_distance_to_random_nodes_jit<IndexT, DistanceT, DataT>(result_indices_buffer,
                                                                    result_distances_buffer,
@@ -289,6 +326,21 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
     }
     __syncthreads();
 
+    if constexpr (FAVOR) {
+      if (threadIdx.x == 0) {
+        if (iter == 0 && favor_penalty_mode_value != 0) {
+          favor_penalty[0] =
+            device::favor_query_local_penalty(result_distances_buffer,
+                                              internal_topk,
+                                              static_cast<DistanceT>(favor_penalty_distance),
+                                              static_cast<DistanceT>(favor_local_gap_multiplier));
+        }
+        if (favor_penalty_mode_value == 2) {
+          favor_cutoff[0] = device::favor_retention_cutoff(result_distances_buffer, internal_topk);
+        }
+      }
+    }
+
     if (iter + 1 == max_iteration) { break; }
 
     // pick up next parents
@@ -315,21 +367,92 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
     // compute the norms between child nodes and query node using JIT version
     _CLK_START();
     if constexpr (FAVOR) {
-      compute_favor_distance_to_child_nodes_jit<IndexT, DistanceT, DataT, SourceIndexT>(
-        result_indices_buffer + internal_topk,
-        result_distances_buffer + internal_topk,
-        smem_desc,
-        knn_graph,
-        graph_degree,
-        local_visited_hashmap_ptr,
-        hash_bitlen,
-        parent_list_buffer,
-        result_indices_buffer,
-        search_width,
-        source_indices_ptr,
-        query_id + query_id_offset,
-        filter_payload,
-        favor_penalty[0]);
+      if (favor_penalty_mode_value == 2) {
+        const bool packed_bitset = favor_bitset.original_nbits == 0 ||
+                                   favor_bitset.original_nbits == sizeof(std::uint32_t) * 8 ||
+                                   favor_bitset.original_nbits == favor_bitset.bitset_len;
+        if (packed_bitset && source_indices_ptr == nullptr) {
+          compute_favor_retention_safe_distance_to_child_nodes_jit<IndexT,
+                                                                   DistanceT,
+                                                                   DataT,
+                                                                   SourceIndexT,
+                                                                   1,
+                                                                   true,
+                                                                   true>(
+            result_indices_buffer + internal_topk,
+            result_distances_buffer + internal_topk,
+            smem_desc,
+            knn_graph,
+            graph_degree,
+            local_visited_hashmap_ptr,
+            hash_bitlen,
+            parent_list_buffer,
+            result_indices_buffer,
+            search_width,
+            source_indices_ptr,
+            favor_bitset,
+            favor_penalty[0],
+            favor_cutoff[0]);
+        } else if (packed_bitset) {
+          compute_favor_retention_safe_distance_to_child_nodes_jit<IndexT,
+                                                                   DistanceT,
+                                                                   DataT,
+                                                                   SourceIndexT,
+                                                                   1,
+                                                                   true>(
+            result_indices_buffer + internal_topk,
+            result_distances_buffer + internal_topk,
+            smem_desc,
+            knn_graph,
+            graph_degree,
+            local_visited_hashmap_ptr,
+            hash_bitlen,
+            parent_list_buffer,
+            result_indices_buffer,
+            search_width,
+            source_indices_ptr,
+            favor_bitset,
+            favor_penalty[0],
+            favor_cutoff[0]);
+        } else {
+          compute_favor_retention_safe_distance_to_child_nodes_jit<IndexT,
+                                                                   DistanceT,
+                                                                   DataT,
+                                                                   SourceIndexT>(
+            result_indices_buffer + internal_topk,
+            result_distances_buffer + internal_topk,
+            smem_desc,
+            knn_graph,
+            graph_degree,
+            local_visited_hashmap_ptr,
+            hash_bitlen,
+            parent_list_buffer,
+            result_indices_buffer,
+            search_width,
+            source_indices_ptr,
+            favor_bitset,
+            favor_penalty[0],
+            favor_cutoff[0]);
+        }
+      } else {
+        compute_favor_distance_to_child_nodes_jit<IndexT, DistanceT, DataT, SourceIndexT>(
+          result_indices_buffer + internal_topk,
+          result_distances_buffer + internal_topk,
+          smem_desc,
+          knn_graph,
+          graph_degree,
+          local_visited_hashmap_ptr,
+          hash_bitlen,
+          parent_list_buffer,
+          result_indices_buffer,
+          search_width,
+          source_indices_ptr,
+          query_id + query_id_offset,
+          filter_payload,
+          favor_penalty[0],
+          favor_cutoff[0],
+          false);
+      }
     } else {
       compute_distance_to_child_nodes_jit<IndexT, DistanceT, DataT>(
         result_indices_buffer + internal_topk,
@@ -382,10 +505,29 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
 
   for (unsigned i = threadIdx.x; i < internal_topk + search_width * graph_degree; i += blockDim.x) {
     const auto node_id = result_indices_buffer[i] & ~index_msb_1_mask;
-    if (node_id != (invalid_index & ~index_msb_1_mask) &&
-        !sample_filter<SourceIndexT>(query_id + query_id_offset,
-                                     to_source_index(node_id),
-                                     filter_payload.sample_filter_data())) {
+    bool passes_filter = true;
+    if (node_id != (invalid_index & ~index_msb_1_mask)) {
+      if constexpr (FAVOR) {
+        if (favor_penalty_mode_value == 2) {
+          const auto source_id     = to_source_index(node_id);
+          const bool packed_bitset = favor_bitset.original_nbits == 0 ||
+                                     favor_bitset.original_nbits == sizeof(std::uint32_t) * 8 ||
+                                     favor_bitset.original_nbits == favor_bitset.bitset_len;
+          passes_filter = packed_bitset
+                            ? device::favor_packed_bitset_test(favor_bitset.bitset_ptr, source_id)
+                            : device::favor_bitset_test(favor_bitset, source_id);
+        } else {
+          passes_filter = sample_filter<SourceIndexT>(query_id + query_id_offset,
+                                                      to_source_index(node_id),
+                                                      filter_payload.sample_filter_data());
+        }
+      } else {
+        passes_filter = sample_filter<SourceIndexT>(query_id + query_id_offset,
+                                                    to_source_index(node_id),
+                                                    filter_payload.sample_filter_data());
+      }
+    }
+    if (!passes_filter) {
       result_distances_buffer[i] = utils::get_max_value<DistanceT>();
       result_indices_buffer[i]   = invalid_index;
     }
@@ -581,6 +723,8 @@ __device__ void search_kernel_jit(
                             filter_payload,
                             0.0f,
                             0.0f,
+                            0u,
+                            0.0f,
                             graph_size);
 }
 
@@ -618,7 +762,9 @@ __device__ void search_favor_kernel_jit(
   const IndexT graph_size,
   cagra_sample_filter<SourceIndexT> filter_payload,
   const float filtering_rate,
-  const float favor_delta_d)
+  const float favor_penalty_distance,
+  const std::uint32_t favor_penalty_mode_value,
+  const float favor_local_gap_multiplier)
 {
   const auto query_id = blockIdx.y;
   search_core<true,
@@ -654,7 +800,9 @@ __device__ void search_favor_kernel_jit(
                             dataset_desc,
                             filter_payload,
                             filtering_rate,
-                            favor_delta_d,
+                            favor_penalty_distance,
+                            favor_penalty_mode_value,
+                            favor_local_gap_multiplier,
                             graph_size);
 }
 

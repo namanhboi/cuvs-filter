@@ -489,6 +489,21 @@ void parse_search_param(const nlohmann::json& conf,
     }
   }
   if (conf.contains("favor_delta_d")) { param.p.favor_delta_d = conf.at("favor_delta_d"); }
+  if (conf.contains("favor_penalty_mode")) {
+    std::string mode = conf.at("favor_penalty_mode");
+    if (mode == "reference") {
+      param.p.favor_penalty = cuvs::neighbors::cagra::favor_penalty_mode::REFERENCE;
+    } else if (mode == "cagra_query_local") {
+      param.p.favor_penalty = cuvs::neighbors::cagra::favor_penalty_mode::CAGRA_QUERY_LOCAL;
+    } else if (mode == "cagra_retention_safe") {
+      param.p.favor_penalty = cuvs::neighbors::cagra::favor_penalty_mode::CAGRA_RETENTION_SAFE;
+    } else {
+      THROW("Invalid CAGRA FAVOR penalty mode: %s", mode.c_str());
+    }
+  }
+  if (conf.contains("favor_penalty_lambda")) {
+    param.p.favor_penalty_lambda = conf.at("favor_penalty_lambda");
+  }
   if (conf.contains("favor_delta_d_file")) {
     param.favor_delta_d_file = conf.at("favor_delta_d_file").get<std::string>();
   }

@@ -143,7 +143,7 @@ struct search
       sizeof(INDEX_T) * hashmap::get_size(small_hash_bitlen) +  // local_visited_hashmap_ptr
       sizeof(INDEX_T) * search_width +                          // parent_indices_buffer
       sizeof(int);                                              // result_position
-    if (filter_mode == filtering_mode::FAVOR) { smem_size += sizeof(DISTANCE_T); }
+    if (filter_mode == filtering_mode::FAVOR) { smem_size += 2 * sizeof(DISTANCE_T); }
     RAFT_LOG_DEBUG("# smem_size: %u", smem_size);
 
     //

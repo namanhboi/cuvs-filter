@@ -1,0 +1,13 @@
+selectivity,workload,batch_size,series,mode,source_run,penalty_lambda,recall,value,itopk,search_width,max_iterations,thread_block_size
+0.9,throughput,10000,favor,favor,current,,0.84888,1267017.4197666247,32,1,0,0
+0.9,throughput,10000,favor,favor,current,,0.85698,1265830.9335290021,32,2,0,0
+0.9,throughput,10000,favor,favor,current,,0.87053,1039575.8422148108,32,4,0,0
+0.9,throughput,10000,favor,favor,current,,0.9371,672449.8460478609,64,1,0,0
+0.9,throughput,10000,favor,favor,current,,0.94,737357.2049810684,64,2,0,0
+0.9,throughput,10000,favor,favor,current,,0.94279,667230.0216238587,64,4,0,0
+0.9,latency,10,favor,favor,current,,0.8481672394043528,0.00031993669072164947,32,1,0,0
+0.9,latency,10,favor,favor,current,,0.85698,0.0002295310549630845,32,2,0,0
+0.9,latency,10,favor,favor,current,,0.87053,0.00021886088932806323,32,4,0,0
+0.9,latency,10,favor,favor,current,,0.9381800766283525,0.0005353506494252874,64,1,0,0
+0.9,latency,10,favor,favor,current,,0.9392014742014742,0.00034222327518427517,64,2,0,0
+0.9,latency,10,favor,favor,current,,0.9430443974630021,0.0002950385634249472,64,4,0,0

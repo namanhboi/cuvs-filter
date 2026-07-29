@@ -892,7 +892,10 @@ void select_and_run(
                    smem_size);
 
     if (favor) {
-      auto kernel_launcher = [&]() -> void {
+      const auto favor_local_gap_multiplier =
+        favor_penalty_coefficient(ps.filtering_rate, ps.itopk_size) * ps.favor_penalty_lambda;
+      const auto favor_penalty_mode_value = static_cast<std::uint32_t>(ps.favor_penalty);
+      auto kernel_launcher                = [&]() -> void {
         launcher
           ->dispatch<search_single_cta_favor_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>(
             stream,
@@ -926,7 +929,9 @@ void select_and_run(
             static_cast<IndexT>(graph.extent(0)),
             filter_payload,
             ps.filtering_rate,
-            ps.favor_delta_d);
+            ps.favor_delta_d,
+            favor_penalty_mode_value,
+            favor_local_gap_multiplier);
       };
       cuvs::neighbors::detail::safely_launch_kernel_with_smem_size<
         search_single_cta_favor_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>(

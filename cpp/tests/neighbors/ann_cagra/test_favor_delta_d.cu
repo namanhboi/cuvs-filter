@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include "../../../src/neighbors/detail/cagra/favor_penalty.cuh"
 #include <cuvs/neighbors/cagra.hpp>
 
 #include <raft/core/copy.hpp>
@@ -27,6 +28,19 @@
 #include <vector>
 
 namespace {
+
+TEST(CagraFavorPenalty, ReferenceCoefficient)
+{
+  using cuvs::neighbors::cagra::detail::favor_penalty_coefficient;
+  using cuvs::neighbors::cagra::detail::favor_reference_penalty;
+
+  auto const reference   = favor_reference_penalty(0.9f, 64, 100.0f);
+  auto const coefficient = favor_penalty_coefficient(0.9f, 64);
+  EXPECT_FLOAT_EQ(reference, 0.9f * (64.0f - 0.1f) * 100.0f / (2.0f * 0.1f * 64.0f));
+  EXPECT_FLOAT_EQ(coefficient, 0.9f * (64.0f - 0.1f) / (2.0f * 0.1f * 64.0f));
+  EXPECT_FLOAT_EQ(favor_penalty_coefficient(0.0f, 64), 0.0f);
+  EXPECT_FLOAT_EQ(favor_reference_penalty(0.9f, 64, 0.0f), 0.0f);
+}
 
 struct temporary_file {
   std::string name;
