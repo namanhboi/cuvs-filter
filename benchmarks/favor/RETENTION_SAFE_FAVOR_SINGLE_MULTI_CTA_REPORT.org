@@ -115,8 +115,10 @@ Recall@10, and every configuration has one recorded run after warm-up.
 queries.  Its plots mark Recall@10 = 0.90.  =MULTI_CTA= uses a batch size of
 one and marks Recall@10 = 0.99.  Its plotted QPS is the reciprocal of
 single-query latency and is not saturated large-batch throughput.  Target
-values are interpolated only where a method's measured Pareto frontier
-brackets the target.
+values use linear interpolation only where the measured Pareto frontier
+brackets 0.99.  If the fastest measured point already exceeds 0.99, that
+measured feasible point is reported directly.  Values below the measured
+recall range are never extrapolated.
 
 The current-static =SINGLE_CTA= sweep uses the same per-selectivity search
 cells as the retention-safe sweep, including its refined near-target cells.
@@ -184,46 +186,48 @@ offers no consistent advantage when most rows already pass the filter.
 the chance that filtering traps the search in one region.  Static and
 retention-safe FAVOR both provide strong batch-size-1 frontiers on SIFT and
 BIGANN.  Retention-safe FAVOR reaches 0.99 on both BIGANN scales and gives
-approximately 2,368 QPS on BIGANN-10M versus 1,715 QPS for default at the
-interpolated target.  GIST and MSTuring remain dataset-dependent near 0.99,
-but FAVOR generally retains a latency advantage at comparable high recall.
+approximately 2,369 QPS on BIGANN-10M versus 1,692 QPS for default at the
+target.  In the controlled confirmation, retention-safe FAVOR reaches 0.99 on
+all six datasets and improves target QPS by approximately 7.6% to 40.0%.
+The smallest gain is MSTuring-10M, where one targeted =itopk=2048 point was
+needed to bracket 0.99 without extrapolation.
 
 #+CAPTION: MULTI_CTA at 1% selectivity on SIFT-1M.
-[[file:results_four_way_comparison/multi/sift/plots/sift_selectivity_01.png]]
+[[file:results_retention_safe_multi_confirmed/sift/plots/sift_selectivity_01.png]]
 
 ** 10% selectivity
 
 The BIGANN static-penalty failure persists in =MULTI_CTA=: current and
 committed static FAVOR remain far below 0.99.  Retention-safe FAVOR removes
 the failure.  At the interpolated 0.99 target, it provides approximately
-2,702 QPS versus 2,086 for default on BIGANN-1M and 2,561 versus 1,934 on
-BIGANN-10M.  SIFT, GIST, and both MSTuring scales also retain favorable
+2,732 QPS versus 1,975 for default on BIGANN-1M and 2,570 versus 1,870 on
+BIGANN-10M.  This is a 38.4% and 37.4% improvement, respectively.  SIFT,
+GIST, and both MSTuring scales also reach 0.99 and retain favorable
 batch-size-1 frontiers.
 
 #+CAPTION: MULTI_CTA at 10% selectivity on BIGANN-10M.
-[[file:results_four_way_comparison/multi/bigann10m/plots/bigann10m_selectivity_10.png]]
+[[file:results_retention_safe_multi_confirmed/bigann10m/plots/bigann10m_selectivity_10.png]]
 
 ** 50% selectivity
 
-Retention-safe FAVOR reaches or approaches the same high-recall envelope as
-default while producing higher batch-size-1 QPS across the six evaluated
-datasets.  The benefit is a small-batch latency result, not evidence of higher
-saturated throughput.  Current static FAVOR is also competitive outside its
-BIGANN 10% failure region.
+Retention-safe FAVOR reaches the 0.99 target on all six evaluated datasets
+while improving target QPS by approximately 27.6% to 43.9%.  The benefit is a
+small-batch latency result, not evidence of higher saturated throughput.
+Current static FAVOR is also competitive outside its BIGANN 10% failure
+region.
 
 #+CAPTION: MULTI_CTA at 50% selectivity on GIST-1M.
-[[file:results_four_way_comparison/multi/gist/plots/gist_selectivity_50.png]]
+[[file:results_retention_safe_multi_confirmed/gist/plots/gist_selectivity_50.png]]
 
 ** 90% selectivity
 
-The 90% behavior follows the 50% result: retention-safe FAVOR broadly
-preserves recall and reduces single-query latency.  The advantage is marginal
-in some cells but consistent enough to remain visible in the Pareto
-frontiers.  Historical static measurements sometimes stop short of the
-current 0.99 region because the old sweep had a lower traversal cap.
+The 90% behavior follows the 50% result: retention-safe FAVOR reaches 0.99 on
+all six datasets and improves target QPS by approximately 27.2% to 42.1%.
+Historical static measurements sometimes stop short of the current 0.99
+region because the old sweep had a lower traversal cap.
 
 #+CAPTION: MULTI_CTA at 90% selectivity on MSTuring-10M.
-[[file:results_four_way_comparison/multi/msturing10m/plots/msturing10m_selectivity_90.png]]
+[[file:results_retention_safe_multi_confirmed/msturing10m/plots/msturing10m_selectivity_90.png]]
 
 * Interpretation and limitations
 
@@ -243,7 +247,9 @@ therefore a more promising next step than further optimizing the static
 formula.
 
 These results use six dataset/scale combinations, one GPU, and one measured
-run per configuration.  They have no confidence intervals.  GIST contains
+run per configuration.  No target comparison landed within 3%, so the
+predeclared three-run tie-breaker was not triggered.  The results have no
+confidence intervals.  GIST contains
 1,000 distinct queries, so its 10,000-query workload repeats the query set ten
 times.  The historical static curves were measured in a different run and
 often use a wider parameter sweep; they show reproducibility and drift but do
@@ -255,9 +261,11 @@ Static FAVOR remains the strongest evaluated =SINGLE_CTA= option for rare 1%
 filters, but its fixed penalty is not robust: BIGANN recall collapses at 10%.
 Retention-safe FAVOR trades some of that 1% strength for reliable traversal,
 repairs the BIGANN failure in both CTA modes, and performs particularly well
-for batch-size-1 =MULTI_CTA=.  No method dominates every dataset, selectivity,
-batch size, and recall target, so the four Pareto frontiers should be used
-instead of a single aggregate speedup.
+for batch-size-1 =MULTI_CTA=.  In the controlled =MULTI_CTA= confirmation it
+reaches 0.99 in every evaluated cell and exceeds default target QPS in all 24
+cells.  No method dominates every dataset, selectivity, batch size, and recall
+target, so the Pareto frontiers should be used instead of a single aggregate
+speedup.
 
 * Appendix A: complete SINGLE_CTA Pareto catalog
 
@@ -353,6 +361,54 @@ y-axes start at zero, and the dashed vertical line marks Recall@10 = 0.99.
 [[file:results_four_way_comparison/multi/msturing10m/plots/msturing10m_selectivity_50.png]]
 [[file:results_four_way_comparison/multi/msturing10m/plots/msturing10m_selectivity_90.png]]
 
+* Appendix C: controlled retention-safe MULTI_CTA confirmation
+
+These figures compare only default CAGRA and the supported explicit
+retention-safe FAVOR mode using the same batch-size-1 run.  Every y-axis starts
+at zero and every dashed line marks Recall@10 = 0.99.
+
+** SIFT-1M
+
+[[file:results_retention_safe_multi_confirmed/sift/plots/sift_selectivity_01.png]]
+[[file:results_retention_safe_multi_confirmed/sift/plots/sift_selectivity_10.png]]
+[[file:results_retention_safe_multi_confirmed/sift/plots/sift_selectivity_50.png]]
+[[file:results_retention_safe_multi_confirmed/sift/plots/sift_selectivity_90.png]]
+
+** GIST-1M
+
+[[file:results_retention_safe_multi_confirmed/gist/plots/gist_selectivity_01.png]]
+[[file:results_retention_safe_multi_confirmed/gist/plots/gist_selectivity_10.png]]
+[[file:results_retention_safe_multi_confirmed/gist/plots/gist_selectivity_50.png]]
+[[file:results_retention_safe_multi_confirmed/gist/plots/gist_selectivity_90.png]]
+
+** BIGANN-1M
+
+[[file:results_retention_safe_multi_confirmed/bigann1m/plots/bigann1m_selectivity_01.png]]
+[[file:results_retention_safe_multi_confirmed/bigann1m/plots/bigann1m_selectivity_10.png]]
+[[file:results_retention_safe_multi_confirmed/bigann1m/plots/bigann1m_selectivity_50.png]]
+[[file:results_retention_safe_multi_confirmed/bigann1m/plots/bigann1m_selectivity_90.png]]
+
+** BIGANN-10M
+
+[[file:results_retention_safe_multi_confirmed/bigann10m/plots/bigann10m_selectivity_01.png]]
+[[file:results_retention_safe_multi_confirmed/bigann10m/plots/bigann10m_selectivity_10.png]]
+[[file:results_retention_safe_multi_confirmed/bigann10m/plots/bigann10m_selectivity_50.png]]
+[[file:results_retention_safe_multi_confirmed/bigann10m/plots/bigann10m_selectivity_90.png]]
+
+** MSTuring-1M
+
+[[file:results_retention_safe_multi_confirmed/msturing1m/plots/msturing1m_selectivity_01.png]]
+[[file:results_retention_safe_multi_confirmed/msturing1m/plots/msturing1m_selectivity_10.png]]
+[[file:results_retention_safe_multi_confirmed/msturing1m/plots/msturing1m_selectivity_50.png]]
+[[file:results_retention_safe_multi_confirmed/msturing1m/plots/msturing1m_selectivity_90.png]]
+
+** MSTuring-10M
+
+[[file:results_retention_safe_multi_confirmed/msturing10m/plots/msturing10m_selectivity_01.png]]
+[[file:results_retention_safe_multi_confirmed/msturing10m/plots/msturing10m_selectivity_10.png]]
+[[file:results_retention_safe_multi_confirmed/msturing10m/plots/msturing10m_selectivity_50.png]]
+[[file:results_retention_safe_multi_confirmed/msturing10m/plots/msturing10m_selectivity_90.png]]
+
 * Reproduction
 
 The missing current static =SINGLE_CTA= data is stored under
@@ -366,3 +422,9 @@ python benchmarks/favor/generate_four_way_plots.py
 The generator reads current and historical result directories independently;
 it does not copy or merge their raw JSON files.  Existing plotting commands
 remain unchanged when no overlay series is supplied.
+
+The controlled retention-safe =MULTI_CTA= confirmation can be reproduced with:
+
+#+begin_src sh
+benchmarks/favor/run_retention_safe_multi_confirmation.sh
+#+end_src

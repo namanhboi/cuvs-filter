@@ -60,3 +60,36 @@ run_dataset msturing-1M msturing1m MSTuring-1M query.fbin base.fbin float 0 \
   "32 64 128 256 512 640 768 1024"
 run_dataset msturing-10M msturing10m MSTuring-10M query.fbin base.fbin float 0 \
   "32 64 128 256 512 1024 1536"
+
+# MSTuring-10M at 1% lands immediately below 0.99 at the planned cap. Add only the
+# next breadth point, then merge it into the official frontier without rerunning
+# already-complete cells.
+FAVOR_BATCH_SIZES=1 \
+FAVOR_SELECTIVITIES=1 \
+FAVOR_ITOPK_VALUES=2048 \
+FAVOR_SEARCH_WIDTHS=1 \
+FAVOR_SEARCH_ALGO=multi_cta \
+FAVOR_BENCHMARK_MODES=favor_retention_safe \
+FAVOR_PENALTY_LAMBDAS=1 \
+  "${repo_dir}/benchmarks/favor/run_benchmarks.sh" \
+    "${repo_dir}/datasets" \
+    "${result_root}/msturing10m_extension" \
+    msturing-10M msturing10m MSTuring-10M query.fbin base.fbin float 0
+
+python "${repo_dir}/benchmarks/favor/merge_benchmark_extension.py" \
+  "${result_root}/msturing10m/raw/msturing10m_s01_nq1.json" \
+  "${result_root}/msturing10m_extension/raw/msturing10m_s01_nq1.json" \
+  "${result_root}/msturing10m/configs/msturing10m_s01_nq1.json" \
+  "${result_root}/msturing10m_extension/configs/msturing10m_s01_nq1.json"
+
+python "${repo_dir}/benchmarks/favor/plot_results.py" \
+  --result-dir "${result_root}/msturing10m" \
+  --result-prefix msturing10m \
+  --plot-title MSTuring-10M \
+  --selectivities 1 10 50 90 \
+  --latency-derived-qps \
+  --latency-batch-size 1 \
+  --latency-unit us \
+  --cta-mode MULTI_CTA \
+  --target-recall 0.99 \
+  --zero-y

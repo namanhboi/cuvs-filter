@@ -1,0 +1,17 @@
+selectivity,workload,batch_size,series,mode,source_run,penalty_lambda,target_recall,value,lower_recall,upper_recall,point_recall,target_method
+0.01,latency,1,default,default,current,,0.99,0.0005909498238213399,1.0,1.0,1.0,measured_feasible
+0.01,throughput,1,default,default,current,,0.99,1692.216113852429,1.0,1.0,1.0,measured_feasible
+0.01,latency,1,favor_retention_safe,favor_retention_safe,current,1.0,0.99,0.0004221839450436373,0.9214497041420119,0.9910060975609756,0.99,interpolated
+0.01,throughput,1,favor_retention_safe,favor_retention_safe,current,1.0,0.99,2368.697483559752,0.9214497041420119,0.9910060975609756,0.99,interpolated
+0.1,latency,1,default,default,current,,0.99,0.0005350313376852505,0.9827368421052631,0.9984018264840183,0.99,interpolated
+0.1,throughput,1,default,default,current,,0.99,1870.487408482925,0.9827368421052631,0.9984018264840183,0.99,interpolated
+0.1,latency,1,favor_retention_safe,favor_retention_safe,current,1.0,0.99,0.00038921583274100044,0.9741588156123823,0.9907042253521127,0.99,interpolated
+0.1,throughput,1,favor_retention_safe,favor_retention_safe,current,1.0,0.99,2569.5020264626087,0.9741588156123823,0.9907042253521127,0.99,interpolated
+0.5,latency,1,default,default,current,,0.99,0.0004948987741649349,0.988152610441767,0.9967462039045553,0.99,interpolated
+0.5,throughput,1,default,default,current,,0.99,2022.3886889562161,0.988152610441767,0.9967462039045553,0.99,interpolated
+0.5,latency,1,favor_retention_safe,favor_retention_safe,current,1.0,0.99,0.00037839560724533833,0.9853917662682603,0.996728307254623,0.99,interpolated
+0.5,throughput,1,favor_retention_safe,favor_retention_safe,current,1.0,0.99,2645.5040724578735,0.9853917662682603,0.996728307254623,0.99,interpolated
+0.9,latency,1,default,default,current,,0.99,0.000526697749891688,0.9735349716446124,0.99648033126294,0.99,interpolated
+0.9,throughput,1,default,default,current,,0.99,1899.007051902525,0.9735349716446124,0.99648033126294,0.99,interpolated
+0.9,latency,1,favor_retention_safe,favor_retention_safe,current,1.0,0.99,0.00037074502115090185,0.9873183619550858,0.9965325936199723,0.99,interpolated
+0.9,throughput,1,favor_retention_safe,favor_retention_safe,current,1.0,0.99,2698.8359640182357,0.9873183619550858,0.9965325936199723,0.99,interpolated
