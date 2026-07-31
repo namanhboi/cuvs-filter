@@ -244,6 +244,162 @@ Another option is to implement a fused kernel that evaluates the UDF and compute
 
 The initial FAVOR implementation will send all filtered queries through FAVOR graph search, including bounded retries when enabled. Supporting a brute-force fallback would complicate this control flow: after selectivity estimation, =search_main_core= would need to identify which queries use brute force and which use graph search, execute the two groups separately, and write their results into the correct rows of the original output. This query-splitting behavior and the choice between reusing cuVS brute-force KNN and implementing a fused scan are intentionally left for future design work.
 
+* CAGRA retention calibration and retry feasibility (implemented 2026-07-31)
+** Scope and archived control experiment
+
+This phase addresses the remaining =SINGLE_CTA= mismatch between FAVOR's HNSW traversal and
+CAGRA's fused candidate/result queue without introducing a second frontier or changing default
+CAGRA traversal.  The unsuccessful experiment that immediately retired expanded rejected parents
+was archived on branch =favor-retention-safe-retire-experiment= at commit =74a5ca05=.  The working
+branch was then restored to =favor-filtered-search= before the calibration work below.
+
+** Retention formula
+
+For a rejected child with raw distance =d=, query-local penalty =D_q=, and current retention
+cutoff =c=, retention-safe FAVOR continues to use:
+
+#+begin_src text
+  D_effective = min(D_q, rho * max(c - d, 0))
+  scored_distance = d + D_effective
+#+end_src
+
+The explicit fraction =rho= is now configurable for =SINGLE_CTA= bitset FAVOR.  =rho = 0.5=
+preserves the previously implemented midpoint exactly.  An opt-in value of zero selects the
+following automatic CAGRA-local rule:
+
+#+begin_src text
+  s       = 1 - filtering_rate                 (passing selectivity)
+  B       = configured itopk size
+  k       = requested result count
+  E       = s * B                              (expected passing entries in itopk)
+  x       = E / k                              (expected result occupancy)
+  P_short = clamp(2 * (1 - x), 0, 1)
+  smooth  = P_short^2 * (3 - 2 * P_short)
+  rho     = 0.5 + 0.4 * smooth
+#+end_src
+
+=P_short= is zero when the expected passing occupancy is at least =k= and saturates when it is at
+most =k / 2=.  The half-=k= boundary is the same sufficiency threshold used by FAVOR's
+filter-aware stopping condition.  Smoothstep makes the transition continuous with zero slope at
+both ends.  The range =[0.5, 0.9]= is deliberate: the lower endpoint preserves the established
+retention-safe behavior, while the upper endpoint remains strictly below one so a bridge candidate
+keeps positive headroom inside the current CAGRA retention boundary.
+
+This differs from the reference FAVOR penalty because it responds to CAGRA's finite fused queue.
+The reference scalar models distance displacement under HNSW traversal, whose frontier is separate
+from its result heap.  Here =E / k= directly measures pressure on the shared CAGRA itopk.  The rule
+only relaxes the candidate-local penalty cap when the shared queue is unlikely to contain enough
+passing results.
+
+The automatic fraction is calculated once on the host before kernel launch.  The GPU distance path
+still receives one scalar =rho=, so the formula adds no per-child arithmetic, memory traffic, or
+synchronization.  The bitset check, penalty cap, and single candidate-buffer write remain fused.
+
+** Preliminary grid and feasibility gate
+
+The feasibility grid used one historical target-relevant traversal cell for each of ten
+dataset/selectivity controls.  It tested =lambda in {0.5, 1, 2}= and
+=rho in {0.25, 0.5, 0.75, 0.9}=, with one throughput run per configuration and batch size 10,000.
+The same graph, query set, ground truth, and traversal cell were used for default CAGRA and every
+FAVOR point.
+
+The grid established the required shape.  At 1% selectivity, the target-relevant =itopk= of 512
+contains only 5.12 expected passing entries for =k = 10=, and =rho= near 0.9 restored at least 0.90
+recall on SIFT and both BIGANN scales.  At 10% selectivity with =itopk = 128=, the expectation is
+12.8 passing entries, so the automatic rule falls back to the midpoint.  At 50% and 90%, changing
+=rho= was effectively inert because passing occupancy was already ample.
+
+The automatic rule with =lambda = 1= was then rerun on all ten held cells:
+
+| Dataset | Selectivity | Default recall | Automatic recall | Default QPS | Automatic QPS |
+|-------------+-------------+----------------+------------------+-------------+---------------|
+| SIFT-1M | 1% | 0.72947 | 0.91329 | 114,478 | 106,206 |
+| BIGANN-1M | 1% | 0.77246 | 0.92185 | 79,887 | 76,308 |
+| BIGANN-10M | 1% | 0.78604 | 0.91902 | 77,655 | 72,877 |
+| BIGANN-1M | 10% | 0.90612 | 0.90498 | 783,216 | 767,504 |
+| BIGANN-10M | 10% | 0.88676 | 0.90020 | 541,697 | 545,222 |
+| MSTuring-10M | 10% | 0.91871 | 0.91037 | 73,931 | 75,652 |
+| GIST-1M | 50% | 0.94590 | 0.94700 | 30,614 | 31,295 |
+| MSTuring-1M | 50% | 0.92966 | 0.92823 | 150,445 | 159,782 |
+| SIFT-1M | 90% | 0.93201 | 0.93031 | 1,059,749 | 1,046,486 |
+| MSTuring-10M | 90% | 0.94515 | 0.94455 | 150,553 | 159,289 |
+
+These are one-run feasibility measurements, not a replacement for the full report.  The important
+gate result is that one dataset-independent occupancy rule reaches the requested 0.90
+=SINGLE_CTA= recall range on all three 1% controls and preserves the established midpoint at higher
+occupancy.
+
+** Termination diagnostics and retry decision
+
+cuVS bench now reports two additive post-search counters while the result IDs are already on the
+host for recall calculation:
+
+- =UnderfilledQueries=: fraction of query rows containing fewer than =k= valid dataset IDs;
+- =MissingResultSlots=: missing output slots divided by all requested output slots.
+
+This does not alter search timing or the kernel.  The predeclared retry gate required at least 1%
+underfilled queries and at least 0.01 absolute recall headroom from missing slots.
+
+| Cell | FAVOR underfilled queries | FAVOR missing slots | Retry gate |
+|----------------------+-----------------------------+---------------------+-------------------------------|
+| SIFT-1M, 1% | 1.84% | 0.458% | fail: less than 0.01 recall headroom |
+| BIGANN-1M, 10% | 0.08% | 0.013% | fail: underfill below 1% |
+| BIGANN-10M, 10% | 0.10% | 0.014% | fail: underfill below 1% |
+| MSTuring-10M, 10% | 0% | 0% | fail: no underfill |
+
+Therefore the bounded retry was intentionally not implemented.  In particular, BIGANN's 10%
+failure mode is wrong-neighbor ordering, not a shortage of returned passing IDs; rerunning the same
+traversal would add cost without addressing the demonstrated cause.
+
+** Backwards compatibility
+
+- Default CAGRA filtering is unchanged.
+- Existing retention-safe FAVOR remains unchanged because =favor_retention_fraction= defaults to
+  =0.5=.
+- Automatic retention is opt-in with =favor_retention_fraction = 0= and is accepted only for
+  =SINGLE_CTA= =CAGRA_RETENTION_SAFE= FAVOR.
+- =MULTI_CTA= remains explicitly pinned to =rho = 0.5=; non-default or automatic fractions are
+  rejected during plan validation.
+- Explicit fractions must be finite and in =(0, 1)=.  Invalid modes, negative values, one, and
+  non-default =MULTI_CTA= values are covered by focused tests.
+
+** Reproduction and artifacts
+
+Build the changed library, tests, and benchmark with all available threads:
+
+#+begin_src sh
+  PARALLEL_LEVEL=$(nproc) ./build.sh libcuvs tests bench-ann -n \
+    --limit-tests=NEIGHBORS_ANN_CAGRA_FAVOR_SEARCH_TEST \
+    --limit-bench-ann=CUVS_CAGRA_ANN_BENCH
+#+end_src
+
+Run the explicit feasibility grid:
+
+#+begin_src sh
+  ./benchmarks/favor/run_retention_formula_grid.sh
+#+end_src
+
+Run the automatic formula over every historical traversal cell and regenerate QPS--recall plots:
+
+#+begin_src sh
+  FAVOR_PENALTY_LAMBDAS=1 \
+  FAVOR_RETENTION_FRACTIONS=0 \
+  FAVOR_RETENTION_ALL_CELLS=1 \
+    ./benchmarks/favor/run_retention_formula_grid.sh \
+      benchmarks/favor/results_retention_formula_auto_pareto
+#+end_src
+
+Artifacts are stored under:
+
+- =benchmarks/favor/results_retention_formula_grid= (explicit =lambda/rho= feasibility grid),
+- =benchmarks/favor/results_retention_formula_auto_validation= (held-cell automatic validation),
+- =benchmarks/favor/results_retention_formula_auto_pareto= (full automatic QPS--recall sweeps),
+- =benchmarks/favor/results_retention_termination_gate= (underfill/retry diagnostics).
+
+The broad grid pass that was stopped after it was found to include irrelevant historical cells was
+moved, without deleting it, to
+=benchmarks/favor/results_retention_formula_grid_broad_partial_20260731=.
+
 ** Implementation and Testing Phases
 
 The implementation should be broken into phases so that each FAVOR component can be tested separately:

@@ -103,6 +103,37 @@ class PlotResultsTest(unittest.TestCase):
             points["favor_retention_safe:lambda=1"][0]["recall"], 0.99
         )
 
+    def test_retention_fractions_are_separate_series(self) -> None:
+        rows = []
+        for fraction, recall in ((0.25, 0.91), (0.75, 0.97)):
+            rows.append(
+                {
+                    "run_type": "iteration",
+                    "label": (
+                        'favor_penalty_mode="cagra_retention_safe"'
+                        '#filter_mode="favor"'
+                    ),
+                    "favor_penalty_lambda": 1.0,
+                    "favor_retention_fraction": fraction,
+                    "itopk": 64,
+                    "search_width": 1,
+                    "Recall": recall,
+                    "items_per_second": 1000.0,
+                }
+            )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "result.json"
+            path.write_text(json.dumps({"benchmarks": rows}))
+            points = plot_results.load_points(path, "items_per_second")
+
+        self.assertEqual(
+            set(points),
+            {
+                "favor_retention_safe:lambda=1:rho=0.25",
+                "favor_retention_safe:lambda=1:rho=0.75",
+            },
+        )
+
     def test_lambda_filter_keeps_baselines(self) -> None:
         rows = [
             {

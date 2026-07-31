@@ -504,6 +504,9 @@ void parse_search_param(const nlohmann::json& conf,
   if (conf.contains("favor_penalty_lambda")) {
     param.p.favor_penalty_lambda = conf.at("favor_penalty_lambda");
   }
+  if (conf.contains("favor_retention_fraction")) {
+    param.p.favor_retention_fraction = conf.at("favor_retention_fraction");
+  }
   if (conf.contains("favor_delta_d_file")) {
     param.favor_delta_d_file = conf.at("favor_delta_d_file").get<std::string>();
   }

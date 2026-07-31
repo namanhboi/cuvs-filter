@@ -384,6 +384,14 @@ struct search_params : cuvs::neighbors::search_params {
   /** Dimensionless multiplier applied to the query/CTA-local distance gap. */
   float favor_penalty_lambda = 1.0f;
 
+  /**
+   * Fraction of the current retention headroom that a rejected candidate's penalty may consume.
+   * Explicit values must be finite and in (0, 1). Zero selects a CAGRA-local automatic value from
+   * the expected number of passing entries in itopk. The default 0.5 preserves the original
+   * retention-safe midpoint rule. Non-default values are currently supported only by SINGLE_CTA.
+   */
+  float favor_retention_fraction = 0.5f;
+
   /** Data type of the query vector and codebook table on shared memory. Currently, only VPQ
    * supports FP8. **/
   internal_dtype smem_dtype = internal_dtype::F16;

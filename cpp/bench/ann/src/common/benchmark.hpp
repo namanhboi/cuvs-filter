@@ -359,6 +359,8 @@ void bench_search(::benchmark::State& state,
     std::size_t rows        = std::min(queries_processed, query_set_size);
     std::size_t match_count = 0;
     std::size_t total_count = 0;
+    std::size_t underfilled_query_count = 0;
+    std::size_t missing_result_count    = 0;
 
     // We go through the groundtruth with same stride as the benchmark loop.
     size_t out_offset   = 0;
@@ -374,6 +376,10 @@ void bench_search(::benchmark::State& state,
       recall_calculation_workers.reserve(num_recall_calculation_worker_threads);
       std::vector<std::size_t> local_match_count(num_recall_calculation_worker_threads + 1);
       std::vector<std::size_t> local_total_count(num_recall_calculation_worker_threads + 1);
+      std::vector<std::size_t> local_underfilled_query_count(num_recall_calculation_worker_threads +
+                                                             1);
+      std::vector<std::size_t> local_missing_result_count(num_recall_calculation_worker_threads +
+                                                          1);
       int chunk_size =
         n_queries / (num_recall_calculation_worker_threads + 1);  // +1 for the main thread
       int remainder           = n_queries % (num_recall_calculation_worker_threads + 1);
@@ -386,6 +392,15 @@ void bench_search(::benchmark::State& state,
             auto [matching, total] = gt_maps->count_matches(i_orig_idx, candidates, k);
             local_match_count[tid] += matching;
             local_total_count[tid] += total;
+            std::size_t valid_results = 0;
+            for (std::uint32_t rank = 0; rank < k; ++rank) {
+              valid_results +=
+                static_cast<std::size_t>(candidates[rank]) < dataset->base_set_size();
+            }
+            if (valid_results < k) {
+              ++local_underfilled_query_count[tid];
+              local_missing_result_count[tid] += k - valid_results;
+            }
           }
         }
       };
@@ -405,6 +420,10 @@ void bench_search(::benchmark::State& state,
       }
       match_count += std::accumulate(local_match_count.begin(), local_match_count.end(), 0);
       total_count += std::accumulate(local_total_count.begin(), local_total_count.end(), 0);
+      underfilled_query_count += std::accumulate(
+        local_underfilled_query_count.begin(), local_underfilled_query_count.end(), 0);
+      missing_result_count +=
+        std::accumulate(local_missing_result_count.begin(), local_missing_result_count.end(), 0);
 
       out_offset += n_queries;
       batch_offset = (batch_offset + queries_stride) % query_set_size;
@@ -417,6 +436,14 @@ void bench_search(::benchmark::State& state,
     enough under assumption that the filtering is more-or-less uniform.
     */
     state.counters.insert({"Recall", {actual_recall, benchmark::Counter::kAvgThreads}});
+    state.counters.insert(
+      {"UnderfilledQueries",
+       {static_cast<double>(underfilled_query_count) / static_cast<double>(rows),
+        benchmark::Counter::kAvgThreads}});
+    state.counters.insert(
+      {"MissingResultSlots",
+       {static_cast<double>(missing_result_count) / static_cast<double>(rows * k),
+        benchmark::Counter::kAvgThreads}});
   }
 }
 

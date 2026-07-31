@@ -80,6 +80,7 @@ using search_single_cta_favor_kernel_func_t =
        const float,
        const float,
        const std::uint32_t,
+       const float,
        const float);
 
 namespace single_cta_search {

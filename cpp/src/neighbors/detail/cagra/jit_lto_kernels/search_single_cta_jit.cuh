@@ -88,6 +88,7 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   const float favor_penalty_distance           = 0.0f,
   const std::uint32_t favor_penalty_mode_value = 0,
   const float favor_local_gap_multiplier       = 0.0f,
+  const float favor_retention_fraction         = 0.5f,
   const IndexT graph_size                      = 0)  // Original number of bits
 {
   using LOAD_T = device::LOAD_128BIT_T;
@@ -392,7 +393,8 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
             source_indices_ptr,
             favor_bitset,
             favor_penalty[0],
-            favor_cutoff[0]);
+            favor_cutoff[0],
+            static_cast<DistanceT>(favor_retention_fraction));
         } else if (packed_bitset) {
           compute_favor_retention_safe_distance_to_child_nodes_jit<IndexT,
                                                                    DistanceT,
@@ -413,7 +415,8 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
             source_indices_ptr,
             favor_bitset,
             favor_penalty[0],
-            favor_cutoff[0]);
+            favor_cutoff[0],
+            static_cast<DistanceT>(favor_retention_fraction));
         } else {
           compute_favor_retention_safe_distance_to_child_nodes_jit<IndexT,
                                                                    DistanceT,
@@ -432,7 +435,8 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
             source_indices_ptr,
             favor_bitset,
             favor_penalty[0],
-            favor_cutoff[0]);
+            favor_cutoff[0],
+            static_cast<DistanceT>(favor_retention_fraction));
         }
       } else {
         compute_favor_distance_to_child_nodes_jit<IndexT, DistanceT, DataT, SourceIndexT>(
@@ -725,6 +729,7 @@ __device__ void search_kernel_jit(
                             0.0f,
                             0u,
                             0.0f,
+                            0.5f,
                             graph_size);
 }
 
@@ -764,7 +769,8 @@ __device__ void search_favor_kernel_jit(
   const float filtering_rate,
   const float favor_penalty_distance,
   const std::uint32_t favor_penalty_mode_value,
-  const float favor_local_gap_multiplier)
+  const float favor_local_gap_multiplier,
+  const float favor_retention_fraction)
 {
   const auto query_id = blockIdx.y;
   search_core<true,
@@ -803,6 +809,7 @@ __device__ void search_favor_kernel_jit(
                             favor_penalty_distance,
                             favor_penalty_mode_value,
                             favor_local_gap_multiplier,
+                            favor_retention_fraction,
                             graph_size);
 }
 

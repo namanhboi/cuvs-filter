@@ -1,0 +1,5 @@
+selectivity,workload,batch_size,series,mode,source_run,penalty_lambda,retention_fraction,target_recall,value,lower_recall,upper_recall,point_recall,target_method
+0.1,throughput,10000,default,default,current,,,0.9,73877.56195284707,0.91871,0.91871,0.91871,measured_feasible
+0.1,throughput,10000,favor_retention_safe,favor_retention_safe,current,1.0,0.0,0.9,75697.80630352118,0.91037,0.91037,0.91037,measured_feasible
+0.9,throughput,10000,default,default,current,,,0.9,150553.17035556005,0.94515,0.94515,0.94515,measured_feasible
+0.9,throughput,10000,favor_retention_safe,favor_retention_safe,current,1.0,0.0,0.9,159289.4701672326,0.94455,0.94455,0.94455,measured_feasible

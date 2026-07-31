@@ -42,6 +42,22 @@ TEST(CagraFavorPenalty, ReferenceCoefficient)
   EXPECT_FLOAT_EQ(favor_reference_penalty(0.9f, 64, 0.0f), 0.0f);
 }
 
+TEST(CagraFavorPenalty, AutomaticRetentionTracksExpectedPassingOccupancy)
+{
+  using cuvs::neighbors::cagra::detail::favor_automatic_retention_fraction;
+
+  // At least k expected passing entries preserves the established midpoint.
+  EXPECT_FLOAT_EQ(favor_automatic_retention_fraction(0.9f, 128, 10), 0.5f);
+  // At most k/2 expected passing entries saturates at the strict-headroom ceiling.
+  EXPECT_FLOAT_EQ(favor_automatic_retention_fraction(0.99f, 500, 10), 0.9f);
+  EXPECT_FLOAT_EQ(favor_automatic_retention_fraction(0.99f, 256, 10), 0.9f);
+
+  auto const near_half = favor_automatic_retention_fraction(0.99f, 512, 10);
+  EXPECT_GT(near_half, 0.89f);
+  EXPECT_LT(near_half, 0.9f);
+  EXPECT_FLOAT_EQ(favor_automatic_retention_fraction(0.99f, 512, 0), 0.5f);
+}
+
 struct temporary_file {
   std::string name;
   temporary_file()

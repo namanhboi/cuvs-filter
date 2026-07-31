@@ -895,7 +895,11 @@ void select_and_run(
       const auto favor_local_gap_multiplier =
         favor_penalty_coefficient(ps.filtering_rate, ps.itopk_size) * ps.favor_penalty_lambda;
       const auto favor_penalty_mode_value = static_cast<std::uint32_t>(ps.favor_penalty);
-      auto kernel_launcher                = [&]() -> void {
+      const auto favor_retention_fraction =
+        ps.favor_retention_fraction == 0.0f
+          ? favor_automatic_retention_fraction(ps.filtering_rate, ps.itopk_size, topk)
+          : ps.favor_retention_fraction;
+      auto kernel_launcher = [&]() -> void {
         launcher
           ->dispatch<search_single_cta_favor_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>(
             stream,
@@ -931,7 +935,8 @@ void select_and_run(
             ps.filtering_rate,
             ps.favor_delta_d,
             favor_penalty_mode_value,
-            favor_local_gap_multiplier);
+            favor_local_gap_multiplier,
+            favor_retention_fraction);
       };
       cuvs::neighbors::detail::safely_launch_kernel_with_smem_size<
         search_single_cta_favor_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>(

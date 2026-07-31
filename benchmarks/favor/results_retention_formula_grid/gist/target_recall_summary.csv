@@ -1,0 +1,14 @@
+selectivity,workload,batch_size,series,mode,source_run,penalty_lambda,retention_fraction,target_recall,value,lower_recall,upper_recall,point_recall,target_method
+0.5,throughput,10000,default,default,current,,,0.9,30736.563285957174,0.9459,0.9459,0.9459,measured_feasible
+0.5,throughput,10000,favor_retention_safe,favor_retention_safe,current,0.5,0.25,0.9,31387.843542010778,0.9467,0.9467,0.9467,measured_feasible
+0.5,throughput,10000,favor_retention_safe,favor_retention_safe,current,0.5,0.5,0.9,31355.736338703748,0.9466,0.9466,0.9466,measured_feasible
+0.5,throughput,10000,favor_retention_safe,favor_retention_safe,current,0.5,0.75,0.9,31347.344079863004,0.9466,0.9466,0.9466,measured_feasible
+0.5,throughput,10000,favor_retention_safe,favor_retention_safe,current,0.5,0.9,0.9,31388.212694002534,0.9466,0.9466,0.9466,measured_feasible
+0.5,throughput,10000,favor_retention_safe,favor_retention_safe,current,1.0,0.25,0.9,31368.339805302865,0.9468,0.9468,0.9468,measured_feasible
+0.5,throughput,10000,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.9,31349.162593223147,0.947,0.947,0.947,measured_feasible
+0.5,throughput,10000,favor_retention_safe,favor_retention_safe,current,1.0,0.75,0.9,31368.669150038062,0.9468,0.9468,0.9468,measured_feasible
+0.5,throughput,10000,favor_retention_safe,favor_retention_safe,current,1.0,0.9,0.9,31354.927603063552,0.9468,0.9468,0.9468,measured_feasible
+0.5,throughput,10000,favor_retention_safe,favor_retention_safe,current,2.0,0.25,0.9,31399.535479996164,0.9472,0.9472,0.9472,measured_feasible
+0.5,throughput,10000,favor_retention_safe,favor_retention_safe,current,2.0,0.5,0.9,31326.56624655046,0.9467,0.9467,0.9467,measured_feasible
+0.5,throughput,10000,favor_retention_safe,favor_retention_safe,current,2.0,0.75,0.9,31364.564559168513,0.9466,0.9466,0.9466,measured_feasible
+0.5,throughput,10000,favor_retention_safe,favor_retention_safe,current,2.0,0.9,0.9,31320.109078495745,0.9465,0.9465,0.9465,measured_feasible

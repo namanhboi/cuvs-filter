@@ -1,0 +1,5 @@
+selectivity,workload,batch_size,series,mode,source_run,penalty_lambda,retention_fraction,recall,value,itopk,search_width,max_iterations,thread_block_size
+0.5,throughput,10000,default,default,current,,,0.92966,150444.66987692233,256,4,0,0
+0.5,latency,10000,default,default,current,,,0.92966,0.06647040625,256,4,0,0
+0.5,throughput,10000,favor_retention_safe,favor_retention_safe,current,1.0,0.0,0.92823,159781.85180383513,256,4,0,0
+0.5,latency,10000,favor_retention_safe,favor_retention_safe,current,1.0,0.0,0.92823,0.062585859,256,4,0,0

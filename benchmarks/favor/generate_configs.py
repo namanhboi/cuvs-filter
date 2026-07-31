@@ -32,6 +32,9 @@ def main() -> None:
     parser.add_argument("--delta-d-bfs-depth", type=int, default=2)
     parser.add_argument("--penalty-lambdas", type=float, nargs="+", default=(1.0,))
     parser.add_argument(
+        "--retention-fractions", type=float, nargs="+", default=(0.5,)
+    )
+    parser.add_argument(
         "--selectivities", type=int, nargs="+", default=DEFAULT_SELECTIVITIES
     )
     parser.add_argument(
@@ -91,6 +94,8 @@ def main() -> None:
     delta_d_file = args.delta_d_file or f"{args.dataset_name}/{args.graph_file}.delta_d"
     if any(value <= 0 for value in args.penalty_lambdas):
         raise ValueError("penalty lambdas must be positive")
+    if any(not 0 <= value < 1 for value in args.retention_fractions):
+        raise ValueError("retention fractions must be in [0, 1); zero selects automatic retention")
     if any(value < 0 for value in args.max_iterations):
         raise ValueError("max iterations must be nonnegative")
     if any(value < 0 for value in args.thread_block_sizes):
@@ -131,6 +136,11 @@ def main() -> None:
                     )
                     else (1.0,)
                 )
+                retention_fractions = (
+                    args.retention_fractions
+                    if mode == "favor_retention_safe"
+                    else (0.5,)
+                )
                 for itopk, width, max_iterations, thread_block_size in tuning_cells:
                     covered_cta_counts.setdefault(itopk, set())
                     effective_cta_count = max(width, (itopk + 31) // 32)
@@ -142,37 +152,39 @@ def main() -> None:
                         continue
                     covered_cta_counts[itopk].add(effective_cta_count)
                     for penalty_lambda in lambdas:
-                        param = {
-                            "algo": args.algo,
-                            "filter_mode": (
-                                "default" if mode == "default" else "favor"
-                            ),
-                            "itopk": itopk,
-                            "search_width": width,
-                        }
-                        if max_iterations > 0:
-                            param["max_iterations"] = max_iterations
-                        if thread_block_size > 0:
-                            param["thread_block_size"] = thread_block_size
-                        if mode != "default":
-                            if args.favor_delta_d is not None:
-                                param["favor_delta_d"] = args.favor_delta_d
-                            else:
-                                param.update(
-                                    {
-                                        "favor_delta_d_file": delta_d_file,
-                                        "favor_delta_d_alpha": 10,
-                                        "favor_delta_d_beta": args.delta_d_beta,
-                                        "favor_delta_d_bfs_depth": args.delta_d_bfs_depth,
-                                    }
-                                )
-                        if mode == "favor_query_local":
-                            param["favor_penalty_mode"] = "cagra_query_local"
-                            param["favor_penalty_lambda"] = penalty_lambda
-                        elif mode == "favor_retention_safe":
-                            param["favor_penalty_mode"] = "cagra_retention_safe"
-                            param["favor_penalty_lambda"] = penalty_lambda
-                        search_params.append(param)
+                        for retention_fraction in retention_fractions:
+                            param = {
+                                "algo": args.algo,
+                                "filter_mode": (
+                                    "default" if mode == "default" else "favor"
+                                ),
+                                "itopk": itopk,
+                                "search_width": width,
+                            }
+                            if max_iterations > 0:
+                                param["max_iterations"] = max_iterations
+                            if thread_block_size > 0:
+                                param["thread_block_size"] = thread_block_size
+                            if mode != "default":
+                                if args.favor_delta_d is not None:
+                                    param["favor_delta_d"] = args.favor_delta_d
+                                else:
+                                    param.update(
+                                        {
+                                            "favor_delta_d_file": delta_d_file,
+                                            "favor_delta_d_alpha": 10,
+                                            "favor_delta_d_beta": args.delta_d_beta,
+                                            "favor_delta_d_bfs_depth": args.delta_d_bfs_depth,
+                                        }
+                                    )
+                            if mode == "favor_query_local":
+                                param["favor_penalty_mode"] = "cagra_query_local"
+                                param["favor_penalty_lambda"] = penalty_lambda
+                            elif mode == "favor_retention_safe":
+                                param["favor_penalty_mode"] = "cagra_retention_safe"
+                                param["favor_penalty_lambda"] = penalty_lambda
+                                param["favor_retention_fraction"] = retention_fraction
+                            search_params.append(param)
 
             dataset = {
                 "name": f"{args.dataset_name}-s{selectivity:02d}",

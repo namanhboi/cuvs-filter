@@ -82,17 +82,19 @@ favor_retention_cutoff(const DistanceT* __restrict__ sorted_distances, const uin
 }
 
 template <typename DistanceT>
-RAFT_DEVICE_INLINE_FUNCTION DistanceT favor_effective_penalty(const DistanceT raw_distance,
-                                                              const DistanceT query_penalty,
-                                                              const DistanceT retention_cutoff,
-                                                              const bool retention_safe)
+RAFT_DEVICE_INLINE_FUNCTION DistanceT
+favor_effective_penalty(const DistanceT raw_distance,
+                        const DistanceT query_penalty,
+                        const DistanceT retention_cutoff,
+                        const bool retention_safe,
+                        const DistanceT retention_fraction = static_cast<DistanceT>(0.5))
 {
   if (!retention_safe) { return query_penalty; }
   const auto slack =
     retention_cutoff > raw_distance ? retention_cutoff - raw_distance : DistanceT{0};
-  // Keep rejected candidates safely inside the current retention boundary. The midpoint leaves
-  // equal headroom on either side and avoids floating-point ties at the cutoff.
-  const auto retention_cap = static_cast<DistanceT>(0.5) * slack;
+  // Any fraction strictly below one keeps the rejected candidate inside the current retention
+  // boundary. The public default of 0.5 preserves the original midpoint rule.
+  const auto retention_cap = retention_fraction * slack;
   return retention_cap < query_penalty ? retention_cap : query_penalty;
 }
 
@@ -355,6 +357,7 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_child_nodes_jit_impl(
   const DistanceT favor_penalty                    = DistanceT{0},
   const DistanceT favor_retention_cutoff           = raft::upper_bound<DistanceT>(),
   const bool favor_retention_safe                  = false,
+  const DistanceT favor_retention_fraction         = static_cast<DistanceT>(0.5),
   const cuvs::neighbors::detail::bitset_filter_data_t<SourceIndexT> favor_bitset = {})
 {
   constexpr IndexT index_msb_1_mask = utils::gen_index_msb_1_mask<IndexT>::value;
@@ -424,8 +427,8 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_child_nodes_jit_impl(
               PACKED_BITSET ? favor_packed_bitset_test(favor_bitset.bitset_ptr, source_id)
                             : favor_bitset_test(favor_bitset, source_id);
             if (!passes_filter) {
-              final_dist +=
-                favor_effective_penalty(child_dist, favor_penalty, favor_retention_cutoff, true);
+              final_dist += favor_effective_penalty(
+                child_dist, favor_penalty, favor_retention_cutoff, true, favor_retention_fraction);
             }
           }
         } else {
@@ -435,8 +438,11 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_child_nodes_jit_impl(
                                      : source_indices_ptr[child_id];
             if (!cuvs::neighbors::detail::sample_filter<SourceIndexT>(
                   query_id, source_id, filter_payload.sample_filter_data())) {
-              final_dist += favor_effective_penalty(
-                child_dist, favor_penalty, favor_retention_cutoff, favor_retention_safe);
+              final_dist += favor_effective_penalty(child_dist,
+                                                    favor_penalty,
+                                                    favor_retention_cutoff,
+                                                    favor_retention_safe,
+                                                    favor_retention_fraction);
             }
           }
         }
@@ -560,6 +566,7 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_favor_retention_safe_distance_to_child_
   const cuvs::neighbors::detail::bitset_filter_data_t<SourceIndexT> favor_bitset,
   const DistanceT favor_penalty,
   const DistanceT favor_retention_cutoff,
+  const DistanceT favor_retention_fraction   = static_cast<DistanceT>(0.5),
   IndexT* __restrict__ traversed_hashmap_ptr = nullptr,
   const uint32_t traversed_hash_bitlen       = 0,
   int* __restrict__ result_position          = nullptr,
@@ -593,6 +600,7 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_favor_retention_safe_distance_to_child_
                                                              favor_penalty,
                                                              favor_retention_cutoff,
                                                              true,
+                                                             favor_retention_fraction,
                                                              favor_bitset);
 }
 

@@ -288,6 +288,23 @@ TEST_F(CagraFavorSearchTest, RetentionSafeAcceptAllMatchesDefaultSearch)
   EXPECT_EQ(expected.distances, actual.distances);
 }
 
+TEST_F(CagraFavorSearchTest, ExplicitDefaultRetentionFractionPreservesResults)
+{
+  auto filter                              = make_filter(kRows / 2);
+  auto implicit_params                     = params();
+  implicit_params.filter_mode              = cagra::filtering_mode::FAVOR;
+  implicit_params.favor_delta_d            = 100.0f;
+  implicit_params.favor_penalty            = cagra::favor_penalty_mode::CAGRA_RETENTION_SAFE;
+  implicit_params.favor_penalty_lambda     = 1.0f;
+  auto explicit_params                     = implicit_params;
+  explicit_params.favor_retention_fraction = 0.5f;
+
+  auto expected = run(implicit_params, filter);
+  auto actual   = run(explicit_params, filter);
+  EXPECT_EQ(expected.neighbors, actual.neighbors);
+  EXPECT_EQ(expected.distances, actual.distances);
+}
+
 TEST_F(CagraFavorSearchTest, CompactsRejectedRowsFromFinalTopK)
 {
   auto filter                = make_filter(kRows / 2);
@@ -335,6 +352,33 @@ TEST_F(CagraFavorSearchTest, RejectsMissingDeltaAndNonBitsetFilter)
   invalid_lambda.favor_penalty        = cagra::favor_penalty_mode::CAGRA_QUERY_LOCAL;
   invalid_lambda.favor_penalty_lambda = 0.0f;
   EXPECT_ANY_THROW(run(invalid_lambda, filter));
+
+  auto automatic_retention_fraction          = favor_params;
+  automatic_retention_fraction.favor_penalty = cagra::favor_penalty_mode::CAGRA_RETENTION_SAFE;
+  automatic_retention_fraction.favor_retention_fraction = 0.0f;
+  EXPECT_NO_THROW(run(automatic_retention_fraction, filter));
+
+  auto automatic_wrong_mode          = automatic_retention_fraction;
+  automatic_wrong_mode.favor_penalty = cagra::favor_penalty_mode::CAGRA_QUERY_LOCAL;
+  EXPECT_ANY_THROW(run(automatic_wrong_mode, filter));
+
+  auto negative_retention_fraction                     = automatic_retention_fraction;
+  negative_retention_fraction.favor_retention_fraction = -0.1f;
+  EXPECT_ANY_THROW(run(negative_retention_fraction, filter));
+
+  auto one_retention_fraction                     = automatic_retention_fraction;
+  one_retention_fraction.favor_retention_fraction = 1.0f;
+  EXPECT_ANY_THROW(run(one_retention_fraction, filter));
+
+  auto multi_cta_retention_fraction          = favor_params;
+  multi_cta_retention_fraction.algo          = cagra::search_algo::MULTI_CTA;
+  multi_cta_retention_fraction.favor_penalty = cagra::favor_penalty_mode::CAGRA_RETENTION_SAFE;
+  multi_cta_retention_fraction.favor_retention_fraction = 0.75f;
+  EXPECT_ANY_THROW(run(multi_cta_retention_fraction, filter, 1));
+
+  auto multi_cta_automatic_retention = automatic_retention_fraction;
+  multi_cta_automatic_retention.algo = cagra::search_algo::MULTI_CTA;
+  EXPECT_ANY_THROW(run(multi_cta_automatic_retention, filter, 1));
 }
 
 TEST_F(CagraFavorUint8SearchTest, ExplicitDefaultPreservesExistingResults)
@@ -394,8 +438,8 @@ TEST_F(CagraFavorUint8SearchTest, ZeroPenaltyCompactsRejectedRows)
 
 TEST_F(CagraFavorSearchTest, MultiCtaBatchOneAcceptAllMatchesDefault)
 {
-  auto filter                = make_filter(0);
-  auto default_params        = multi_cta_params();
+  auto filter         = make_filter(0);
+  auto default_params = multi_cta_params();
   // Use one CTA so two independent approximate searches have deterministic traversal order.
   // Multi-CTA concurrency and filtering are covered separately below.
   default_params.itopk_size  = 32;
@@ -475,8 +519,8 @@ TEST_F(CagraFavorSearchTest, MultiCtaBatchOneZeroPenaltyCompactsRejectedRows)
 
 TEST_F(CagraFavorUint8SearchTest, MultiCtaBatchOneAcceptAllMatchesDefault)
 {
-  auto filter                = make_filter(0);
-  auto default_params        = multi_cta_params();
+  auto filter         = make_filter(0);
+  auto default_params = multi_cta_params();
   // Use one CTA so two independent approximate searches have deterministic traversal order.
   default_params.itopk_size  = 32;
   auto favor_params          = default_params;

@@ -26,6 +26,7 @@ benchmark_min_time=${FAVOR_BENCHMARK_MIN_TIME:-"0.2s"}
 benchmark_warmup_time=${FAVOR_BENCHMARK_WARMUP_TIME:-"0.1"}
 benchmark_modes=${FAVOR_BENCHMARK_MODES:-"default favor"}
 penalty_lambdas=${FAVOR_PENALTY_LAMBDAS:-"1"}
+retention_fractions=${FAVOR_RETENTION_FRACTIONS:-"0.5"}
 benchmark_repetitions=${FAVOR_BENCHMARK_REPETITIONS:-1}
 bench_bin="${repo_dir}/cpp/build/bench/ann/CUVS_CAGRA_ANN_BENCH"
 build_libcuvs="${repo_dir}/cpp/build/libcuvs.so"
@@ -51,6 +52,7 @@ generate_args=(
   --dtype="${dtype}"
   --delta-d-file="${data_dir}/${dataset_name}/cagra_g32_ig64.index.delta_d"
   --penalty-lambdas ${penalty_lambdas}
+  --retention-fractions ${retention_fractions}
   --selectivities ${selectivities}
   --itopk-values ${itopk_values}
   --search-widths ${search_widths}

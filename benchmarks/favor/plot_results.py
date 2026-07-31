@@ -27,7 +27,9 @@ def load_points(
     path: Path, metric: str, selected_lambdas: set[float] | None = None
 ) -> dict[str, list[dict[str, float]]]:
     payload = json.loads(path.read_text())
-    grouped: dict[tuple[str, float | None, int, int, int, int], list[dict]] = defaultdict(list)
+    grouped: dict[
+        tuple[str, float | None, float | None, int, int, int, int], list[dict]
+    ] = defaultdict(list)
     for row in payload["benchmarks"]:
         if row.get("run_type", "iteration") != "iteration":
             continue
@@ -52,9 +54,17 @@ def load_points(
                 and penalty_lambda not in selected_lambdas
             ):
                 continue
+        retention_fraction = row.get("favor_retention_fraction")
+        if retention_fraction is None:
+            match = re.search(r"favor_retention_fraction=([0-9.eE+-]+)", label)
+            if match:
+                retention_fraction = float(match.group(1))
+        if retention_fraction is not None:
+            retention_fraction = float(retention_fraction)
         key = (
             mode,
             penalty_lambda,
+            retention_fraction,
             int(row["itopk"]),
             int(row["search_width"]),
             int(row.get("max_iterations", 0)),
@@ -66,6 +76,7 @@ def load_points(
     for (
         mode,
         penalty_lambda,
+        retention_fraction,
         itopk,
         width,
         max_iterations,
@@ -73,11 +84,11 @@ def load_points(
     ), repetitions in grouped.items():
         recall = float(np.median([r["Recall"] for r in repetitions]))
         value = float(np.median([r[metric] for r in repetitions]))
-        series = (
-            mode
-            if penalty_lambda is None
-            else f"{mode}:lambda={penalty_lambda:g}"
-        )
+        series = mode
+        if penalty_lambda is not None:
+            series += f":lambda={penalty_lambda:g}"
+        if retention_fraction is not None:
+            series += f":rho={retention_fraction:g}"
         result[series].append(
             {
                 "recall": recall,
@@ -87,6 +98,7 @@ def load_points(
                 "max_iterations": max_iterations,
                 "thread_block_size": thread_block_size,
                 "penalty_lambda": penalty_lambda,
+                "retention_fraction": retention_fraction,
             }
         )
     return result
@@ -249,6 +261,22 @@ def main() -> None:
             "repeat for multiple overlays"
         ),
     )
+    parser.add_argument(
+        "--series-label",
+        action="append",
+        nargs=2,
+        metavar=("KEY", "LABEL"),
+        default=[],
+        help="override a primary or overlay legend label; repeat as needed",
+    )
+    parser.add_argument(
+        "--series-color",
+        action="append",
+        nargs=2,
+        metavar=("KEY", "COLOR"),
+        default=[],
+        help="override a primary or overlay matplotlib color; repeat as needed",
+    )
     args = parser.parse_args()
     overlays = [
         OverlaySeries(key, mode, label, Path(result_dir))
@@ -306,6 +334,19 @@ def main() -> None:
     for overlay in overlays:
         labels[overlay.key] = overlay.label
         colors.setdefault(overlay.key, "#7f7f7f")
+    valid_series_keys = set(labels)
+    for option, values, destination in (
+        ("--series-label", args.series_label, labels),
+        ("--series-color", args.series_color, colors),
+    ):
+        seen = set()
+        for key, value in values:
+            if key in seen:
+                raise ValueError(f"{option} contains duplicate key {key!r}")
+            if key not in valid_series_keys:
+                raise ValueError(f"{option} contains unknown series key {key!r}")
+            destination[key] = value
+            seen.add(key)
     latency_scale = 1_000_000.0 if args.latency_unit == "us" else 1_000.0
     latency_unit_label = "microseconds" if args.latency_unit == "us" else "milliseconds"
     selected_lambdas = (
@@ -397,11 +438,12 @@ def main() -> None:
             set(latency) | (set(throughput) if throughput is not None else set()),
             key=lambda series: (
                 mode_order.get(series.split(":", 1)[0], 10),
-                (
-                    float(series.rsplit("=", 1)[1])
-                    if ":lambda=" in series
-                    else -1.0
-                ),
+                float(re.search(r":lambda=([^:]+)", series).group(1))
+                if ":lambda=" in series
+                else -1.0,
+                float(re.search(r":rho=([^:]+)", series).group(1))
+                if ":rho=" in series
+                else -1.0,
                 series,
             ),
         )
@@ -411,11 +453,24 @@ def main() -> None:
             mode = overlay.mode if overlay is not None else series_key
             source_run = "current" if overlay is None else series_key
             penalty_lambda = (
-                float(series.rsplit("=", 1)[1]) if ":lambda=" in series else None
+                float(re.search(r":lambda=([^:]+)", series).group(1))
+                if ":lambda=" in series
+                else None
+            )
+            retention_fraction = (
+                float(re.search(r":rho=([^:]+)", series).group(1))
+                if ":rho=" in series
+                else None
             )
             series_label = labels[series_key]
             if penalty_lambda is not None:
                 series_label += f" (lambda={penalty_lambda:g})"
+            if retention_fraction is not None:
+                series_label += (
+                    " (rho=auto)"
+                    if retention_fraction == 0.0
+                    else f" (rho={retention_fraction:g})"
+                )
             series_color = colors[series_key]
             series_line_style = line_styles[series_key]
             series_marker = markers[series_key]
@@ -455,6 +510,7 @@ def main() -> None:
                                 "mode": mode,
                                 "source_run": source_run,
                                 "penalty_lambda": penalty_lambda,
+                                "retention_fraction": retention_fraction,
                                 **target,
                             }
                         )
@@ -495,6 +551,7 @@ def main() -> None:
                                 "mode": mode,
                                 "source_run": source_run,
                                 "penalty_lambda": penalty_lambda,
+                                "retention_fraction": retention_fraction,
                                 **target,
                             }
                         )
@@ -596,6 +653,7 @@ def main() -> None:
     with (output_dir / "favor_benchmark_summary.csv").open("w", newline="") as stream:
         writer = csv.DictWriter(
             stream,
+            lineterminator="\n",
             fieldnames=[
                 "selectivity",
                 "workload",
@@ -604,6 +662,7 @@ def main() -> None:
                 "mode",
                 "source_run",
                 "penalty_lambda",
+                "retention_fraction",
                 "recall",
                 "value",
                 "itopk",
@@ -620,6 +679,7 @@ def main() -> None:
         ) as stream:
             writer = csv.DictWriter(
                 stream,
+                lineterminator="\n",
                 fieldnames=[
                     "selectivity",
                     "workload",
@@ -628,6 +688,7 @@ def main() -> None:
                     "mode",
                     "source_run",
                     "penalty_lambda",
+                    "retention_fraction",
                     "target_recall",
                     "value",
                     "lower_recall",
