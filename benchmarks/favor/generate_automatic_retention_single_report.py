@@ -218,7 +218,7 @@ def render_report(
             "** Complete Pareto figures",
             "",
             "Each figure contains a throughput panel (QPS versus recall) and a batch-10 latency",
-            "panel (latency versus recall) for all three methods.",
+            "panel (latency versus recall) for all three methods.  Both y-axes begin at zero.",
             "",
         ]
     )

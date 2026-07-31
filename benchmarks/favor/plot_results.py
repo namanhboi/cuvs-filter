@@ -240,7 +240,7 @@ def main() -> None:
     parser.add_argument(
         "--zero-y",
         action="store_true",
-        help="start every rendered y-axis at zero",
+        help="deprecated compatibility flag; every rendered y-axis starts at zero",
     )
     parser.add_argument(
         "--target-recall",
@@ -628,8 +628,7 @@ def main() -> None:
                     linewidth=1,
                     alpha=0.7,
                 )
-            if args.zero_y:
-                axis.set_ylim(bottom=0)
+            axis.set_ylim(bottom=0)
             axis.grid(True, alpha=0.3)
             axis.legend()
         if args.cta_mode:
