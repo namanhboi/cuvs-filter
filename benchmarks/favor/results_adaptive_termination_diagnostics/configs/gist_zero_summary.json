@@ -1,0 +1,45 @@
+{
+  "dataset": {
+    "name": "gist-s01-diagnostic-zero",
+    "base_file": "gist-960-euclidean/base.fbin",
+    "query_file": "gist-960-euclidean/query_10000.fbin",
+    "groundtruth_neighbors_file": "gist-960-euclidean/favor/groundtruth_s01.ibin",
+    "filter_bitset_file": "gist-960-euclidean/favor/filter_s01.bin",
+    "distance": "euclidean",
+    "dtype": "float"
+  },
+  "search_basic_param": {
+    "batch_size": 10000,
+    "k": 10
+  },
+  "index": [
+    {
+      "name": "cagra-g32-ig64",
+      "algo": "cuvs_cagra",
+      "file": "gist-960-euclidean/cagra_g32_ig64.index",
+      "build_param": {
+        "graph_build_algo": "NN_DESCENT",
+        "graph_degree": 32,
+        "intermediate_graph_degree": 64
+      },
+      "search_params": [
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "itopk": 512,
+          "search_width": 4,
+          "max_queries": 2048,
+          "filtering_rate": 0.99,
+          "favor_diagnostics_output": "benchmarks/favor/results_adaptive_termination_diagnostics/gist/zero_summary",
+          "favor_diagnostics_groundtruth": "/users/namanh/cuvs-filter/datasets/gist-960-euclidean/favor/groundtruth_s01.ibin",
+          "favor_diagnostics_dataset": "gist",
+          "favor_diagnostics_variant": "zero",
+          "favor_penalty_mode": "cagra_retention_safe",
+          "favor_penalty_lambda": 1.0,
+          "favor_retention_fraction": 0.0,
+          "favor_delta_d": 0.0
+        }
+      ]
+    }
+  ]
+}

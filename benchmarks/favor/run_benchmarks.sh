@@ -28,6 +28,8 @@ benchmark_modes=${FAVOR_BENCHMARK_MODES:-"default favor"}
 penalty_lambdas=${FAVOR_PENALTY_LAMBDAS:-"1"}
 retention_fractions=${FAVOR_RETENTION_FRACTIONS:-"0.5"}
 benchmark_repetitions=${FAVOR_BENCHMARK_REPETITIONS:-1}
+max_queries=${FAVOR_MAX_QUERIES:-0}
+adaptive_termination=${FAVOR_ADAPTIVE_TERMINATION:-0}
 bench_bin="${repo_dir}/cpp/build/bench/ann/CUVS_CAGRA_ANN_BENCH"
 build_libcuvs="${repo_dir}/cpp/build/libcuvs.so"
 config_dir="${result_dir}/configs"
@@ -35,6 +37,10 @@ mkdir -p "${config_dir}" "${result_dir}/raw"
 
 if ! [[ "${benchmark_repetitions}" =~ ^[1-9][0-9]*$ ]]; then
   echo "FAVOR_BENCHMARK_REPETITIONS must be a positive integer." >&2
+  exit 1
+fi
+if [[ "${adaptive_termination}" != 0 && "${adaptive_termination}" != 1 ]]; then
+  echo "FAVOR_ADAPTIVE_TERMINATION must be 0 or 1." >&2
   exit 1
 fi
 
@@ -59,6 +65,7 @@ generate_args=(
   --max-iterations ${max_iterations}
   --thread-block-sizes ${thread_block_sizes}
   --batch-sizes ${batch_sizes}
+  --max-queries="${max_queries}"
   --algo="${search_algo}"
   --modes ${benchmark_modes}
 )
@@ -111,7 +118,9 @@ for selectivity_value in ${selectivities}; do
       continue
     fi
     set +e
-    env LD_PRELOAD="${build_libcuvs}${LD_PRELOAD:+:${LD_PRELOAD}}" "${bench_bin}" \
+    env LD_PRELOAD="${build_libcuvs}${LD_PRELOAD:+:${LD_PRELOAD}}" \
+      CUVS_FAVOR_EXPERIMENTAL_ADAPTIVE_TERMINATION="${adaptive_termination}" \
+      "${bench_bin}" \
       --search \
       --mode="${mode}" \
       --threads=1 \

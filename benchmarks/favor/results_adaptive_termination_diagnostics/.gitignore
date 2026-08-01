@@ -1,0 +1,5 @@
+**/candidate_trace.bin
+**/candidate_trace.bin.zst
+**/iteration_trace.bin
+**/iteration_trace.bin.zst
+**/bench.log

@@ -1,0 +1,36 @@
+{
+  "dataset": {
+    "name": "msturing-1M-s01",
+    "base_file": "msturing-1M/base.fbin",
+    "query_file": "msturing-1M/query.fbin",
+    "groundtruth_neighbors_file": "msturing-1M/favor/groundtruth_s01.ibin",
+    "filter_bitset_file": "msturing-1M/favor/filter_s01.bin",
+    "distance": "euclidean",
+    "dtype": "float"
+  },
+  "search_basic_param": {
+    "batch_size": 10000,
+    "k": 10
+  },
+  "index": [
+    {
+      "name": "cagra-g32-ig64",
+      "algo": "cuvs_cagra",
+      "file": "msturing-1M/cagra_g32_ig64.index",
+      "build_param": {
+        "graph_build_algo": "NN_DESCENT",
+        "graph_degree": 32,
+        "intermediate_graph_degree": 64
+      },
+      "search_params": [
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "itopk": 512,
+          "search_width": 1,
+          "max_queries": 2048
+        }
+      ]
+    }
+  ]
+}

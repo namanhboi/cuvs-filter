@@ -7,6 +7,7 @@
 
 #include "../../../core/nvtx.hpp"
 #include "factory.cuh"
+#include "favor_search_diagnostics.hpp"
 #include "sample_filter_utils.cuh"
 #include "search_plan.cuh"
 
@@ -95,7 +96,12 @@ void search_main_core(
       plan->num_seeds > 0
         ? reinterpret_cast<const IndexT*>(plan->dev_seed.data()) + (plan->num_seeds * qid)
         : nullptr;
-    uint32_t* _num_executed_iterations = nullptr;
+    auto* diagnostic_context = favor_search_diagnostics::get_active_context();
+    if (diagnostic_context != nullptr) {
+      RAFT_LOG_INFO("CAGRA FAVOR diagnostic context attached for %u queries", n_queries);
+    }
+    uint32_t* _num_executed_iterations =
+      reinterpret_cast<uint32_t*>(diagnostic_context);
 
     (*plan)(res,
             graph,

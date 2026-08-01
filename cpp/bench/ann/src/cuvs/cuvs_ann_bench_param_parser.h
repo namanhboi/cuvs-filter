@@ -475,9 +475,14 @@ template <typename T, typename IdxT>
 void parse_search_param(const nlohmann::json& conf,
                         typename cuvs::bench::cuvs_cagra<T, IdxT>::search_param& param)
 {
+  if (conf.contains("max_queries")) { param.p.max_queries = conf.at("max_queries"); }
   if (conf.contains("itopk")) { param.p.itopk_size = conf.at("itopk"); }
   if (conf.contains("search_width")) { param.p.search_width = conf.at("search_width"); }
   if (conf.contains("max_iterations")) { param.p.max_iterations = conf.at("max_iterations"); }
+  if (conf.contains("hashmap_max_fill_rate")) {
+    param.p.hashmap_max_fill_rate = conf.at("hashmap_max_fill_rate");
+  }
+  if (conf.contains("filtering_rate")) { param.p.filtering_rate = conf.at("filtering_rate"); }
   if (conf.contains("filter_mode")) {
     std::string mode = conf.at("filter_mode");
     if (mode == "default") {
@@ -518,6 +523,18 @@ void parse_search_param(const nlohmann::json& conf,
   }
   if (conf.contains("favor_delta_d_bfs_depth")) {
     param.favor_delta_d_params.bfs_depth = conf.at("favor_delta_d_bfs_depth");
+  }
+  if (conf.contains("favor_diagnostics_output")) {
+    param.favor_diagnostics.output_directory =
+      conf.at("favor_diagnostics_output").get<std::string>();
+    param.favor_diagnostics.ground_truth_file =
+      conf.value("favor_diagnostics_groundtruth", std::string{});
+    param.favor_diagnostics.selected_queries_file =
+      conf.value("favor_diagnostics_selected_queries", std::string{});
+    param.favor_diagnostics.dataset = conf.value("favor_diagnostics_dataset", std::string{});
+    param.favor_diagnostics.variant = conf.value("favor_diagnostics_variant", std::string{});
+    param.favor_diagnostics.max_trace_iterations =
+      conf.value("favor_diagnostics_max_trace_iterations", 0u);
   }
   if (conf.contains("persistent")) { param.p.persistent = conf.at("persistent"); }
   if (conf.contains("persistent_lifetime")) {

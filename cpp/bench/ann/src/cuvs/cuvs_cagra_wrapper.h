@@ -8,6 +8,7 @@
 #include "../common/ann_types.hpp"
 #include "../common/cuda_huge_page_resource.hpp"
 #include "cuvs_ann_bench_utils.h"
+#include "favor_search_diagnostic_session.h"
 #include <rmm/mr/pinned_host_memory_resource.hpp>
 
 #include <cuvs/distance/distance.hpp>
@@ -82,6 +83,7 @@ class cuvs_cagra : public algo<T>, public algo_gpu {
     cuvs::neighbors::cagra::search_params p;
     std::optional<std::string> favor_delta_d_file;
     cuvs::neighbors::cagra::favor_delta_d_params favor_delta_d_params;
+    detail::favor_diagnostic_config favor_diagnostics;
     float refine_ratio;
     AllocatorType graph_mem   = AllocatorType::kDevice;
     AllocatorType dataset_mem = AllocatorType::kDevice;
@@ -191,6 +193,7 @@ class cuvs_cagra : public algo<T>, public algo_gpu {
 
   std::shared_ptr<rmm::device_uvector<uint32_t>> filter_bitset_;
   std::shared_ptr<cuvs::neighbors::filtering::base_filter> filter_;
+  std::shared_ptr<detail::favor_diagnostic_session> favor_diagnostic_session_;
   std::vector<std::shared_ptr<cuvs::neighbors::cagra::index<T, IdxT>>> sub_indices_;
 
   inline rmm::device_async_resource_ref get_mr(AllocatorType mem_type)
@@ -300,6 +303,16 @@ void cuvs_cagra<T, IdxT>::set_search_param(const search_param_base& param,
   dynamic_batching_conservative_dispatch_ = sp.dynamic_batching_conservative_dispatch;
   search_params_                          = sp.p;
   refine_ratio_                           = sp.refine_ratio;
+  if (sp.favor_diagnostics.enabled()) {
+    RAFT_EXPECTS(search_params_.algo == cuvs::neighbors::cagra::search_algo::SINGLE_CTA,
+                 "FAVOR diagnostics support only SINGLE_CTA");
+    RAFT_EXPECTS(!search_params_.persistent, "FAVOR diagnostics do not support persistent search");
+    RAFT_EXPECTS(!sp.dynamic_batching, "FAVOR diagnostics do not support dynamic batching");
+    favor_diagnostic_session_ =
+      std::make_shared<detail::favor_diagnostic_session>(sp.favor_diagnostics);
+  } else {
+    favor_diagnostic_session_.reset();
+  }
   if (sp.graph_mem != graph_mem_) {
     // Move graph to correct memory space
     graph_mem_ = sp.graph_mem;
@@ -499,8 +512,27 @@ void cuvs_cagra<T, IdxT>::search_base(
   } else {
     if (index_params_.num_dataset_splits <= 1 ||
         index_params_.merge_type == CagraMergeType::kPhysical) {
-      cuvs::neighbors::cagra::search(
-        handle_, search_params_, *index_, queries_view, neighbors_view, distances_view, *filter_);
+      auto run_search = [&]() {
+        cuvs::neighbors::cagra::search(
+          handle_, search_params_, *index_, queries_view, neighbors_view, distances_view, *filter_);
+      };
+      if (favor_diagnostic_session_) {
+        favor_diagnostic_session_->capture(handle_,
+                                            static_cast<std::uint32_t>(batch_size),
+                                            static_cast<std::uint32_t>(k),
+                                            static_cast<std::uint32_t>(index_->graph().extent(1)),
+                                            static_cast<std::uint32_t>(search_params_.search_width),
+                                            static_cast<std::int64_t>(index_->size()),
+                                            static_cast<std::uint32_t>(search_params_.itopk_size),
+                                            search_params_.max_iterations,
+                                            search_params_.filtering_rate,
+                                            search_params_.filter_mode ==
+                                              cuvs::neighbors::cagra::filtering_mode::FAVOR,
+                                            neighbors,
+                                            run_search);
+      } else {
+        run_search();
+      }
     } else {
       if (index_params_.merge_type == CagraMergeType::kLogical) {
         // TODO: index merge must happen outside of search, otherwise what are we benchmarking?

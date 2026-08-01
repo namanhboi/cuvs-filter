@@ -1,0 +1,3 @@
+selectivity,workload,batch_size,series,mode,source_run,penalty_lambda,retention_fraction,target_recall,value,lower_recall,upper_recall,point_recall,target_method
+0.01,latency,10,adaptive,favor_retention_safe,adaptive,,,0.9,0.0223841223,0.933,0.933,0.933,measured_feasible
+0.01,throughput,10000,adaptive,favor_retention_safe,adaptive,,,0.9,5529.576716328998,0.92198,0.92198,0.92198,measured_feasible

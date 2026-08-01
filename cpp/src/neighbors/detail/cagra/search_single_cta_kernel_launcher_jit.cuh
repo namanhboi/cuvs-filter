@@ -13,6 +13,7 @@
 #include "compute_distance.hpp"  // For dataset_descriptor_host
 #include "hashmap.hpp"
 #include "jit_lto_kernels/cagra_jit_launcher_factory.hpp"
+#include "favor_search_diagnostics.hpp"
 #include "jit_lto_kernels/kernel_def.hpp"
 #include "sample_filter_utils.cuh"  // For CagraSampleFilterWithQueryIdOffset
 #include "search_plan.cuh"          // For search_params
@@ -792,6 +793,8 @@ void select_and_run(
   const IndexT* dev_seed_ptr,         // [num_queries, num_seeds]
   uint32_t* num_executed_iterations,  // [num_queries,]
   const search_params& ps,
+  uint32_t favor_adaptive_start_iteration,
+  uint32_t favor_adaptive_prefix_size,
   uint32_t topk,
   uint32_t num_itopk_candidates,
   uint32_t block_size,  //
@@ -853,7 +856,9 @@ void select_and_run(
       ->launch(topk_indices_ptr, topk_distances_ptr, queries_ptr, num_queries, topk);
     return;
   } else {
-    const bool favor = ps.filter_mode == filtering_mode::FAVOR;
+    const bool favor       = ps.filter_mode == filtering_mode::FAVOR;
+    const bool diagnostics = favor_search_diagnostics::get_active_context() != nullptr;
+    if (diagnostics) { RAFT_LOG_INFO("Selecting dedicated SINGLE_CTA FAVOR diagnostic fragment"); }
     std::shared_ptr<AlgorithmLauncher> launcher =
       make_cagra_single_cta_jit_launcher<DataT,
                                          IndexT,
@@ -865,7 +870,8 @@ void select_and_run(
         bitonic_sort_and_merge_multi_warps,
         false /* persistent */,
         make_cagra_sample_filter_udf_fragment<SourceIndexT>(sample_filter),
-        favor);
+        favor,
+        diagnostics);
     if (!launcher) { RAFT_FAIL("Failed to get JIT launcher for CAGRA search kernel"); }
 
     // Get the device descriptor pointer - dev_ptr() initializes it if needed
@@ -881,6 +887,8 @@ void select_and_run(
     const uint32_t search_width_u32              = static_cast<uint32_t>(ps.search_width);
     const uint32_t min_iterations_u32            = static_cast<uint32_t>(ps.min_iterations);
     const uint32_t max_iterations_u32            = static_cast<uint32_t>(ps.max_iterations);
+    const uint32_t favor_adaptive_start_iteration_u32 = favor_adaptive_start_iteration;
+    const uint32_t favor_adaptive_prefix_size_u32     = favor_adaptive_prefix_size;
     const unsigned num_random_samplings_u        = static_cast<unsigned>(ps.num_random_samplings);
 
     dim3 grid(1, num_queries, 1);
@@ -894,7 +902,22 @@ void select_and_run(
     if (favor) {
       const auto favor_local_gap_multiplier =
         favor_penalty_coefficient(ps.filtering_rate, ps.itopk_size) * ps.favor_penalty_lambda;
-      const auto favor_penalty_mode_value = static_cast<std::uint32_t>(ps.favor_penalty);
+      constexpr std::uint32_t favor_retire_rejected_parent_mask = std::uint32_t{1} << 31;
+      auto favor_penalty_mode_value = static_cast<std::uint32_t>(ps.favor_penalty);
+      const auto selectivity        = 1.0f - ps.filtering_rate;
+      const bool retire_rejected_parents =
+        ps.favor_penalty == favor_penalty_mode::CAGRA_RETENTION_SAFE &&
+        ps.favor_retention_fraction == 0.0f &&
+        selectivity * static_cast<float>(ps.itopk_size) < static_cast<float>(topk);
+      if (retire_rejected_parents) {
+        favor_penalty_mode_value |= favor_retire_rejected_parent_mask;
+        RAFT_LOG_DEBUG(
+          "FAVOR sparse automatic retention enables default-CAGRA rejected-parent retirement "
+          "(selectivity=%g, itopk=%lu, k=%u).",
+          selectivity,
+          ps.itopk_size,
+          topk);
+      }
       const auto favor_retention_fraction =
         ps.favor_retention_fraction == 0.0f
           ? favor_automatic_retention_fraction(ps.filtering_rate, ps.itopk_size, topk)
@@ -936,7 +959,9 @@ void select_and_run(
             ps.favor_delta_d,
             favor_penalty_mode_value,
             favor_local_gap_multiplier,
-            favor_retention_fraction);
+            favor_retention_fraction,
+            favor_adaptive_start_iteration_u32,
+            favor_adaptive_prefix_size_u32);
       };
       cuvs::neighbors::detail::safely_launch_kernel_with_smem_size<
         search_single_cta_favor_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>(

@@ -1,0 +1,259 @@
+#+title: CAGRA FAVOR Early-Termination Evaluation and Implementation Plan
+#+date: 2026-08-01
+
+* Objective
+
+Fix the sparse SINGLE_CTA FAVOR failure currently described as a =max_iterations= problem.
+The more precise name is *early termination by a fixed budget*: search reaches its automatically
+derived iteration ceiling while hundreds of useful, unexpanded candidates remain in CAGRA's
+internal top-k buffer.
+
+The target is Recall@10 >= 0.90 at 1% selectivity while preserving a QPS advantage over default
+filtered CAGRA at comparable recall. The solution must retain CAGRA's single fused
+frontier/result buffer, add no passing-result accumulator or HNSW-style second queue, leave
+default CAGRA kernels unchanged, and introduce no required public API parameter.
+
+* Established evidence
+
+All six 1%-selectivity automatic-retention FAVOR captures, covering SIFT-1M, GIST-1M,
+BIGANN-1M/10M, and MSTuring-1M/10M, stopped at =MAX_WITH_UNEXPANDED_FRONTIER=. Exact diagnostic
+hash-full counts were zero. Increasing only the iteration ceiling produced these changes:
+
+| Dataset | Normal recall / iterations | Expanded recall / iterations |
+|-
+| GIST-1M | 0.83008 / 133 | 0.91386 / 256 |
+| MSTuring-1M | 0.72162 / 517 | 0.92541 / 2,048 |
+| MSTuring-10M | 0.69661 / 518 | 0.92553 / 3,584 |
+
+The expanded runs also ended at the cap with an unexpanded frontier. Therefore, merely selecting
+a larger universal cap is not a convergence rule. It proves that more traversal can recover
+recall, but forces every query to perform the worst-case work.
+
+The all-query first-discovery records show that query-local stopping has meaningful potential.
+An oracle that stopped a query after its ninth filtered ground-truth neighbor was first discovered
+would average approximately 143, 1,031, and 1,491 iterations for GIST-1M, MSTuring-1M, and
+MSTuring-10M, versus uniform ceilings of 256, 2,048, and 3,584. Ground truth is unavailable during
+real search, but this quantifies the possible saving from a useful convergence proxy.
+
+The abandoned passing-result accumulator is not present in the active C++ path. Its benchmark
+artifacts remain only as negative evidence: retaining passing nodes already seen improved recall
+by just 0.005--0.014 and did not solve nondiscovery.
+
+* Evaluation of candidate fixes
+
+** A larger fixed budget
+
+This is the positive control. It recovers recall, but it is dataset- and query-insensitive, reduces
+QPS sharply, and makes the per-query visited hash scale with the worst-case iteration count. It
+must not be the supported policy.
+
+** A selectivity-derived fixed budget
+
+A ceiling based on =k / selectivity= is a defensible safety bound because it estimates how many
+samples are needed to encounter passing nodes. It is not a sufficient stopping rule: SIFT and
+MSTuring at the same 1% selectivity require radically different traversal depths. Selectivity may
+size a safety ceiling, but it must not decide when an individual query has converged.
+
+** Passing-distance stagnation windows
+
+Stopping after the best passing results fail to improve for one or more windows is query-local and
+cheap. Its window length, tolerance, and allowed number of stagnant windows are heuristic, and a
+flat interval can occur before a useful bridge reaches a new neighborhood. Retain this only as a
+fallback guard to evaluate if the distance-based FAVOR adaptation is insufficient.
+
+** Direct FAVOR-paper termination
+
+The paper uses separate HNSW candidate and result sets, =C= and =R=, and terminates when both:
+
+#+begin_example
+min penalized_distance(C) > max penalized_distance(R)
+passing_count(R) >= 0.5 * |R|
+#+end_example
+
+Using CAGRA's complete internal top-k buffer as =R= does not work. CAGRA's unexpanded candidate
+set is a subset of that same buffer, so its minimum cannot exceed the buffer maximum while any
+frontier remains. The condition degenerates to frontier exhaustion. The paper's 50% clause also
+does not fit the observed physical buffer: even expanded 1% runs retained only about 30--48
+passing entries on average with =itopk=512, rather than the required 256. It would therefore force
+nearly every query to the safety cap.
+
+The released FAVOR source is not a suitable substitute. It checks =candidate > 0.95 * boundary=
+and more than half of output =k=, rather than the paper's exact distance inequality and half of
+=ef=. Replaying the available CAGRA trace fields shows this relaxed condition can trigger after
+only about 35--51 iterations on selected SIFT/GIST queries, when only roughly five or six of ten
+ground-truth neighbors have been discovered. A direct port risks severe premature termination.
+
+** Recommended: a virtual FAVOR result prefix
+
+Let CAGRA's physical sorted internal buffer be =B= with capacity =T=, and let =U= be its unexpanded
+entries. Define a logical result set =R_m= as the first =m= entries of =B=, leaving =T-m= entries
+as frontier reserve. No storage or traversal queue is added.
+
+For the first feasibility experiment:
+
+#+begin_example
+m = round_up_to_warp(2*k + 1)
+boundary = penalized distance of B[m - 1]
+frontier_best = minimum penalized distance among U
+passing_prefix = number of bitset-passing entries in B[0:m]
+
+favor_converged =
+    B has at least m valid entries
+    AND passing_prefix >= ceil(m / 2)
+    AND frontier_best > boundary
+#+end_example
+
+For =k=10, =m=32= and at least 16 prefix entries must pass. The warp rounding gives more than
+=k= passing entries and lets one warp evaluate the entire prefix. The distance clause means all
+unexpanded candidates competitive with the logical result boundary have been processed. This is
+the paper's termination rule applied to a virtual result set while the rest of CAGRA's existing
+beam plays the role of candidate reserve.
+
+Use the exact strict distance comparison, not rank alone. Integer-vector datasets can contain tied
+distances, for which an unexpanded candidate after rank =m= may still equal the boundary.
+
+The penalty continues to use physical =T= during feasibility testing. This isolates termination
+from penalty tuning. The normalized FAVOR penalty depends only weakly on =ef= at these sizes, but
+whether a later mathematically unified version should use =m= is a separate experiment and must
+not be mixed into the first test.
+
+* Execution policy
+
+Preserve the current automatically derived CAGRA budget as a per-query floor =B0=. This makes the
+first implementation recall-safe relative to current automatic FAVOR: it never terminates a query
+earlier than the existing method.
+
+When =max_iterations= is zero and the search is sparse bitset SINGLE_CTA FAVOR:
+
+1. Run normally through =B0= unless the existing frontier-exhausted condition fires.
+2. At and after =B0=, stop a query when =favor_converged= is true.
+3. Otherwise continue until convergence, frontier exhaustion, or a safety ceiling =Bhard=.
+
+Use a safety ceiling only to bound memory and pathological runtime:
+
+#+begin_example
+L = existing graph-depth allowance
+X = max(ceil(T / search_width), ceil(k / (selectivity * search_width)))
+Bhard = max(B0, L + 4*X)
+#+end_example
+
+The factor four is an engineering guard, not a convergence claim. It covers the deepest observed
+MSTuring-10M recovery point at 1%, while the virtual FAVOR condition decides normal per-query
+termination. Enable extension only when =selectivity*T < k= in the first implementation; at other
+selectivities, retain =Bhard=B0= and current behavior.
+
+An explicitly nonzero user =max_iterations= remains a strict ceiling and retains the current
+fixed-budget behavior during the feasibility phase. Thus users can reproduce the old automatic
+budget by specifying its resolved value, and default filtered CAGRA is completely unaffected.
+
+* Phase 1: diagnostic feasibility, before production code
+
+Extend the compile-time diagnostic fragment only. At each recorded iteration, capture for logical
+prefix sizes 32 and 64:
+
+- number of valid and passing prefix entries;
+- prefix boundary distance;
+- best unexpanded distance and first unexpanded rank;
+- whether the paper-inspired condition is satisfied;
+- first satisfying iteration after =B0=.
+
+Run bounded traces on the three known failures (GIST-1M and MSTuring-1M/10M) and three controls
+(SIFT-1M and BIGANN-1M/10M), all at 1%, =k=10=, =itopk=512=. Use the existing expanded ceiling
+and selected-query machinery; timings remain invalid.
+
+Choose =m= using this decision:
+
+- A control that already has >=0.90 recall should normally satisfy the condition at =B0=.
+- A failing workload should not satisfy it at =B0=, but should satisfy it near the region where
+  cumulative ground-truth discovery crosses 0.90.
+- Prefer =m=32= if both sizes separate controls from failures; it has the lowest GPU overhead.
+- Reject the prefix rule if neither size correlates with discovery progress. Do not tune many
+  arbitrary prefix sizes to the six datasets.
+
+* Phase 2: minimal experimental kernel
+
+Implement the selected condition only in the bitset FAVOR SINGLE_CTA JIT fragment.
+
+- Keep the default kernel and non-FAVOR instantiations compile-time unchanged.
+- Add a FAVOR-specific parent-pickup helper rather than a second post-processing kernel.
+- Use warp 0 to inspect the already sorted prefix. Apply the bitset checks with a warp ballot and
+  =__popc=; for =m=32= this is one bitset lookup per lane and no block-wide reduction.
+- Reuse the existing synchronization surrounding top-k merge and parent pickup. Do not introduce
+  a synchronization after distance computation.
+- Read the prefix boundary from the sorted distance buffer and obtain the first unexpanded
+  candidate while performing the existing pickup scan. Decide termination before setting its MSB.
+- Count against the fixed prefix capacity, not only currently valid entries. If fewer than =m=
+  entries are valid, the condition is false; rejected-parent retirement therefore cannot inflate
+  the passing fraction.
+- Compare penalized distances on both sides, matching FAVOR's traversal ordering.
+- Pass =B0= and the private adaptive-enable bit through internal launch state only. Add no required
+  public search parameter.
+- Record separate stop reasons for virtual-FAVOR convergence, frontier exhaustion, and safety-cap
+  exhaustion.
+
+* Visited-hash and large-batch memory
+
+The hash is sized from =Bhard= before launch, even when most queries stop near =B0=. With filtered
+search, CAGRA uses the non-resetting exact hash, so a 4,000-iteration ceiling and 10,000 internal
+queries can cross a multi-gigabyte power-of-two allocation boundary.
+
+Use the existing =max_queries= chunking mechanism rather than changing hash correctness. Search
+already launches a large external batch in chunks when =max_queries= is smaller than the batch.
+For the feasibility benchmark, test internal chunk sizes 256 and 512 and retain whichever
+saturates the GPU. Batch size remains 10,000 for throughput. Batch 10 latency runs need no
+chunking adjustment. Do not add hash resets, Bloom filters, or lossy visited-state compression in
+this work.
+
+If =max_queries= is left at zero, a later supported implementation may choose an internal FAVOR
+chunk size from the projected per-query hash allocation and available workspace. An explicitly
+configured =max_queries= remains user-controlled.
+
+* Phase 3: validation and benchmark gate
+
+First run one actual, uninstrumented 10,000-query search for each of the two prefix candidates on
+the three failures and controls. Compare:
+
+1. default filtered CAGRA;
+2. current automatic-retention FAVOR at =B0=;
+3. the fixed expanded-budget positive control;
+4. virtual-prefix adaptive FAVOR.
+
+Collect Recall@10, QPS, mean/p50/p90/p99 executed iterations, stop-reason fractions, hard-cap
+fraction, and output-underfill count. For the selected winner, add batch-10 latency measurements.
+
+Acceptance criteria:
+
+- GIST-1M and MSTuring-1M/10M reach Recall@10 >= 0.90;
+- SIFT and BIGANN do not lose more than 0.005 absolute recall from current automatic FAVOR;
+- adaptive FAVOR has higher QPS than default CAGRA at an observed/interpolated recall near 0.90;
+- adaptive FAVOR materially improves QPS over the fixed expanded ceiling;
+- fewer than 10% of queries hit =Bhard=, unless a demonstrated QPS/recall Pareto point still
+  justifies the cap;
+- exact hash-full and output-underfill counts remain zero or at their established negligible level;
+- existing default CAGRA and non-adaptive FAVOR tests pass unchanged.
+
+After the focused gate passes, run the normal SINGLE_CTA Pareto sweep across all six datasets at
+1%, then a small 10% regression sweep to confirm the sparse gate leaves higher selectivities
+unchanged. Do not launch a full 1/10/50/90 matrix before the gate succeeds.
+
+* Failure branches
+
+If the virtual-prefix condition terminates too early, first increase =m= from 32 to 64. If it
+still admits long discovery gaps, require passing top-k distance improvement to be stagnant only
+as an additional condition, not as the primary rule.
+
+If the condition rarely fires and most queries hit =Bhard=, test a passing-boundary variant:
+
+#+begin_example
+at least 2*k passing entries are retained
+AND frontier_best > distance of the (2*k)-th passing entry
+#+end_example
+
+This preserves a result-quality margin but relaxes the paper's 50%-dense-prefix assumption. Treat
+it explicitly as a CAGRA-specific heuristic and validate it with the same gate.
+
+If adaptive stopping is accurate but hash allocation/chunk launches erase the QPS gain, the next
+option is a two-pass hard-query continuation: run all queries to =B0=, compact only unconverged
+query IDs, and rerun those queries with a larger cap. This duplicates work for the hard subset and
+adds a launch, so it is a fallback rather than the first implementation. Preserving complete CTA
+state or adding a second frontier remains out of scope.

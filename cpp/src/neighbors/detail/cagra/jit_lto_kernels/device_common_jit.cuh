@@ -335,7 +335,8 @@ template <bool APPLY_FAVOR,
           int STATIC_RESULT_POSITION      = 1,
           bool RETENTION_SAFE_BITSET_ONLY = false,
           bool PACKED_BITSET              = false,
-          bool DIRECT_SOURCE_ID           = false>
+          bool DIRECT_SOURCE_ID           = false,
+          bool RECORD_HASH_OUTCOME        = false>
 RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_child_nodes_jit_impl(
   IndexT* __restrict__ result_child_indices_ptr,
   DistanceT* __restrict__ result_child_distances_ptr,
@@ -358,7 +359,8 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_child_nodes_jit_impl(
   const DistanceT favor_retention_cutoff           = raft::upper_bound<DistanceT>(),
   const bool favor_retention_safe                  = false,
   const DistanceT favor_retention_fraction         = static_cast<DistanceT>(0.5),
-  const cuvs::neighbors::detail::bitset_filter_data_t<SourceIndexT> favor_bitset = {})
+  const cuvs::neighbors::detail::bitset_filter_data_t<SourceIndexT> favor_bitset = {},
+  std::uint8_t* diagnostic_hash_outcomes = nullptr)
 {
   constexpr IndexT index_msb_1_mask = utils::gen_index_msb_1_mask<IndexT>::value;
   constexpr IndexT invalid_index    = ~static_cast<IndexT>(0);
@@ -366,6 +368,9 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_child_nodes_jit_impl(
   // Read child indices of parents from knn graph and check if the distance computation is
   // necessary.
   for (uint32_t i = threadIdx.x; i < knn_k * search_width; i += blockDim.x) {
+    if constexpr (RECORD_HASH_OUTCOME) {
+      diagnostic_hash_outcomes[i] = 0;
+    }
     const IndexT smem_parent_id = parent_indices[i / knn_k];
     IndexT child_id             = invalid_index;
     if (smem_parent_id != invalid_index) {
@@ -373,12 +378,27 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_child_nodes_jit_impl(
       child_id             = knn_graph[(i % knn_k) + (static_cast<int64_t>(knn_k) * parent_id)];
     }
     if (child_id != invalid_index) {
-      if (hashmap::insert(visited_hashmap_ptr, visited_hash_bitlen, child_id) == 0) {
-        child_id = invalid_index;
-      } else if ((traversed_hashmap_ptr != nullptr) &&
-                 hashmap::search<IndexT, 1>(
-                   traversed_hashmap_ptr, traversed_hash_bitlen, child_id)) {
-        child_id = invalid_index;
+      if constexpr (RECORD_HASH_OUTCOME) {
+        const auto outcome = hashmap::insert_with_outcome(
+          visited_hashmap_ptr, visited_hash_bitlen, child_id);
+        diagnostic_hash_outcomes[i] = static_cast<std::uint8_t>(outcome);
+        if (outcome != hashmap::insert_outcome::inserted) {
+          child_id = invalid_index;
+        } else if ((traversed_hashmap_ptr != nullptr) &&
+                   hashmap::search<IndexT, 1>(
+                     traversed_hashmap_ptr, traversed_hash_bitlen, child_id)) {
+          diagnostic_hash_outcomes[i] =
+            static_cast<std::uint8_t>(hashmap::insert_outcome::duplicate);
+          child_id = invalid_index;
+        }
+      } else {
+        if (hashmap::insert(visited_hashmap_ptr, visited_hash_bitlen, child_id) == 0) {
+          child_id = invalid_index;
+        } else if ((traversed_hashmap_ptr != nullptr) &&
+                   hashmap::search<IndexT, 1>(
+                     traversed_hashmap_ptr, traversed_hash_bitlen, child_id)) {
+          child_id = invalid_index;
+        }
       }
     }
     if (STATIC_RESULT_POSITION) {
@@ -550,7 +570,8 @@ template <typename IndexT,
           typename SourceIndexT,
           int STATIC_RESULT_POSITION = 1,
           bool PACKED_BITSET         = false,
-          bool DIRECT_SOURCE_ID      = false>
+          bool DIRECT_SOURCE_ID      = false,
+          bool RECORD_HASH_OUTCOME   = false>
 RAFT_DEVICE_INLINE_FUNCTION void compute_favor_retention_safe_distance_to_child_nodes_jit(
   IndexT* __restrict__ result_child_indices_ptr,
   DistanceT* __restrict__ result_child_distances_ptr,
@@ -570,7 +591,8 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_favor_retention_safe_distance_to_child_
   IndexT* __restrict__ traversed_hashmap_ptr = nullptr,
   const uint32_t traversed_hash_bitlen       = 0,
   int* __restrict__ result_position          = nullptr,
-  const int max_result_position              = 0)
+  const int max_result_position              = 0,
+  std::uint8_t* diagnostic_hash_outcomes     = nullptr)
 {
   compute_distance_to_child_nodes_jit_impl<true,
                                            IndexT,
@@ -580,7 +602,8 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_favor_retention_safe_distance_to_child_
                                            STATIC_RESULT_POSITION,
                                            true,
                                            PACKED_BITSET,
-                                           DIRECT_SOURCE_ID>(result_child_indices_ptr,
+                                           DIRECT_SOURCE_ID,
+                                           RECORD_HASH_OUTCOME>(result_child_indices_ptr,
                                                              result_child_distances_ptr,
                                                              smem_desc,
                                                              knn_graph,
@@ -601,7 +624,8 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_favor_retention_safe_distance_to_child_
                                                              favor_retention_cutoff,
                                                              true,
                                                              favor_retention_fraction,
-                                                             favor_bitset);
+                                                             favor_bitset,
+                                                             diagnostic_hash_outcomes);
 }
 
 }  // namespace cuvs::neighbors::cagra::detail::device

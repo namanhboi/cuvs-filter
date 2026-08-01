@@ -1,0 +1,123 @@
+#+title: Parsing and Interpreting SINGLE_CTA FAVOR Traces
+
+* Scope
+
+This diagnostic path is bench-only. It does not add a public cuVS API and it does not alter the
+normal CAGRA or FAVOR kernel fragments. A benchmark search with =favor_diagnostics_output= performs
+one untimed diagnostic capture. Later benchmark iterations use the normal fragment, so QPS and
+latency must be taken from an uninstrumented run, not from the capture.
+
+Enable it by adding =favor_diagnostics_output= and =favor_diagnostics_groundtruth= to one cuVS
+Bench search configuration. Remove =favor_diagnostics_output= (or set it to an empty string) to
+disable it. With diagnostics disabled, the normal kernel is instantiated with =DIAGNOSTICS=false=;
+trace scans, counters, buffers, and synchronizations are compile-time absent. Only a negligible
+host-side null check remains when the launcher selects the normal fragment.
+
+The all-query file is =query_summary.csv=. Full iteration and candidate records are bounded to at
+most 48 query IDs listed in =selected_queries.csv=. Binary traces may be stored raw or compressed
+with =zstd=.
+
+* Files
+
+- =manifest.json=: schema and exact run parameters. =timing_valid=false= is intentional.
+- =query_summary.csv=: one row for each query, including recall, stop reason, frontier composition,
+  parent/candidate counts, penalty values, hash configuration, output count, GT-seen mask, and the
+  first iteration in which each of the ten filtered ground-truth IDs entered the retained frontier.
+- =selected_queries.csv=: maps a query ID to its fixed trace slot.
+- =iteration_trace.bin[.zst]=: one fixed 84-byte record per trace slot and possible iteration.
+- =candidate_trace.bin[.zst]=: one fixed 36-byte record per trace slot, iteration, and child slot.
+
+An iteration record describes the frontier *after* the top-k merge. Parent and child fields on that
+row describe the expansion started from that frontier. Therefore a child from row =i= first has a
+chance to appear in the retained frontier on row =i+1=. =survived_next_merge= follows this same
+convention. The final iteration can contain a frontier snapshot without a child expansion.
+
+* Commands
+
+#+begin_src sh
+python benchmarks/favor/favor_trace.py validate TRACE_DIR
+python benchmarks/favor/favor_trace.py summarize TRACE_DIR
+python benchmarks/favor/favor_trace.py inspect-query TRACE_DIR --query-id 123
+python benchmarks/favor/favor_trace.py inspect-query TRACE_DIR --query-id 123 --candidates
+python benchmarks/favor/favor_trace.py compare BASELINE_DIR EXPERIMENT_DIR
+python benchmarks/favor/favor_trace.py export-csv TRACE_DIR --table iteration --output iterations.csv
+python benchmarks/favor/favor_trace.py export-csv TRACE_DIR --table candidate --output candidates.csv
+#+end_src
+
+Select 16 lowest-recall, 16 closest-to-0.90, and 16 highest-recall queries deterministically, while
+round-robin balancing the represented stop reasons:
+
+#+begin_src sh
+python benchmarks/favor/favor_trace.py select-queries SUMMARY_DIR \
+  --target 0.90 --count 16 --output selected_queries.txt
+#+end_src
+
+Compress raw traces after validation. The parser automatically prefers the compressed file:
+
+#+begin_src sh
+zstd -T0 -19 --rm TRACE_DIR/iteration_trace.bin TRACE_DIR/candidate_trace.bin
+#+end_src
+
+* Stop reasons
+
+- =MAX_WITH_UNEXPANDED_FRONTIER=: the iteration budget ended while an MSB-clear candidate remained.
+  This is direct evidence of a budget stop, not frontier exhaustion.
+- =MAX_WITH_EMPTY_FRONTIER=: the iteration budget ended and no unexpanded candidate remained.
+- =FRONTIER_EXHAUSTED=: =pickup_next_parents= found no candidate that could be expanded after the
+  minimum-iteration condition was satisfied.
+- =FILTER_EMPTY_OR_SKIPPED=: reserved for an exact-empty filter fast path.
+- =UNKNOWN=: host-only default-CAGRA summary or an incomplete/corrupt capture.
+
+* Important fields
+
+- =terminal_pass/reject=: passing and rejected entries in the fused retained buffer at the last
+  frontier snapshot.
+- =terminal_unexpanded_pass/reject=: entries still eligible to become parents. Nonzero values at a
+  max-iteration stop indicate early termination by budget.
+- =expanded_*_parents=: whether traversal work was spent expanding passing result candidates or
+  rejected bridge candidates.
+- =candidate_attempts=: graph edges presented by valid parents.
+- =candidate_evaluations=: child slots that survived visited-hash insertion and received a distance.
+- =candidate_duplicate_or_full=: all attempted edges that did not receive a distance. This legacy
+  aggregate also includes invalid graph slots and traversed-hash rejections.
+- =candidate_duplicates=: exact visited/traversed-hash duplicate count from the diagnostic-only
+  insertion helper.
+- =candidate_hash_full=: exact count of insertions that scanned the entire visited hash table
+  without finding the key or an empty slot. A zero value rules out hash capacity exhaustion.
+- Candidate rows use =hash_result= values =INSERTED=, =DUPLICATE=, or =FULL=. Duplicate/full rows
+  retain their parent and fixed child-slot position but have an invalid child ID because CAGRA
+  overwrites rejected child IDs before distance evaluation. =valid= means an edge was attempted;
+  only =INSERTED= rows contain distances and may set =survived_next_merge=.
+- =query_penalty=: CTA-local scalar D. =effective_penalty= is the smaller retention-safe value
+  actually added to one rejected candidate.
+- =gt_seen_mask=: bit =r= means filtered ground-truth rank =r= reached the retained frontier at least
+  once. =gt_first_iteration_r= is =4294967295= if it never did.
+- =output_count=: number of valid returned IDs. Recall loss with ten valid outputs is wrong-neighbor
+  ordering, not result underfilling.
+
+* Interpretation decision tree
+
+1. First check =output_count=. If it is below =k=, diagnose underfilling before ordering.
+2. If the stop is =MAX_WITH_UNEXPANDED_FRONTIER= and expanded budget raises =gt_seen_mask= and
+   recall, the normal budget ends too early.
+3. If zero penalty discovers GT IDs earlier or in more queries than automatic FAVOR, the penalty is
+   suppressing useful bridges or retaining the wrong route.
+4. If GT IDs are seen but absent from output, inspect their candidate =survived_next_merge= fields
+   and the next frontier. This is retained-ordering/output loss, not discovery failure.
+5. If attempts are high, inspect =candidate_hash_full= separately from =candidate_duplicates=.
+   Nonzero full counts support a hash-capacity problem; duplicate growth alone means traversal is
+   revisiting graph neighborhoods and should not be fixed by merely enlarging the table.
+6. If expanded budget adds many evaluated candidates but no GT discovery, the traversed route is
+   unproductive; simply raising =max_iterations= is not a useful fix.
+
+* Worked comparison patterns
+
+Suppose automatic FAVOR stops with an unexpanded rejected frontier, sees four of ten GT IDs, and
+zero-penalty FAVOR sees eight at the same budget. The penalty has changed the local top-k ordering
+before the GT neighborhood is reached. If expanded automatic FAVOR also reaches eight, both the
+penalty ordering and the finite budget matter.
+
+Suppose both variants see all ten GT IDs but automatic FAVOR returns only seven. Inspect the
+candidate rows for the three missing ranks: a zero =survived_next_merge= shows that the fused CAGRA
+frontier/result buffer evicted them. That is different from early termination and calls for a
+retention-ordering change rather than more iterations.

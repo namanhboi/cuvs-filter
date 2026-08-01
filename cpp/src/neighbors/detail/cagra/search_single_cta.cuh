@@ -242,6 +242,8 @@ struct search
                    dev_seed_ptr,
                    num_executed_iterations,
                    *this,
+                   this->favor_adaptive_start_iteration,
+                   this->favor_adaptive_prefix_size,
                    topk,
                    num_itopk_candidates,
                    static_cast<uint32_t>(thread_block_size),

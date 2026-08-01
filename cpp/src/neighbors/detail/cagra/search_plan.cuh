@@ -7,6 +7,7 @@
 
 #include "favor_penalty.cuh"
 #include "hashmap.hpp"
+#include "sample_filter_utils.cuh"
 
 #include <cuvs/neighbors/common.hpp>
 #include <neighbors/detail/cagra/compute_distance-ext.cuh>
@@ -23,11 +24,33 @@
 #include <raft/util/pow2_utils.cuh>
 
 #include <cmath>
+#include <cstdlib>
 #include <optional>
 #include <tuple>
 #include <variant>
 
 namespace cuvs::neighbors::cagra::detail {
+
+/**
+ * Keep the rejected adaptive-termination experiment out of normal CAGRA behavior while retaining
+ * an exact, internal reproduction path for its benchmark and diagnostic artifacts.
+ */
+inline bool favor_adaptive_termination_experiment_enabled() noexcept
+{
+  auto const* value = std::getenv("CUVS_FAVOR_EXPERIMENTAL_ADAPTIVE_TERMINATION");
+  return value != nullptr && value[0] == '1' && value[1] == '\0';
+}
+
+template <typename T>
+struct is_cagra_bitset_sample_filter : std::false_type {};
+
+template <typename BitsetT, typename IndexT>
+struct is_cagra_bitset_sample_filter<
+  cuvs::neighbors::filtering::bitset_filter<BitsetT, IndexT>> : std::true_type {};
+
+template <typename InnerFilterT>
+struct is_cagra_bitset_sample_filter<CagraSampleFilterWithQueryIdOffset<InnerFilterT>>
+  : is_cagra_bitset_sample_filter<InnerFilterT> {};
 
 /**
  * A lightweight version of rmm::device_uvector.
@@ -104,6 +127,9 @@ struct search_plan_impl_base : public search_params {
   int64_t graph_degree;
   uint32_t topk;
   size_t configured_itopk_size;
+  size_t configured_max_iterations;
+  std::uint32_t favor_adaptive_start_iteration = 0;
+  std::uint32_t favor_adaptive_prefix_size     = 0;
   float favor_penalty_distance = 0.0f;
   search_plan_impl_base(
     search_params params, int64_t dim, int64_t dataset_size, int64_t graph_degree, uint32_t topk)
@@ -112,7 +138,8 @@ struct search_plan_impl_base : public search_params {
       dataset_size(dataset_size),
       graph_degree(graph_degree),
       topk(topk),
-      configured_itopk_size(params.itopk_size)
+      configured_itopk_size(params.itopk_size),
+      configured_max_iterations(params.max_iterations)
   {
     if (filter_mode == filtering_mode::FAVOR && algo == search_algo::AUTO) {
       algo = search_algo::SINGLE_CTA;
@@ -181,7 +208,7 @@ struct search_plan_impl : public search_plan_impl_base {
       num_seeds(0),
       dataset_desc(dataset_desc)
   {
-    adjust_search_params();
+    adjust_search_params(is_cagra_bitset_sample_filter<SAMPLE_FILTER_T>::value);
     check_params();
     calculate_favor_penalty();
     calc_hashmap_params(res);
@@ -225,7 +252,7 @@ struct search_plan_impl : public search_plan_impl_base {
     uint32_t topk,
     SAMPLE_FILTER_T sample_filter) {};
 
-  void adjust_search_params()
+  void adjust_search_params(bool bitset_filter)
   {
     uint32_t _max_iterations = max_iterations;
     if (max_iterations == 0) {
@@ -272,6 +299,29 @@ struct search_plan_impl : public search_plan_impl_base {
                      itopk_size,
                      itopk32);
       itopk_size = itopk32;
+    }
+    if (favor_adaptive_termination_experiment_enabled() && bitset_filter &&
+        configured_max_iterations == 0 && algo == search_algo::SINGLE_CTA &&
+        filter_mode == filtering_mode::FAVOR &&
+        favor_penalty == favor_penalty_mode::CAGRA_RETENTION_SAFE &&
+        favor_retention_fraction == 0.0f) {
+      const auto budget = favor_adaptive_budget(filtering_rate,
+                                                itopk_size,
+                                                topk,
+                                                search_width,
+                                                dataset_size,
+                                                graph_degree,
+                                                static_cast<std::uint32_t>(max_iterations));
+      if (budget.prefix_size != 0) {
+        favor_adaptive_start_iteration = budget.start_iteration;
+        favor_adaptive_prefix_size     = budget.prefix_size;
+        max_iterations                 = budget.hard_iteration;
+        RAFT_LOG_DEBUG(
+          "# sparse FAVOR adaptive termination: prefix=%u, start=%u, hard=%u",
+          favor_adaptive_prefix_size,
+          favor_adaptive_start_iteration,
+          static_cast<std::uint32_t>(max_iterations));
+      }
     }
     team_size = dataset_desc.team_size;
   }

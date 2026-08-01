@@ -20,6 +20,8 @@
 namespace cuvs::neighbors::cagra::detail {
 namespace hashmap {
 
+enum class insert_outcome : uint8_t { inserted = 1, duplicate = 2, full = 3 };
+
 RAFT_INLINE_FUNCTION uint32_t get_size(const uint32_t bitlen) { return 1U << bitlen; }
 
 template <class IdxT>
@@ -70,6 +72,37 @@ RAFT_DEVICE_INLINE_FUNCTION uint32_t insert(IdxT* const table,
     index = (index + stride) & bit_mask;
   }
   return 0;
+}
+
+/** Diagnostic-only equivalent of insert() that distinguishes duplicates from a full table. */
+template <class IdxT, unsigned SUPPORT_REMOVE = 0>
+RAFT_DEVICE_INLINE_FUNCTION insert_outcome insert_with_outcome(IdxT* const table,
+                                                               const uint32_t bitlen,
+                                                               const IdxT key)
+{
+  const uint32_t size     = get_size(bitlen);
+  const uint32_t bit_mask = size - 1;
+#ifdef HASHMAP_LINEAR_PROBING
+  IdxT index                = (key ^ (key >> bitlen)) & bit_mask;
+  constexpr uint32_t stride = 1;
+#else
+  uint32_t index        = key & bit_mask;
+  const uint32_t stride = (key >> bitlen) * 2 + 1;
+#endif
+  constexpr IdxT hashval_empty = ~static_cast<IdxT>(0);
+  const IdxT removed_key       = key | utils::gen_index_msb_1_mask<IdxT>::value;
+  for (unsigned i = 0; i < size; ++i) {
+    const IdxT old = atomicCAS(&table[index], hashval_empty, key);
+    if (old == hashval_empty) { return insert_outcome::inserted; }
+    if (old == key) { return insert_outcome::duplicate; }
+    if constexpr (SUPPORT_REMOVE != 0) {
+      const IdxT replaced = atomicCAS(&table[index], removed_key, key);
+      if (replaced == removed_key) { return insert_outcome::inserted; }
+      if (replaced == key) { return insert_outcome::duplicate; }
+    }
+    index = (index + stride) & bit_mask;
+  }
+  return insert_outcome::full;
 }
 
 template <class IdxT, unsigned SUPPORT_REMOVE = 0>

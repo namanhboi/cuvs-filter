@@ -54,7 +54,9 @@ extern "C" __global__ __launch_bounds__(1024, 1) void search_single_cta_favor(
   const float favor_delta_d,
   const std::uint32_t favor_penalty_mode,
   const float favor_local_gap_multiplier,
-  const float favor_retention_fraction)
+  const float favor_retention_fraction,
+  const std::uint32_t favor_adaptive_start_iteration,
+  const std::uint32_t favor_adaptive_prefix_size)
 {
   single_cta_search::search_favor_kernel_jit<k_topk_by_bitonic_sort,
                                              k_bitonic_sort_and_merge_multi_warps,
@@ -91,7 +93,9 @@ extern "C" __global__ __launch_bounds__(1024, 1) void search_single_cta_favor(
                                                              favor_delta_d,
                                                              favor_penalty_mode,
                                                              favor_local_gap_multiplier,
-                                                             favor_retention_fraction);
+                                                             favor_retention_fraction,
+                                                             favor_adaptive_start_iteration,
+                                                             favor_adaptive_prefix_size);
 }
 
 static_assert(

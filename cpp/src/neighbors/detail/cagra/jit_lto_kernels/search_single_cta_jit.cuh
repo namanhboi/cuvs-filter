@@ -33,6 +33,7 @@
 #include "extern_device_functions.cuh"
 // Include shared JIT device functions
 #include "device_common_jit.cuh"
+#include "favor_search_diagnostics.cuh"
 
 namespace cuvs::neighbors::cagra::detail::single_cta_search {
 
@@ -56,7 +57,8 @@ template <bool FAVOR,
           typename DataT,
           typename IndexT,
           typename DistanceT,
-          typename SourceIndexT>
+          typename SourceIndexT,
+          bool DIAGNOSTICS = false>
 RAFT_DEVICE_INLINE_FUNCTION void search_core(
   uintptr_t result_indices_ptr,
   DistanceT* const result_distances_ptr,
@@ -89,13 +91,25 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   const std::uint32_t favor_penalty_mode_value = 0,
   const float favor_local_gap_multiplier       = 0.0f,
   const float favor_retention_fraction         = 0.5f,
-  const IndexT graph_size                      = 0)  // Original number of bits
+  const IndexT graph_size                      = 0,
+  favor_search_diagnostics::context* const diagnostic_context = nullptr,
+  const std::uint32_t favor_adaptive_start_iteration = 0,
+  const std::uint32_t favor_adaptive_prefix_size     = 0)
 {
   using LOAD_T = device::LOAD_128BIT_T;
 
+  // The launcher privately uses the high bit to request the same rejected-parent retirement
+  // performed by default filtered CAGRA. Keep the public penalty-mode enum and the JIT kernel
+  // signature unchanged, and mask the transport bit before interpreting the penalty mode.
+  constexpr std::uint32_t favor_retire_rejected_parent_mask = std::uint32_t{1} << 31;
+  const auto favor_penalty_mode =
+    favor_penalty_mode_value & ~favor_retire_rejected_parent_mask;
+  const bool retire_rejected_parents =
+    !FAVOR || ((favor_penalty_mode_value & favor_retire_rejected_parent_mask) != 0);
+
   cuvs::neighbors::detail::bitset_filter_data_t<SourceIndexT> favor_bitset{};
   if constexpr (FAVOR) {
-    if (favor_penalty_mode_value == 2 && filter_payload.filter_data != nullptr) {
+    if (favor_penalty_mode == 2 && filter_payload.filter_data != nullptr) {
       // The retention-safe path is bitset-only. Hoist its three metadata fields out of the
       // iteration loop so candidate teams do not reload the payload for every graph expansion.
       favor_bitset =
@@ -107,6 +121,37 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   auto to_source_index = [source_indices_ptr](IndexT x) {
     return source_indices_ptr == nullptr ? static_cast<SourceIndexT>(x) : source_indices_ptr[x];
   };
+
+  constexpr IndexT index_msb_1_mask = utils::gen_index_msb_1_mask<IndexT>::value;
+  const IndexT invalid_index        = utils::get_max_value<IndexT>();
+
+  favor_search_diagnostics::query_summary* diagnostic_summary = nullptr;
+  std::int32_t diagnostic_trace_slot                            = -1;
+  const auto diagnostic_query_id = query_id + query_id_offset;
+  if constexpr (DIAGNOSTICS) {
+    if (diagnostic_context != nullptr && diagnostic_query_id < diagnostic_context->num_queries) {
+      diagnostic_summary = diagnostic_context->summaries + diagnostic_query_id;
+      diagnostic_trace_slot = diagnostic_context->trace_slot_by_query == nullptr
+                                ? -1
+                                : diagnostic_context->trace_slot_by_query[diagnostic_query_id];
+      if (threadIdx.x == 0) {
+        *diagnostic_summary = {};
+        diagnostic_summary->schema                  = favor_search_diagnostics::schema_version;
+        diagnostic_summary->query_id                = diagnostic_query_id;
+        diagnostic_summary->resolved_max_iterations = max_iteration;
+        diagnostic_summary->hash_bitlen             = hash_bitlen;
+        diagnostic_summary->small_hash_bitlen       = small_hash_bitlen;
+        diagnostic_summary->small_hash_reset_interval = small_hash_reset_interval;
+        diagnostic_summary->best_unexpanded_distance = raft::upper_bound<float>();
+        diagnostic_summary->worst_retained_distance  = raft::upper_bound<float>();
+        diagnostic_summary->kth_passing_raw_distance = raft::upper_bound<float>();
+        for (std::uint32_t rank = 0; rank < favor_search_diagnostics::ground_truth_k; ++rank) {
+          diagnostic_summary->gt_first_iteration[rank] =
+            favor_search_diagnostics::invalid_iteration;
+        }
+      }
+    }
+  }
 
 #ifdef _CLK_BREAKDOWN
   std::uint64_t clk_init                 = 0;
@@ -167,13 +212,12 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
     terminate_flag[0] = 0;
     topk_ws[0]        = ~0u;
     if constexpr (FAVOR) {
-      favor_penalty[0] = favor_penalty_mode_value == 0
+      favor_penalty[0] = favor_penalty_mode == 0
                            ? static_cast<DistanceT>(favor_penalty_distance)
                            : DistanceT{0};
       favor_cutoff[0]  = raft::upper_bound<DistanceT>();
     }
   }
-
   // Init hashmap
   IndexT* local_visited_hashmap_ptr;
   if (small_hash_bitlen) {
@@ -191,7 +235,7 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   // Get dataset_size directly from base descriptor
   IndexT dataset_size = smem_desc->size;
   if constexpr (FAVOR) {
-    if (favor_penalty_mode_value == 0) {
+    if (favor_penalty_mode == 0) {
       compute_favor_distance_to_random_nodes_jit<IndexT, DistanceT, DataT, SourceIndexT>(
         result_indices_buffer,
         result_distances_buffer,
@@ -279,15 +323,14 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
 
       // topk with bitonic sort
       _CLK_START();
-      if constexpr (!FAVOR) {
-        // Default filtering may invalidate expanded parents between top-k updates.
-        if (*filter_flag != 0) {
-          for (unsigned i = 0; i < search_width; i++) {
-            move_invalid_to_end_of_list(
-              result_indices_buffer, result_distances_buffer, internal_topk);
-          }
-          if (threadIdx.x == 0) { *terminate_flag = 0; }
+      // Default filtering and sparse automatic FAVOR retirement may invalidate expanded parents
+      // between top-k updates. Restore the sorted internal-top-k invariant before merging.
+      if (retire_rejected_parents && *filter_flag != 0) {
+        for (unsigned i = 0; i < search_width; i++) {
+          move_invalid_to_end_of_list(
+            result_indices_buffer, result_distances_buffer, internal_topk);
         }
+        if (threadIdx.x == 0) { *terminate_flag = 0; }
       }
       topk_by_bitonic_sort_and_merge<BITONIC_SORT_AND_MERGE_MULTI_WARPS>(
         result_distances_buffer,
@@ -327,22 +370,141 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
     }
     __syncthreads();
 
+    if constexpr (DIAGNOSTICS) {
+      // Mark which candidates from the previous expansion survived this merge. This deliberately
+      // runs only for the bounded selected-query trace, never for the 10k-query summary path.
+      if (diagnostic_trace_slot >= 0 && iter > 0 &&
+          iter <= diagnostic_context->max_trace_iterations) {
+        const auto candidates_per_iteration = diagnostic_context->candidates_per_iteration;
+        auto* previous = diagnostic_context->candidate_records +
+                         (static_cast<std::uint64_t>(diagnostic_trace_slot) *
+                            diagnostic_context->max_trace_iterations +
+                          (iter - 1)) *
+                           candidates_per_iteration;
+        for (std::uint32_t j = threadIdx.x; j < candidates_per_iteration; j += blockDim.x) {
+          if (!previous[j].valid || previous[j].child_id == 0xffffffffu) { continue; }
+          const auto child = static_cast<IndexT>(previous[j].child_id);
+          for (std::uint32_t i = 0; i < internal_topk; ++i) {
+            if ((result_indices_buffer[i] & ~index_msb_1_mask) == child) {
+              previous[j].survived_next_merge = 1;
+              break;
+            }
+          }
+        }
+      }
+      __syncthreads();
+    }
+
     if constexpr (FAVOR) {
       if (threadIdx.x == 0) {
-        if (iter == 0 && favor_penalty_mode_value != 0) {
+        if (iter == 0 && favor_penalty_mode != 0) {
           favor_penalty[0] =
             device::favor_query_local_penalty(result_distances_buffer,
                                               internal_topk,
                                               static_cast<DistanceT>(favor_penalty_distance),
                                               static_cast<DistanceT>(favor_local_gap_multiplier));
         }
-        if (favor_penalty_mode_value == 2) {
+        if (favor_penalty_mode == 2) {
           favor_cutoff[0] = device::favor_retention_cutoff(result_distances_buffer, internal_topk);
         }
       }
     }
 
-    if (iter + 1 == max_iteration) { break; }
+    if constexpr (DIAGNOSTICS) {
+      __syncthreads();
+      if (threadIdx.x == 0 && diagnostic_summary != nullptr) {
+        std::uint32_t valid = 0, passing = 0, rejected = 0;
+        std::uint32_t unexpanded_passing = 0, unexpanded_rejected = 0;
+        float best_unexpanded = raft::upper_bound<float>();
+        float worst_retained  = -raft::upper_bound<float>();
+        for (std::uint32_t i = 0; i < internal_topk; ++i) {
+          const auto tagged = result_indices_buffer[i];
+          const auto node   = tagged & ~index_msb_1_mask;
+          if (node == (invalid_index & ~index_msb_1_mask)) { continue; }
+          ++valid;
+          const bool pass = sample_filter<SourceIndexT>(query_id + query_id_offset,
+                                                        to_source_index(node),
+                                                        filter_payload.sample_filter_data());
+          passing += pass;
+          rejected += !pass;
+          if ((tagged & index_msb_1_mask) == 0) {
+            unexpanded_passing += pass;
+            unexpanded_rejected += !pass;
+            best_unexpanded = min(best_unexpanded, static_cast<float>(result_distances_buffer[i]));
+          }
+          worst_retained = max(worst_retained, static_cast<float>(result_distances_buffer[i]));
+
+          if (diagnostic_context->ground_truth_ids != nullptr) {
+            const auto source = static_cast<std::uint32_t>(to_source_index(node));
+            const auto* gt = diagnostic_context->ground_truth_ids +
+                             static_cast<std::uint64_t>(diagnostic_query_id) *
+                               favor_search_diagnostics::ground_truth_k;
+            for (std::uint32_t rank = 0; rank < favor_search_diagnostics::ground_truth_k; ++rank) {
+              if (source == gt[rank]) {
+                diagnostic_summary->gt_seen_mask |= (1u << rank);
+                if (diagnostic_summary->gt_first_iteration[rank] ==
+                    favor_search_diagnostics::invalid_iteration) {
+                  diagnostic_summary->gt_first_iteration[rank] = iter;
+                }
+              }
+            }
+          }
+        }
+        diagnostic_summary->terminal_valid             = valid;
+        diagnostic_summary->terminal_pass              = passing;
+        diagnostic_summary->terminal_reject            = rejected;
+        diagnostic_summary->terminal_unexpanded_pass   = unexpanded_passing;
+        diagnostic_summary->terminal_unexpanded_reject = unexpanded_rejected;
+        diagnostic_summary->query_penalty              = static_cast<float>(favor_penalty[0]);
+        diagnostic_summary->terminal_cutoff             = static_cast<float>(favor_cutoff[0]);
+        diagnostic_summary->best_unexpanded_distance    = best_unexpanded;
+        diagnostic_summary->worst_retained_distance     = valid ? worst_retained
+                                                                 : raft::upper_bound<float>();
+
+        if (diagnostic_trace_slot >= 0 && iter < diagnostic_context->max_trace_iterations) {
+          auto* record = diagnostic_context->iteration_records +
+                         static_cast<std::uint64_t>(diagnostic_trace_slot) *
+                           diagnostic_context->max_trace_iterations +
+                         iter;
+          *record                        = {};
+          record->query_id               = diagnostic_query_id;
+          record->iteration              = iter;
+          record->valid                  = valid;
+          record->passing                = passing;
+          record->rejected               = rejected;
+          record->unexpanded_passing     = unexpanded_passing;
+          record->unexpanded_rejected    = unexpanded_rejected;
+          record->penalty                = static_cast<float>(favor_penalty[0]);
+          record->cutoff                 = static_cast<float>(favor_cutoff[0]);
+          record->best_unexpanded_distance = best_unexpanded;
+          record->worst_retained_distance  = diagnostic_summary->worst_retained_distance;
+        }
+      }
+      __syncthreads();
+    }
+
+    if (iter + 1 == max_iteration) {
+      if constexpr (DIAGNOSTICS) {
+        if (threadIdx.x == 0 && diagnostic_summary != nullptr) {
+          const bool has_unexpanded = diagnostic_summary->terminal_unexpanded_pass != 0 ||
+                                      diagnostic_summary->terminal_unexpanded_reject != 0;
+          diagnostic_summary->reason = static_cast<std::uint32_t>(
+            favor_adaptive_prefix_size != 0
+              ? favor_search_diagnostics::stop_reason::adaptive_safety_cap
+              : (has_unexpanded
+                   ? favor_search_diagnostics::stop_reason::max_with_unexpanded_frontier
+                   : favor_search_diagnostics::stop_reason::max_with_empty_frontier));
+          if (diagnostic_trace_slot >= 0 && iter < diagnostic_context->max_trace_iterations) {
+            diagnostic_context
+              ->iteration_records[static_cast<std::uint64_t>(diagnostic_trace_slot) *
+                                    diagnostic_context->max_trace_iterations +
+                                  iter]
+              .stop_reason = diagnostic_summary->reason;
+          }
+        }
+      }
+      break;
+    }
 
     // pick up next parents
     if (threadIdx.x < 32) {
@@ -350,6 +512,79 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
       pickup_next_parents<TOPK_BY_BITONIC_SORT, IndexT>(
         terminate_flag, parent_list_buffer, result_indices_buffer, internal_topk, search_width);
       _CLK_REC(clk_pickup_parents);
+    }
+
+    // Sparse automatic FAVOR uses the first selected parent as the pre-pickup minimum of the
+    // unexpanded frontier. Parent pickup only tags its index MSB; its distance and filter result
+    // are unchanged, so the existing pickup and synchronization can be reused.
+    if constexpr (FAVOR) {
+      if (favor_adaptive_prefix_size != 0 &&
+          iter + 1 >= favor_adaptive_start_iteration && threadIdx.x < 32 &&
+          *terminate_flag == 0) {
+        const auto lane = static_cast<std::uint32_t>(threadIdx.x);
+        std::uint32_t valid_prefix = 0;
+        std::uint32_t passing_prefix = 0;
+        for (std::uint32_t base = 0; base < favor_adaptive_prefix_size; base += 32) {
+          const auto rank = base + lane;
+          bool valid      = false;
+          bool passing    = false;
+          if (rank < favor_adaptive_prefix_size && rank < internal_topk) {
+            const auto pos = TOPK_BY_BITONIC_SORT ? device::swizzling(rank) : rank;
+            const auto node = result_indices_buffer[pos] & ~index_msb_1_mask;
+            valid = node != (invalid_index & ~index_msb_1_mask);
+            if (valid) {
+              passing = device::favor_bitset_test(favor_bitset, to_source_index(node));
+            }
+          }
+          const auto valid_mask = __ballot_sync(0xffffffffu, valid);
+          const auto pass_mask  = __ballot_sync(0xffffffffu, passing);
+          if (lane == 0) {
+            valid_prefix += __popc(valid_mask);
+            passing_prefix += __popc(pass_mask);
+          }
+        }
+        if (lane == 0) {
+          const auto frontier_pos = parent_list_buffer[0];
+          const auto boundary_rank = favor_adaptive_prefix_size - 1;
+          const auto boundary_pos =
+            TOPK_BY_BITONIC_SORT ? device::swizzling(boundary_rank) : boundary_rank;
+          const auto required_passing = (favor_adaptive_prefix_size + 1) / 2;
+          if (frontier_pos != invalid_index && valid_prefix == favor_adaptive_prefix_size &&
+              passing_prefix >= required_passing &&
+              result_distances_buffer[frontier_pos] > result_distances_buffer[boundary_pos]) {
+            *terminate_flag = 2;
+          }
+        }
+      }
+    }
+
+    if constexpr (DIAGNOSTICS) {
+      __syncthreads();
+      if (threadIdx.x == 0 && diagnostic_summary != nullptr) {
+        std::uint32_t selected_pass = 0, selected_reject = 0;
+        if (*terminate_flag != 2) {
+          for (std::uint32_t p = 0; p < search_width; ++p) {
+            if (parent_list_buffer[p] == invalid_index) { continue; }
+            const auto node = result_indices_buffer[parent_list_buffer[p]] & ~index_msb_1_mask;
+            const bool pass = sample_filter<SourceIndexT>(query_id + query_id_offset,
+                                                          to_source_index(node),
+                                                          filter_payload.sample_filter_data());
+            selected_pass += pass;
+            selected_reject += !pass;
+          }
+        }
+        diagnostic_summary->expanded_pass_parents += selected_pass;
+        diagnostic_summary->expanded_reject_parents += selected_reject;
+        if (diagnostic_trace_slot >= 0 && iter < diagnostic_context->max_trace_iterations) {
+          auto& record = diagnostic_context
+                           ->iteration_records[static_cast<std::uint64_t>(diagnostic_trace_slot) *
+                                                 diagnostic_context->max_trace_iterations +
+                                               iter];
+          record.selected_passing_parents  = selected_pass;
+          record.selected_rejected_parents = selected_reject;
+        }
+      }
+      __syncthreads();
     }
 
     // restore small-hash table by putting internal-topk indices in it
@@ -362,13 +597,29 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
     }
     __syncthreads();
 
-    if (*terminate_flag && iter >= min_iteration) { break; }
+    if (*terminate_flag && iter >= min_iteration) {
+      if constexpr (DIAGNOSTICS) {
+        if (threadIdx.x == 0 && diagnostic_summary != nullptr) {
+          diagnostic_summary->reason = static_cast<std::uint32_t>(
+            *terminate_flag == 2 ? favor_search_diagnostics::stop_reason::adaptive_converged
+                                 : favor_search_diagnostics::stop_reason::frontier_exhausted);
+          if (diagnostic_trace_slot >= 0 && iter < diagnostic_context->max_trace_iterations) {
+            diagnostic_context
+              ->iteration_records[static_cast<std::uint64_t>(diagnostic_trace_slot) *
+                                    diagnostic_context->max_trace_iterations +
+                                  iter]
+              .stop_reason = diagnostic_summary->reason;
+          }
+        }
+      }
+      break;
+    }
 
     __syncthreads();
     // compute the norms between child nodes and query node using JIT version
     _CLK_START();
     if constexpr (FAVOR) {
-      if (favor_penalty_mode_value == 2) {
+      if (favor_penalty_mode == 2) {
         const bool packed_bitset = favor_bitset.original_nbits == 0 ||
                                    favor_bitset.original_nbits == sizeof(std::uint32_t) * 8 ||
                                    favor_bitset.original_nbits == favor_bitset.bitset_len;
@@ -379,7 +630,8 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
                                                                    SourceIndexT,
                                                                    1,
                                                                    true,
-                                                                   true>(
+                                                                   true,
+                                                                   DIAGNOSTICS>(
             result_indices_buffer + internal_topk,
             result_distances_buffer + internal_topk,
             smem_desc,
@@ -394,14 +646,21 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
             favor_bitset,
             favor_penalty[0],
             favor_cutoff[0],
-            static_cast<DistanceT>(favor_retention_fraction));
+            static_cast<DistanceT>(favor_retention_fraction),
+            nullptr,
+            0,
+            nullptr,
+            0,
+            reinterpret_cast<std::uint8_t*>(smem_work_ptr));
         } else if (packed_bitset) {
           compute_favor_retention_safe_distance_to_child_nodes_jit<IndexT,
                                                                    DistanceT,
                                                                    DataT,
                                                                    SourceIndexT,
                                                                    1,
-                                                                   true>(
+                                                                   true,
+                                                                   false,
+                                                                   DIAGNOSTICS>(
             result_indices_buffer + internal_topk,
             result_distances_buffer + internal_topk,
             smem_desc,
@@ -416,12 +675,21 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
             favor_bitset,
             favor_penalty[0],
             favor_cutoff[0],
-            static_cast<DistanceT>(favor_retention_fraction));
+            static_cast<DistanceT>(favor_retention_fraction),
+            nullptr,
+            0,
+            nullptr,
+            0,
+            reinterpret_cast<std::uint8_t*>(smem_work_ptr));
         } else {
           compute_favor_retention_safe_distance_to_child_nodes_jit<IndexT,
                                                                    DistanceT,
                                                                    DataT,
-                                                                   SourceIndexT>(
+                                                                   SourceIndexT,
+                                                                   1,
+                                                                   false,
+                                                                   false,
+                                                                   DIAGNOSTICS>(
             result_indices_buffer + internal_topk,
             result_distances_buffer + internal_topk,
             smem_desc,
@@ -436,7 +704,12 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
             favor_bitset,
             favor_penalty[0],
             favor_cutoff[0],
-            static_cast<DistanceT>(favor_retention_fraction));
+            static_cast<DistanceT>(favor_retention_fraction),
+            nullptr,
+            0,
+            nullptr,
+            0,
+            reinterpret_cast<std::uint8_t*>(smem_work_ptr));
         }
       } else {
         compute_favor_distance_to_child_nodes_jit<IndexT, DistanceT, DataT, SourceIndexT>(
@@ -477,8 +750,117 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
     __syncthreads();
     _CLK_REC(clk_compute_distance);
 
-    if constexpr (!FAVOR) {
-      // Default filtering invalidates expanded parents after their children have been scored.
+    if constexpr (DIAGNOSTICS) {
+      if (threadIdx.x == 0 && diagnostic_summary != nullptr) {
+        const auto num_children = search_width * graph_degree;
+        std::uint32_t attempts = 0, evaluations = 0, duplicates = 0, hash_full = 0;
+        std::uint32_t passing = 0, rejected = 0, penalized = 0;
+        for (std::uint32_t p = 0; p < search_width; ++p) {
+          attempts += parent_list_buffer[p] == invalid_index ? 0 : graph_degree;
+        }
+        for (std::uint32_t j = 0; j < num_children; ++j) {
+          const auto hash_result = reinterpret_cast<std::uint8_t*>(smem_work_ptr)[j];
+          duplicates += hash_result == static_cast<std::uint8_t>(hashmap::insert_outcome::duplicate);
+          hash_full += hash_result == static_cast<std::uint8_t>(hashmap::insert_outcome::full);
+          favor_search_diagnostics::candidate_record* candidate = nullptr;
+          if (diagnostic_trace_slot >= 0 && iter < diagnostic_context->max_trace_iterations &&
+              j < diagnostic_context->candidates_per_iteration) {
+            candidate = diagnostic_context->candidate_records +
+                        (static_cast<std::uint64_t>(diagnostic_trace_slot) *
+                           diagnostic_context->max_trace_iterations +
+                         iter) *
+                          diagnostic_context->candidates_per_iteration +
+                        j;
+            *candidate               = {};
+            candidate->query_id      = diagnostic_query_id;
+            candidate->iteration     = iter;
+            candidate->hash_result   = hash_result;
+            candidate->valid         = hash_result != 0;
+            candidate->ground_truth_rank = -1;
+            const auto parent_number = j / graph_degree;
+            if (parent_number < search_width && parent_list_buffer[parent_number] != invalid_index) {
+              candidate->parent_id = static_cast<std::uint32_t>(
+                result_indices_buffer[parent_list_buffer[parent_number]] & ~index_msb_1_mask);
+            }
+          }
+          const auto child = result_indices_buffer[internal_topk + j] & ~index_msb_1_mask;
+          if (child == (invalid_index & ~index_msb_1_mask)) { continue; }
+          ++evaluations;
+          const auto source = to_source_index(child);
+          const bool pass   = sample_filter<SourceIndexT>(query_id + query_id_offset,
+                                                        source,
+                                                        filter_payload.sample_filter_data());
+          passing += pass;
+          rejected += !pass;
+
+          const float final_distance = static_cast<float>(result_distances_buffer[internal_topk + j]);
+          float raw_distance         = final_distance;
+          float effective_penalty    = 0.0f;
+          if (!pass && favor_penalty_mode == 2 && favor_penalty[0] > DistanceT{0} &&
+              final_distance < raft::upper_bound<float>()) {
+            const float penalty = static_cast<float>(favor_penalty[0]);
+            const float cutoff  = static_cast<float>(favor_cutoff[0]);
+            const float rho     = favor_retention_fraction;
+            const float raw_if_full_penalty = final_distance - penalty;
+            if (raw_if_full_penalty < cutoff &&
+                penalty <= rho * (cutoff - raw_if_full_penalty)) {
+              raw_distance      = raw_if_full_penalty;
+              effective_penalty = penalty;
+            } else if (rho < 1.0f) {
+              raw_distance = (final_distance - rho * cutoff) / (1.0f - rho);
+              effective_penalty = final_distance - raw_distance;
+            }
+            penalized += effective_penalty > 0.0f;
+          }
+
+          if (candidate != nullptr) {
+            candidate->child_id          = static_cast<std::uint32_t>(child);
+            candidate->raw_distance      = raw_distance;
+            candidate->effective_penalty = effective_penalty;
+            candidate->final_distance    = final_distance;
+            candidate->passes_filter     = pass;
+            if (diagnostic_context->ground_truth_ids != nullptr) {
+              const auto* gt = diagnostic_context->ground_truth_ids +
+                               static_cast<std::uint64_t>(diagnostic_query_id) *
+                                 favor_search_diagnostics::ground_truth_k;
+              for (std::uint32_t rank = 0; rank < favor_search_diagnostics::ground_truth_k; ++rank) {
+                if (static_cast<std::uint32_t>(source) == gt[rank]) {
+                  candidate->ground_truth_rank = static_cast<std::int16_t>(rank);
+                  break;
+                }
+              }
+            }
+          }
+        }
+        diagnostic_summary->candidate_attempts += attempts;
+        diagnostic_summary->candidate_evaluations += evaluations;
+        diagnostic_summary->candidate_duplicate_or_full += attempts - evaluations;
+        diagnostic_summary->candidate_duplicates += duplicates;
+        diagnostic_summary->candidate_hash_full += hash_full;
+        diagnostic_summary->passing_candidates += passing;
+        diagnostic_summary->rejected_candidates += rejected;
+        diagnostic_summary->penalized_candidates += penalized;
+        if (diagnostic_trace_slot >= 0 && iter < diagnostic_context->max_trace_iterations) {
+          auto& record = diagnostic_context
+                           ->iteration_records[static_cast<std::uint64_t>(diagnostic_trace_slot) *
+                                                 diagnostic_context->max_trace_iterations +
+                                               iter];
+          record.child_attempts          = attempts;
+          record.child_evaluations       = evaluations;
+          record.child_duplicate_or_full = attempts - evaluations;
+          record.child_duplicates       = duplicates;
+          record.child_hash_full        = hash_full;
+          record.child_passing           = passing;
+          record.child_rejected          = rejected;
+        }
+      }
+      __syncthreads();
+    }
+
+    if (retire_rejected_parents) {
+      // This is exactly the default filtered-CAGRA lifecycle: score a selected parent's children,
+      // then retire the parent if it does not pass the filter. Sparse automatic FAVOR reuses it so
+      // expanded rejected nodes do not permanently consume the fused frontier/result buffer.
       if (threadIdx.x == 0) { *filter_flag = 0; }
       __syncthreads();
 
@@ -504,15 +886,12 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   }
 
   // Post process for filtering - use extern sample_filter function
-  constexpr IndexT index_msb_1_mask = utils::gen_index_msb_1_mask<IndexT>::value;
-  const IndexT invalid_index        = utils::get_max_value<IndexT>();
-
   for (unsigned i = threadIdx.x; i < internal_topk + search_width * graph_degree; i += blockDim.x) {
     const auto node_id = result_indices_buffer[i] & ~index_msb_1_mask;
     bool passes_filter = true;
     if (node_id != (invalid_index & ~index_msb_1_mask)) {
       if constexpr (FAVOR) {
-        if (favor_penalty_mode_value == 2) {
+        if (favor_penalty_mode == 2) {
           const auto source_id     = to_source_index(node_id);
           const bool packed_bitset = favor_bitset.original_nbits == 0 ||
                                      favor_bitset.original_nbits == sizeof(std::uint32_t) * 8 ||
@@ -596,6 +975,23 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   }
   __syncthreads();
 
+  if constexpr (DIAGNOSTICS) {
+    if (threadIdx.x == 0 && diagnostic_summary != nullptr) {
+      std::uint32_t output_count = 0;
+      for (std::uint32_t i = 0; i < top_k; ++i) {
+        unsigned ii = TOPK_BY_BITONIC_SORT ? device::swizzling(i) : i;
+        const auto node = result_indices_buffer[ii] & ~index_msb_1_mask;
+        output_count += node != (invalid_index & ~index_msb_1_mask);
+      }
+      diagnostic_summary->output_count = output_count;
+      if (output_count >= top_k) {
+        const auto ii = TOPK_BY_BITONIC_SORT ? device::swizzling(top_k - 1) : top_k - 1;
+        diagnostic_summary->kth_passing_raw_distance =
+          static_cast<float>(result_distances_buffer[ii]);
+      }
+    }
+  }
+
   // NB: The indices pointer is tagged with its element size.
   const uint32_t index_element_tag = result_indices_ptr & 0x3;
   result_indices_ptr ^= index_element_tag;
@@ -626,8 +1022,12 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
     auto source_index = to_source_index(internal_index);
     write_indices(result_indices_ptr, j, source_index);
   }
-  if (threadIdx.x == 0 && num_executed_iterations != nullptr) {
-    num_executed_iterations[query_id] = iter + 1;
+  if (threadIdx.x == 0) {
+    if constexpr (DIAGNOSTICS) {
+      if (diagnostic_summary != nullptr) { diagnostic_summary->iterations = iter + 1; }
+    } else if (num_executed_iterations != nullptr) {
+      num_executed_iterations[query_id] = iter + 1;
+    }
   }
 #ifdef _CLK_BREAKDOWN
   if ((threadIdx.x == 0 || threadIdx.x == blockDim.x - 1) && ((query_id * 3) % gridDim.y < 3)) {
@@ -770,7 +1170,9 @@ __device__ void search_favor_kernel_jit(
   const float favor_penalty_distance,
   const std::uint32_t favor_penalty_mode_value,
   const float favor_local_gap_multiplier,
-  const float favor_retention_fraction)
+  const float favor_retention_fraction,
+  const std::uint32_t favor_adaptive_start_iteration,
+  const std::uint32_t favor_adaptive_prefix_size)
 {
   const auto query_id = blockIdx.y;
   search_core<true,
@@ -810,7 +1212,97 @@ __device__ void search_favor_kernel_jit(
                             favor_penalty_mode_value,
                             favor_local_gap_multiplier,
                             favor_retention_fraction,
-                            graph_size);
+                            graph_size,
+                            nullptr,
+                            favor_adaptive_start_iteration,
+                            favor_adaptive_prefix_size);
+}
+
+/** Diagnostic FAVOR entry used only by the bench-only scoped diagnostic attachment. */
+template <bool TOPK_BY_BITONIC_SORT,
+          bool BITONIC_SORT_AND_MERGE_MULTI_WARPS,
+          typename DataT,
+          typename IndexT,
+          typename DistanceT,
+          typename SourceIndexT>
+__device__ void search_favor_diagnostic_kernel_jit(
+  uintptr_t result_indices_ptr,
+  DistanceT* const result_distances_ptr,
+  const std::uint32_t top_k,
+  const DataT* const queries_ptr,
+  const IndexT* const knn_graph,
+  const std::uint32_t graph_degree,
+  const SourceIndexT* source_indices_ptr,
+  const unsigned num_distilation,
+  const uint64_t rand_xor_mask,
+  const IndexT* seed_ptr,
+  const uint32_t num_seeds,
+  IndexT* const visited_hashmap_ptr,
+  const std::uint32_t max_candidates,
+  const std::uint32_t max_itopk,
+  const std::uint32_t internal_topk,
+  const std::uint32_t search_width,
+  const std::uint32_t min_iteration,
+  const std::uint32_t max_iteration,
+  std::uint32_t* const diagnostic_context_ptr,
+  const std::uint32_t hash_bitlen,
+  const std::uint32_t small_hash_bitlen,
+  const std::uint32_t small_hash_reset_interval,
+  const std::uint32_t query_id_offset,
+  const dataset_descriptor_base_t<DataT, IndexT, DistanceT>* dataset_desc,
+  const IndexT graph_size,
+  cagra_sample_filter<SourceIndexT> filter_payload,
+  const float filtering_rate,
+  const float favor_penalty_distance,
+  const std::uint32_t favor_penalty_mode_value,
+  const float favor_local_gap_multiplier,
+  const float favor_retention_fraction,
+  const std::uint32_t favor_adaptive_start_iteration,
+  const std::uint32_t favor_adaptive_prefix_size)
+{
+  const auto query_id = blockIdx.y;
+  search_core<true,
+              TOPK_BY_BITONIC_SORT,
+              BITONIC_SORT_AND_MERGE_MULTI_WARPS,
+              DataT,
+              IndexT,
+              DistanceT,
+              SourceIndexT,
+              true>(result_indices_ptr,
+                    result_distances_ptr,
+                    top_k,
+                    queries_ptr,
+                    knn_graph,
+                    graph_degree,
+                    source_indices_ptr,
+                    num_distilation,
+                    rand_xor_mask,
+                    seed_ptr,
+                    num_seeds,
+                    visited_hashmap_ptr,
+                    max_candidates,
+                    max_itopk,
+                    internal_topk,
+                    search_width,
+                    min_iteration,
+                    max_iteration,
+                    nullptr,
+                    hash_bitlen,
+                    small_hash_bitlen,
+                    small_hash_reset_interval,
+                    query_id,
+                    query_id_offset,
+                    dataset_desc,
+                    filter_payload,
+                    filtering_rate,
+                    favor_penalty_distance,
+                    favor_penalty_mode_value,
+                    favor_local_gap_multiplier,
+                    favor_retention_fraction,
+                    graph_size,
+                    reinterpret_cast<favor_search_diagnostics::context*>(diagnostic_context_ptr),
+                    favor_adaptive_start_iteration,
+                    favor_adaptive_prefix_size);
 }
 
 // JIT persistent device implementation - called from extern "C" __global__ entry in generated .cu

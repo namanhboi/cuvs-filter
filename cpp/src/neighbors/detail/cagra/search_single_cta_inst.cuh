@@ -25,6 +25,8 @@ namespace cuvs::neighbors::cagra::detail::single_cta_search {
     const uint32_t* dev_seed_ptr,                                                  \
     uint32_t* num_executed_iterations,                                             \
     const search_params& ps,                                                       \
+    uint32_t favor_adaptive_start_iteration,                                      \
+    uint32_t favor_adaptive_prefix_size,                                          \
     uint32_t topk,                                                                 \
     uint32_t num_itopk_candidates,                                                 \
     uint32_t block_size,                                                           \

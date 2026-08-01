@@ -64,6 +64,12 @@ def main() -> None:
         "--batch-sizes", type=int, nargs="+", default=DEFAULT_BATCH_SIZES
     )
     parser.add_argument(
+        "--max-queries",
+        type=int,
+        default=0,
+        help="existing CAGRA internal query-chunk size; zero keeps the library default",
+    )
+    parser.add_argument(
         "--algo", choices=("single_cta", "multi_cta"), default="single_cta"
     )
     parser.add_argument(
@@ -90,6 +96,8 @@ def main() -> None:
     batch_sizes = tuple(dict.fromkeys(args.batch_sizes))
     if not batch_sizes or any(value <= 0 for value in batch_sizes):
         raise ValueError("batch sizes must be positive")
+    if args.max_queries < 0:
+        raise ValueError("max queries must be nonnegative")
     args.output_dir.mkdir(parents=True, exist_ok=True)
     delta_d_file = args.delta_d_file or f"{args.dataset_name}/{args.graph_file}.delta_d"
     if any(value <= 0 for value in args.penalty_lambdas):
@@ -161,6 +169,8 @@ def main() -> None:
                                 "itopk": itopk,
                                 "search_width": width,
                             }
+                            if args.max_queries > 0:
+                                param["max_queries"] = min(args.max_queries, batch_size)
                             if max_iterations > 0:
                                 param["max_iterations"] = max_iterations
                             if thread_block_size > 0:

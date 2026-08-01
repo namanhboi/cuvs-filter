@@ -1,0 +1,19 @@
+{
+  "schema_version": 3,
+  "dataset": "msturing10m",
+  "variant": "expanded",
+  "num_queries": 10000,
+  "topk": 10,
+  "dataset_size": 10000000,
+  "graph_degree": 32,
+  "search_width": 1,
+  "itopk": 512,
+  "configured_max_iterations": 3584,
+  "filtering_rate": 0.99,
+  "trace_slots": 0,
+  "max_trace_iterations": 0,
+  "candidates_per_iteration": 32,
+  "iteration_record_size": 84,
+  "candidate_record_size": 36,
+  "timing_valid": false
+}

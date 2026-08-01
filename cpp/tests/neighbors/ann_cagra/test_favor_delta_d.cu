@@ -58,6 +58,32 @@ TEST(CagraFavorPenalty, AutomaticRetentionTracksExpectedPassingOccupancy)
   EXPECT_FLOAT_EQ(favor_automatic_retention_fraction(0.99f, 512, 0), 0.5f);
 }
 
+TEST(CagraFavorPenalty, SparseAdaptiveTerminationBudget)
+{
+  using cuvs::neighbors::cagra::detail::favor_adaptive_budget;
+  using cuvs::neighbors::cagra::detail::favor_adaptive_prefix_size;
+
+  EXPECT_EQ(favor_adaptive_prefix_size(10), 32);
+  EXPECT_EQ(favor_adaptive_prefix_size(16), 64);
+
+  auto const one_million = favor_adaptive_budget(0.99f, 512, 10, 1, 1'000'000, 32, 517);
+  EXPECT_EQ(one_million.prefix_size, 32);
+  EXPECT_EQ(one_million.start_iteration, 517);
+  EXPECT_EQ(one_million.hard_iteration, 4005);
+
+  auto const ten_million = favor_adaptive_budget(0.99f, 512, 10, 1, 10'000'000, 32, 518);
+  EXPECT_EQ(ten_million.prefix_size, 32);
+  EXPECT_EQ(ten_million.start_iteration, 518);
+  EXPECT_EQ(ten_million.hard_iteration, 4006);
+
+  auto const width_four = favor_adaptive_budget(0.99f, 512, 10, 4, 1'000'000, 32, 133);
+  EXPECT_EQ(width_four.hard_iteration, 1005);
+
+  // Ten percent and a prefix with no remaining frontier reserve are deliberately ineligible.
+  EXPECT_EQ(favor_adaptive_budget(0.90f, 512, 10, 1, 1'000'000, 32, 517).prefix_size, 0);
+  EXPECT_EQ(favor_adaptive_budget(0.99f, 32, 10, 1, 1'000'000, 32, 37).prefix_size, 0);
+}
+
 struct temporary_file {
   std::string name;
   temporary_file()

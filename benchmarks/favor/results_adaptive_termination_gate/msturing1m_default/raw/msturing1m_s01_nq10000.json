@@ -1,0 +1,96 @@
+{
+  "context": {
+    "date": "2026-08-01T05:40:31+00:00",
+    "host_name": "node0.favorcagra.parlayann-pg0.wisc.cloudlab.us",
+    "executable": "cpp/build/bench/ann/CUVS_CAGRA_ANN_BENCH",
+    "num_cpus": 64,
+    "mhz_per_cpu": 2994,
+    "cpu_scaling_enabled": false,
+    "aslr_enabled": true,
+    "caches": [
+      {
+        "type": "Data",
+        "level": 1,
+        "size": 32768,
+        "num_sharing": 2
+      },
+      {
+        "type": "Instruction",
+        "level": 1,
+        "size": 32768,
+        "num_sharing": 2
+      },
+      {
+        "type": "Unified",
+        "level": 2,
+        "size": 524288,
+        "num_sharing": 2
+      },
+      {
+        "type": "Unified",
+        "level": 3,
+        "size": 16777216,
+        "num_sharing": 4
+      }
+    ],
+    "load_avg": [0.749512,1.07861,1.7124],
+    "library_version": "v1.9.5",
+    "library_build_type": "release",
+    "json_schema_version": 1,
+    "command_line": "cpp/build/bench/ann/CUVS_CAGRA_ANN_BENCH --search --mode=throughput --threads=1 --data_prefix=datasets --index_prefix=datasets --benchmark_repetitions=1 --benchmark_min_time=0.2s --benchmark_min_warmup_time=0.1 --benchmark_report_aggregates_only=false --benchmark_out_format=json --benchmark_out=benchmarks/favor/results_adaptive_termination_gate/msturing1m_default/raw/msturing1m_s01_nq10000.json benchmarks/favor/results_adaptive_termination_gate/msturing1m_default/configs/msturing1m_s01_nq10000.json",
+    "dataset": "msturing-1M-s01",
+    "dim": "100",
+    "distance": "euclidean",
+    "gpu_driver_version": "13.0",
+    "gpu_gpuDirectRDMASupported": "1",
+    "gpu_hostNativeAtomicSupported": "0",
+    "gpu_mem_bus_width": "3072",
+    "gpu_mem_freq": "1215000000.000000",
+    "gpu_mem_global_size": "25337004032",
+    "gpu_mem_shared_size": "167936",
+    "gpu_name": "NVIDIA A30",
+    "gpu_pageableMemoryAccess": "0",
+    "gpu_pageableMemoryAccessUsesHostPageTables": "0",
+    "gpu_runtime_version": "13.3",
+    "gpu_sm_count": "56",
+    "gpu_sm_freq": "1440000000.000000",
+    "host_cores_used": "32",
+    "host_pagesize": "4096",
+    "host_processors_sysconf": "64",
+    "host_processors_used": "64",
+    "host_total_ram_size": "134592569344",
+    "host_total_swap_size": "8589930496",
+    "max_k": "10",
+    "max_n_queries": "10000"
+  },
+  "benchmarks": [
+    {
+      "name": "cagra-g32-ig64/process_time/real_time/threads:1",
+      "family_index": 0,
+      "per_family_instance_index": 0,
+      "run_name": "cagra-g32-ig64/process_time/real_time/threads:1",
+      "run_type": "iteration",
+      "repetitions": 1,
+      "repetition_index": 0,
+      "threads": 1,
+      "iterations": 1,
+      "real_time": 2.0365909195970744e+02,
+      "cpu_time": 2.0364016799999973e+02,
+      "time_unit": "ms",
+      "GPU": 2.0363366699218749e-01,
+      "Latency": 2.0366177699999999e-01,
+      "MissingResultSlots": 1.1677999999999999e-01,
+      "Recall": 7.0318999999999998e-01,
+      "UnderfilledQueries": 4.3280000000000002e-01,
+      "end_to_end": 2.0366177699999999e-01,
+      "items_per_second": 4.9101662507551744e+04,
+      "itopk": 5.1200000000000000e+02,
+      "k": 1.0000000000000000e+01,
+      "max_queries": 2.0480000000000000e+03,
+      "n_queries": 1.0000000000000000e+04,
+      "search_width": 1.0000000000000000e+00,
+      "total_queries": 1.0000000000000000e+04,
+      "label": "algo=\"single_cta\"#filter_mode=\"default\""
+    }
+  ]
+}
