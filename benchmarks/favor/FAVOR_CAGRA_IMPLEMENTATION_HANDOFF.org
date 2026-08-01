@@ -1,0 +1,340 @@
+#+title: FAVOR for CAGRA — Implementation and Continuation Handoff
+#+date: 2026-08-01
+#+options: toc:3 num:t
+
+* Read this first
+
+This is the continuation document for a human reviewer or a new Codex session.  The repository is
+=/users/namanh/cuvs-filter= on branch =favor-filtered-search=.  Commit =f574e784= contains the
+latest implementation, diagnostics, matched benchmark artifacts, and the rejected adaptive
+termination experiment.  The branch preserves default CAGRA behavior unless FAVOR is selected.
+
+The current high-level result is:
+
+- FAVOR-style bitset scoring works in both =SINGLE_CTA= and =MULTI_CTA=.
+- Retention-safe FAVOR is the most robust implemented scoring method.  =MULTI_CTA= is the clear
+  success: at batch size one it reaches Recall@10 0.99 across the evaluated matrix and beats
+  default CAGRA at the target in the controlled confirmation.
+- =SINGLE_CTA= is unresolved at sparse 1% selectivity on GIST and MSTuring.  The main cause is an
+  insufficient automatically derived traversal budget, not a full visited hash or primarily a bad
+  delta-d value.
+- A one-pass adaptive termination experiment recovers much of the missing recall but loses too much
+  throughput.  It is disabled by default and must not be presented as the supported solution.
+
+The working tree contains many pre-existing, untracked experimental reports and result directories.
+Do not run =git clean=, =git reset --hard=, or bulk-add untracked files.  Treat them as user data.
+
+* Scope actually implemented
+
+The original =plan.org= is broader than the implementation and is partly stale.  Current FAVOR is:
+
+- bitset-only;
+- supplied one exact selectivity shared by the query batch through =filtering_rate=;
+- implemented for explicit =SINGLE_CTA= and =MULTI_CTA=;
+- unsupported for persistent search, =MULTI_KERNEL=, and arbitrary UDF FAVOR filtering;
+- opt-in through =search_params.filter_mode=, whose default remains =DEFAULT=.
+
+No selectivity estimator or per-query FAVOR runtime-state object was added.
+
+* Current public and supported behavior
+
+** Public API
+
+The main API additions are in =cpp/include/cuvs/neighbors/cagra.hpp=:
+
+- =filtering_mode::{DEFAULT,FAVOR}=;
+- =favor_penalty_mode::{REFERENCE,CAGRA_QUERY_LOCAL,CAGRA_RETENTION_SAFE}=;
+- =search_params.filter_mode=, defaulting to =DEFAULT=;
+- =favor_delta_d=, =favor_penalty=, =favor_penalty_lambda=, and
+  =favor_retention_fraction=;
+- =favor_delta_d_params= and typed =compute_favor_delta_d=, =save_favor_delta_d=, and
+  =load_favor_delta_d= APIs.
+
+The public defaults preserve old searches.  FAVOR validates that delta-d and exact filtering rate
+are available and that the selected algorithm is supported.
+
+** Delta-d
+
+Delta-d is computed after the degree-32 CAGRA graph exists.  A deterministic bounded BFS collects
+candidate neighborhoods, measures the normalized distance gap between ranks =alpha= and =beta=,
+and averages valid roots.  The benchmarked configuration is =alpha=10=, =beta=64=, BFS depth 2.
+
+The versioned 80-byte sidecar is bound to graph metadata, logical dataset contents, distance
+metric, calculation parameters, and fingerprints.  Loading rejects incompatible or corrupt data.
+The CAGRA estimate was compared with the reference FAVOR/HNSW construction and was close enough to
+rule out delta-d calculation as the main BIGANN/MSTuring failure.
+
+Key files:
+
+- =cpp/src/neighbors/detail/cagra/favor_delta_d.cuh=
+- =cpp/src/neighbors/cagra_favor_delta_d.cu=
+- =cpp/tests/neighbors/ann_cagra/test_favor_delta_d.cu=
+
+** Penalty formulas
+
+Let =s= be passing selectivity, =f= be =1-s=, =B= be effective/configured =itopk= as selected by
+the search mode, and =delta_d= be the graph statistic.
+
+#+begin_example
+D_reference = f * (B - s) * delta_d / (2 * s * B)
+#+end_example
+
+Query-local mode derives a robust local distance gap =g_q= from the interquartile span of the
+query's finite initial candidates:
+
+#+begin_example
+D_query = min(D_reference, lambda * g_q)
+#+end_example
+
+Retention-safe mode additionally bounds the penalty for a rejected candidate with raw distance
+=d=.  Let =tau= be the worst finite distance currently retained and =h=max(tau-d,0)=:
+
+#+begin_example
+D_effective = min(D_query, rho * h)
+score = d + D_effective
+#+end_example
+
+Because =rho<1=, the penalty alone cannot move a candidate beyond the current retained boundary.
+The fixed method uses =lambda=1= and =rho=0.5=.
+
+Setting =favor_retention_fraction= to zero selects the automatic SINGLE_CTA rule:
+
+#+begin_example
+E = s * B
+pressure = clamp(2 * (1 - E/k), 0, 1)
+smooth = pressure^2 * (3 - 2*pressure)
+rho = 0.5 + 0.4 * smooth
+#+end_example
+
+Here =k= is requested output count.  The rule remains at 0.5 when expected passing capacity
+=E>=k= and approaches 0.9 under severe shortfall, permitting a stronger demotion while retaining
+strict headroom.
+
+** GPU kernel design
+
+FAVOR has separate JIT kernel fragments.  The bitset check and penalty are fused into random-node
+and child-node distance computation.  Only the lead lane of each distance team maps the source ID,
+checks the packed bitset, adds the penalty, and writes the candidate once.  There is no separate
+penalty kernel, extra global candidate buffer, or post-distance synchronization phase.
+
+Retention-safe hot paths hoist bitset metadata per CTA, use direct packed 32-bit word loads when
+possible, and reuse the read-only path.  Final compaction always removes rejected outputs.
+
+The MSB-expanded marker and invalid sentinel must be normalized consistently during final
+compaction.  This was fixed early because clearing the MSB of only one side caused invalid entries
+to be counted as valid.
+
+For sparse automatic retention, expanded rejected parents are retired after their children are
+evaluated.  This is exactly the parent lifecycle already used by default filtered CAGRA; it prevents
+expanded rejected nodes from permanently occupying the fused frontier/result buffer.
+
+Primary implementation files:
+
+- =cpp/src/neighbors/detail/cagra/search_plan.cuh=
+- =cpp/src/neighbors/detail/cagra/jit_lto_kernels/device_common_jit.cuh=
+- =cpp/src/neighbors/detail/cagra/jit_lto_kernels/search_single_cta_jit.cuh=
+- =cpp/src/neighbors/detail/cagra/jit_lto_kernels/search_multi_cta_jit.cuh=
+- the corresponding FAVOR kernel templates and JIT launchers in the same directory.
+
+** MULTI_CTA traversal
+
+Explicit FAVOR =MULTI_CTA= uses the same selectivity-adjusted breadth as default filtering:
+
+#+begin_example
+adjusted_B = round_up_32(k/s + (B-k)/sqrt(s))
+num_cta_per_query = max(search_width, adjusted_B/32)
+#+end_example
+
+The configured =B= remains the value used in the FAVOR reference penalty.  No additional public
+parameter was introduced for this adjustment.
+
+* Benchmark infrastructure
+
+cuVS-bench was extended to load FAVOR parameters, delta-d sidecars, persistent filter bitsets,
+filtered ground truth, =max_queries= chunking, and diagnostic output settings.
+
+The original filtered-ground-truth procedure was wrong: it filtered an already truncated ordinary
+nearest-neighbor list.  A passing vector outside that short list can be closer than every retained
+passing entry.  The correct procedure applies the bitset to the full dataset and computes the true
+top ten passing vectors for every query.  All current comparisons use this exact filtered ground
+truth and the identical persistent bitset for both methods.
+
+Main scripts:
+
+- =benchmarks/favor/generate_configs.py= — creates matched cuVS-bench configs;
+- =benchmarks/favor/run_benchmarks.sh= — runs latency/throughput and plots results;
+- =benchmarks/favor/plot_results.py= — produces zero-origin QPS/recall and latency/recall figures;
+- =benchmarks/favor/run_retention_safe_multi_confirmation.sh= — controlled MULTI_CTA matrix;
+- =benchmarks/favor/run_automatic_retention_single_full.sh= — automatic SINGLE_CTA matrix;
+- =benchmarks/favor/run_favor_trace_diagnostics.py= and =favor_trace.py= — bounded diagnostics.
+
+One repetition is intentional: earlier checks found low variance.  Do not compare percentages at a
+target unless both Pareto curves bracket it or the report explicitly labels a short extrapolation.
+
+* Datasets and prepared assets
+
+All graphs are =cagra_g32_ig64.index= with graph degree 32 and intermediate degree 64.  Each has a
+=.delta_d= sidecar and exact bitsets/filtered ground truth under its =favor/= directory.
+
+| Dataset | Rows | Dim | Type | Notes |
+|-
+| SIFT-1M | 1M | 128 | float32 | Local dataset |
+| GIST-1M | 1M | 960 | float32 | Only 1,000 unique queries; 10k throughput repeats them |
+| BIGANN-1M | 1M subset | 128 | uint8 | Base file is symlinked; uses subset_size |
+| BIGANN-10M | 10M | 128 | uint8 | Symlinked from big-ann-benchmarks |
+| MSTuring-1M | 1M | 100 | float32 | Cropped base symlink |
+| MSTuring-10M | 10M | 100 | float32 | Cropped base symlink |
+
+Do not copy the external BIGANN/MSTuring bases into the repository.  Existing links point under
+=/users/namanh/big-ann-benchmarks/data=.
+
+* Established performance conclusions
+
+** Static/reference FAVOR
+
+The original static implementation is strongest for rare 1% SINGLE_CTA filters and can reach 0.90
+where default does not.  It is not robust: BIGANN recall collapses at 10%, and beyond 10% its
+SINGLE_CTA throughput is usually neutral or worse.
+
+** Retention-safe FAVOR
+
+Retention-safe scoring fixes the BIGANN 10% collapse and remains close to default in SINGLE_CTA,
+but gives back part of static FAVOR's 1% advantage.
+
+The controlled =MULTI_CTA= confirmation is the strongest positive result.  With batch size one,
+retention-safe FAVOR reaches 0.99 on all six datasets at 1%, 10%, 50%, and 90% and improves target
+QPS.  Reported batch-one QPS is reciprocal latency, not saturated 10k-query throughput.
+
+** Automatic SINGLE_CTA retention
+
+Automatic rho improves sparse recall materially on SIFT and BIGANN.  At 10% and above it normally
+equals the fixed rho=0.5 path because =s*B>=k=.  In the full measured sweep it still misses 0.90 at
+1% on GIST and both MSTuring scales.
+
+** Deep traversal diagnosis
+
+All six automatic-retention 1% diagnostic captures originally stopped at the derived iteration cap
+with unexpanded frontier entries; exact hash-full counts were zero.  Expanded fixed budgets raised:
+
+- GIST from 0.8301 at 133 iterations to 0.9139 at 256;
+- MSTuring-1M from 0.7216 at 517 to 0.9254 at 2,048;
+- MSTuring-10M from 0.6966 at 518 to 0.9255 at 3,584.
+
+Most missing ground-truth neighbors were never discovered, rather than discovered and evicted.
+Zero penalty did not repair the failures.  This is why further penalty-only tuning is unlikely to
+solve sparse SINGLE_CTA by itself.
+
+* Latest adaptive-termination experiment — rejected/default-off
+
+The experiment defines =m=32= for =k=10= and, only after the old automatic budget =B0=, stops when
+all prefix entries are valid, at least 16 pass, and the nearest unexpanded penalized distance is
+worse than the prefix boundary.  A selectivity-derived =Bhard= bounds runtime.
+
+It is GPU-local: warp 0 uses bitset tests, ballots, and population counts during the existing
+parent-pickup phase.  It adds no second queue or buffer.  Diagnostics distinguish convergence from
+the safety cap.
+
+Matched 1% fixed-cell results:
+
+| Dataset | B0 recall / QPS | Adaptive recall / QPS |
+|-
+| GIST-1M | 0.8300 / 15,635 | 0.9220 / 5,530 |
+| MSTuring-1M | 0.7216 / 49,102 | 0.9450 / 9,204 |
+| MSTuring-10M | 0.6966 / 49,148 | 0.8942 / 9,339 |
+
+It fails both performance and MSTuring-10M recall gates.  Although 98.1--99.8% of queries stop by
+the convergence condition instead of =Bhard=, they converge too late.  The large hard ceiling also
+sizes the exact visited hash before launch, penalizing every query.
+
+Normal behavior is unaffected.  Reproduction requires the internal switch:
+
+#+begin_src sh
+CUVS_FAVOR_EXPERIMENTAL_ADAPTIVE_TERMINATION=1  # direct binary
+FAVOR_ADAPTIVE_TERMINATION=1                    # run_benchmarks.sh wrapper
+#+end_src
+
+Do not enable this by default without a new successful gate.
+
+* Reports: which document answers what
+
+- =FAVOR_CAGRA_SINGLE_MULTI_CTA_PERFORMANCE_REPORT_V2.org=: original static SINGLE/MULTI report.
+- =RETENTION_SAFE_FAVOR_SINGLE_MULTI_CTA_REPORT.org=: four-way default/static/retention comparison.
+- =AUTOMATIC_RETENTION_FAVOR_SINGLE_CTA_REPORT.org=: fixed versus automatic rho over the full matrix.
+- =DEEP_TRAVERSAL_DIAGNOSTIC_REPORT.org=: proof that sparse failures are unfinished traversal.
+- =TRACE_PARSING_AND_INTERPRETATION.org=: trace schema and interpretation guide.
+- =FAVOR_EARLY_TERMINATION_PLAN.org=: rationale and feasibility plan.
+- =FAVOR_ADAPTIVE_TERMINATION_SINGLE_CTA_REPORT.org=: latest negative experiment and exact results.
+- =COMMITTED_PERFORMANCE_REPORT.org=: historical committed-static baseline.
+
+Prefer tracked documents with these exact names.  Several similarly named untracked drafts are
+stale and should not be cited without verification.
+
+* Build and validation
+
+Use the existing micromamba =cuvs= environment and all host threads:
+
+#+begin_src sh
+cd /users/namanh/cuvs-filter
+micromamba activate cuvs
+PARALLEL_LEVEL=$(nproc) ./build.sh libcuvs tests bench-ann -n \
+  --limit-tests="NEIGHBORS_ANN_CAGRA_FAVOR_DELTA_D_TEST;NEIGHBORS_ANN_CAGRA_FAVOR_SEARCH_TEST;NEIGHBORS_ANN_CAGRA_FILTER_UDF_TEST" \
+  --limit-bench-ann="CUVS_CAGRA_ANN_BENCH"
+#+end_src
+
+When running local tests, force the just-built library rather than an older installed one:
+
+#+begin_src sh
+LD_PRELOAD=$PWD/cpp/build/libcuvs.so \
+  cpp/build/gtests/NEIGHBORS_ANN_CAGRA_FAVOR_DELTA_D_TEST
+LD_PRELOAD=$PWD/cpp/build/libcuvs.so \
+  cpp/build/gtests/NEIGHBORS_ANN_CAGRA_FAVOR_SEARCH_TEST
+LD_PRELOAD=$PWD/cpp/build/libcuvs.so \
+  cpp/build/gtests/NEIGHBORS_ANN_CAGRA_FILTER_UDF_TEST
+#+end_src
+
+At handoff, these pass 13/13, 21/21, and 24/24.  A teardown-only CUDA
+=context is destroyed= error can occur after cuVS-bench has written a complete result; runners
+validate output completeness before accepting it.
+
+* Recommended continuation
+
+The next high-value work is sparse =SINGLE_CTA=, not MULTI_CTA.
+
+1. Do not continue tuning the one-pass virtual-prefix condition; it is already a clear negative.
+2. Avoid a larger up-front =max_iterations= because it increases the exact visited-hash allocation
+   for every query.
+3. Test a minimal two-pass hard-query continuation: run all queries to =B0=, compact only queries
+   whose frontier remains unfinished/whose valid-result condition is unmet, then rerun that small
+   subset with a larger budget and different deterministic seeds.
+4. First measure the hard-query fraction and duplicate-work cost from existing summaries.  Gate on
+   GIST and MSTuring 1% before any full matrix.
+5. Acceptance remains Recall@10 >=0.90 and higher QPS than default near that range for SINGLE_CTA.
+   If the focused gate fails, stop rather than launching all datasets/selectivities.
+
+Preserving CTA state between passes or implementing separate HNSW-style frontier/result queues is a
+much larger traversal redesign and should not be the first follow-up.
+
+* Commit timeline
+
+| Commit | Meaning |
+|-
+| =0d249575= | Delta-d computation, checked sidecar, and tests |
+| =d29e68c1= | Basic bitset FAVOR SINGLE_CTA kernel and benchmark integration |
+| =183f7aba= | Cross-dataset committed-performance report |
+| =ddf71ac4= | FAVOR MULTI_CTA implementation |
+| =b7f6f1fe= | Query-local and retention-safe consolidation |
+| =79ca9e6c= | Controlled retention-safe MULTI_CTA confirmation |
+| =e0715aab= | Automatic retention for SINGLE_CTA |
+| =6dc54be3= | Report plot axes start at zero |
+| =f574e784= | Deep diagnostics and rejected adaptive termination experiment |
+
+* Workspace safety checklist
+
+- Confirm branch =favor-filtered-search= before editing.
+- Preserve default =filter_mode= and public API compatibility.
+- Keep FAVOR bitset-only unless scope is explicitly expanded.
+- Do not remove or copy external dataset symlinks.
+- Do not stage unrelated untracked benchmark directories.
+- Use exact filtered ground truth, matched configurations, serial GPU runs, and zero-origin plots.
+- Treat instrumented diagnostic timing as invalid.
+- Use one run unless variance is observed; never claim a target speedup from unrelated recall points.
