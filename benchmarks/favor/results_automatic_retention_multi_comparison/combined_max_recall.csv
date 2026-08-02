@@ -1,0 +1,145 @@
+dataset,selectivity,workload,batch_size,series,method,max_recall
+SIFT-1M,0.01,throughput,1,default,Default CAGRA,1.000000
+SIFT-1M,0.01,throughput,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",1.000000
+SIFT-1M,0.01,throughput,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",1.000000
+SIFT-1M,0.01,latency,1,default,Default CAGRA,1.000000
+SIFT-1M,0.01,latency,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",1.000000
+SIFT-1M,0.01,latency,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",1.000000
+SIFT-1M,0.1,throughput,1,default,Default CAGRA,1.000000
+SIFT-1M,0.1,throughput,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",1.000000
+SIFT-1M,0.1,throughput,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",1.000000
+SIFT-1M,0.1,latency,1,default,Default CAGRA,1.000000
+SIFT-1M,0.1,latency,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",1.000000
+SIFT-1M,0.1,latency,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",1.000000
+SIFT-1M,0.5,throughput,1,default,Default CAGRA,0.999738
+SIFT-1M,0.5,throughput,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.999646
+SIFT-1M,0.5,throughput,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.999651
+SIFT-1M,0.5,latency,1,default,Default CAGRA,0.999738
+SIFT-1M,0.5,latency,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.999646
+SIFT-1M,0.5,latency,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.999651
+SIFT-1M,0.9,throughput,1,default,Default CAGRA,0.999440
+SIFT-1M,0.9,throughput,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.999442
+SIFT-1M,0.9,throughput,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.999556
+SIFT-1M,0.9,latency,1,default,Default CAGRA,0.999440
+SIFT-1M,0.9,latency,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.999442
+SIFT-1M,0.9,latency,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.999556
+GIST-1M,0.01,throughput,1,default,Default CAGRA,1.000000
+GIST-1M,0.01,throughput,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",1.000000
+GIST-1M,0.01,throughput,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",1.000000
+GIST-1M,0.01,latency,1,default,Default CAGRA,1.000000
+GIST-1M,0.01,latency,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",1.000000
+GIST-1M,0.01,latency,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",1.000000
+GIST-1M,0.1,throughput,1,default,Default CAGRA,0.999346
+GIST-1M,0.1,throughput,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.998760
+GIST-1M,0.1,throughput,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.998760
+GIST-1M,0.1,latency,1,default,Default CAGRA,0.999346
+GIST-1M,0.1,latency,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.998760
+GIST-1M,0.1,latency,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.998760
+GIST-1M,0.5,throughput,1,default,Default CAGRA,0.997021
+GIST-1M,0.5,throughput,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.996721
+GIST-1M,0.5,throughput,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.996115
+GIST-1M,0.5,latency,1,default,Default CAGRA,0.997021
+GIST-1M,0.5,latency,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.996721
+GIST-1M,0.5,latency,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.996115
+GIST-1M,0.9,throughput,1,default,Default CAGRA,0.995690
+GIST-1M,0.9,throughput,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.995741
+GIST-1M,0.9,throughput,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.994915
+GIST-1M,0.9,latency,1,default,Default CAGRA,0.995690
+GIST-1M,0.9,latency,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.995741
+GIST-1M,0.9,latency,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.994915
+BIGANN-1M,0.01,throughput,1,default,Default CAGRA,1.000000
+BIGANN-1M,0.01,throughput,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",1.000000
+BIGANN-1M,0.01,throughput,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",1.000000
+BIGANN-1M,0.01,latency,1,default,Default CAGRA,1.000000
+BIGANN-1M,0.01,latency,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",1.000000
+BIGANN-1M,0.01,latency,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",1.000000
+BIGANN-1M,0.1,throughput,1,default,Default CAGRA,0.999869
+BIGANN-1M,0.1,throughput,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",1.000000
+BIGANN-1M,0.1,throughput,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",1.000000
+BIGANN-1M,0.1,latency,1,default,Default CAGRA,0.999869
+BIGANN-1M,0.1,latency,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",1.000000
+BIGANN-1M,0.1,latency,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",1.000000
+BIGANN-1M,0.5,throughput,1,default,Default CAGRA,1.000000
+BIGANN-1M,0.5,throughput,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",1.000000
+BIGANN-1M,0.5,throughput,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",1.000000
+BIGANN-1M,0.5,latency,1,default,Default CAGRA,1.000000
+BIGANN-1M,0.5,latency,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",1.000000
+BIGANN-1M,0.5,latency,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",1.000000
+BIGANN-1M,0.9,throughput,1,default,Default CAGRA,0.999767
+BIGANN-1M,0.9,throughput,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.999781
+BIGANN-1M,0.9,throughput,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.999767
+BIGANN-1M,0.9,latency,1,default,Default CAGRA,0.999767
+BIGANN-1M,0.9,latency,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.999781
+BIGANN-1M,0.9,latency,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.999767
+BIGANN-10M,0.01,throughput,1,default,Default CAGRA,1.000000
+BIGANN-10M,0.01,throughput,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",1.000000
+BIGANN-10M,0.01,throughput,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",1.000000
+BIGANN-10M,0.01,latency,1,default,Default CAGRA,1.000000
+BIGANN-10M,0.01,latency,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",1.000000
+BIGANN-10M,0.01,latency,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",1.000000
+BIGANN-10M,0.1,throughput,1,default,Default CAGRA,1.000000
+BIGANN-10M,0.1,throughput,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.999877
+BIGANN-10M,0.1,throughput,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.999768
+BIGANN-10M,0.1,latency,1,default,Default CAGRA,1.000000
+BIGANN-10M,0.1,latency,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.999877
+BIGANN-10M,0.1,latency,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.999768
+BIGANN-10M,0.5,throughput,1,default,Default CAGRA,0.999749
+BIGANN-10M,0.5,throughput,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.999764
+BIGANN-10M,0.5,throughput,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.999643
+BIGANN-10M,0.5,latency,1,default,Default CAGRA,0.999749
+BIGANN-10M,0.5,latency,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.999764
+BIGANN-10M,0.5,latency,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.999643
+BIGANN-10M,0.9,throughput,1,default,Default CAGRA,1.000000
+BIGANN-10M,0.9,throughput,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",1.000000
+BIGANN-10M,0.9,throughput,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",1.000000
+BIGANN-10M,0.9,latency,1,default,Default CAGRA,1.000000
+BIGANN-10M,0.9,latency,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",1.000000
+BIGANN-10M,0.9,latency,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",1.000000
+MSTuring-1M,0.01,throughput,1,default,Default CAGRA,0.999118
+MSTuring-1M,0.01,throughput,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.997789
+MSTuring-1M,0.01,throughput,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.997611
+MSTuring-1M,0.01,latency,1,default,Default CAGRA,0.999118
+MSTuring-1M,0.01,latency,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.997789
+MSTuring-1M,0.01,latency,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.997611
+MSTuring-1M,0.1,throughput,1,default,Default CAGRA,0.997348
+MSTuring-1M,0.1,throughput,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.996226
+MSTuring-1M,0.1,throughput,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.995745
+MSTuring-1M,0.1,latency,1,default,Default CAGRA,0.997348
+MSTuring-1M,0.1,latency,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.996226
+MSTuring-1M,0.1,latency,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.995745
+MSTuring-1M,0.5,throughput,1,default,Default CAGRA,0.994444
+MSTuring-1M,0.5,throughput,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.994302
+MSTuring-1M,0.5,throughput,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.993303
+MSTuring-1M,0.5,latency,1,default,Default CAGRA,0.994444
+MSTuring-1M,0.5,latency,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.994302
+MSTuring-1M,0.5,latency,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.993303
+MSTuring-1M,0.9,throughput,1,default,Default CAGRA,0.992325
+MSTuring-1M,0.9,throughput,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.991850
+MSTuring-1M,0.9,throughput,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.991457
+MSTuring-1M,0.9,latency,1,default,Default CAGRA,0.992325
+MSTuring-1M,0.9,latency,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.991850
+MSTuring-1M,0.9,latency,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.991457
+MSTuring-10M,0.01,throughput,1,default,Default CAGRA,0.997266
+MSTuring-10M,0.01,throughput,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.994208
+MSTuring-10M,0.01,throughput,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.994981
+MSTuring-10M,0.01,latency,1,default,Default CAGRA,0.997266
+MSTuring-10M,0.01,latency,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.994208
+MSTuring-10M,0.01,latency,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.994981
+MSTuring-10M,0.1,throughput,1,default,Default CAGRA,0.995497
+MSTuring-10M,0.1,throughput,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.995058
+MSTuring-10M,0.1,throughput,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.994298
+MSTuring-10M,0.1,latency,1,default,Default CAGRA,0.995497
+MSTuring-10M,0.1,latency,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.995058
+MSTuring-10M,0.1,latency,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.994298
+MSTuring-10M,0.5,throughput,1,default,Default CAGRA,0.995144
+MSTuring-10M,0.5,throughput,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.994678
+MSTuring-10M,0.5,throughput,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.994438
+MSTuring-10M,0.5,latency,1,default,Default CAGRA,0.995144
+MSTuring-10M,0.5,latency,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.994678
+MSTuring-10M,0.5,latency,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.994438
+MSTuring-10M,0.9,throughput,1,default,Default CAGRA,0.995396
+MSTuring-10M,0.9,throughput,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.995272
+MSTuring-10M,0.9,throughput,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.995519
+MSTuring-10M,0.9,latency,1,default,Default CAGRA,0.995396
+MSTuring-10M,0.9,latency,1,favor_retention_safe,"Fixed retention (lambda=1, rho=0.5)",0.995272
+MSTuring-10M,0.9,latency,1,automatic_retention,"Automatic retention (lambda=1, rho=auto)",0.995519

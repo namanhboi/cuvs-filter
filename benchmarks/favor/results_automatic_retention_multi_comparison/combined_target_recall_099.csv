@@ -1,0 +1,145 @@
+dataset,method,selectivity,workload,batch_size,series,mode,source_run,penalty_lambda,retention_fraction,target_recall,value,lower_recall,upper_recall,point_recall,target_method
+SIFT-1M,Default CAGRA,0.01,latency,1,default,default,current,,,0.99,0.0003274490909090909,0.9905502392344497,0.9905502392344497,0.9905502392344497,measured_feasible
+SIFT-1M,Default CAGRA,0.01,throughput,1,default,default,current,,,0.99,3053.975725857916,0.9905502392344497,0.9905502392344497,0.9905502392344497,measured_feasible
+SIFT-1M,"Fixed retention (lambda=1, rho=0.5)",0.01,latency,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,0.00030643396352932864,0.9346652267818575,0.9959866220735786,0.99,interpolated
+SIFT-1M,"Fixed retention (lambda=1, rho=0.5)",0.01,throughput,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,3263.7150977065826,0.9346652267818575,0.9959866220735786,0.99,interpolated
+SIFT-1M,"Automatic retention (lambda=1, rho=auto)",0.01,latency,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,0.000288858618200911,0.9889705882352942,0.9969729729729729,0.99,interpolated
+SIFT-1M,"Automatic retention (lambda=1, rho=auto)",0.01,throughput,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,3462.803664113222,0.9889705882352942,0.9969729729729729,0.99,interpolated
+SIFT-1M,Default CAGRA,0.1,latency,1,default,default,current,,,0.99,0.000282700288570856,0.9858006042296072,0.995213319458897,0.99,interpolated
+SIFT-1M,Default CAGRA,0.1,throughput,1,default,default,current,,,0.99,3537.9774752830176,0.9858006042296072,0.995213319458897,0.99,interpolated
+SIFT-1M,"Fixed retention (lambda=1, rho=0.5)",0.1,latency,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,0.0002747731339789104,0.9836653386454183,0.995,0.99,interpolated
+SIFT-1M,"Fixed retention (lambda=1, rho=0.5)",0.1,throughput,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,3639.7997518427446,0.9836653386454183,0.995,0.99,interpolated
+SIFT-1M,"Automatic retention (lambda=1, rho=auto)",0.1,latency,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,0.00027384378932835215,0.9849315068493151,0.9945891783567135,0.99,interpolated
+SIFT-1M,"Automatic retention (lambda=1, rho=auto)",0.1,throughput,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,3652.236155230598,0.9849315068493151,0.9945891783567135,0.99,interpolated
+SIFT-1M,Default CAGRA,0.5,latency,1,default,default,current,,,0.99,0.0002726889205680192,0.9836223506743738,0.9967774420946627,0.99,interpolated
+SIFT-1M,Default CAGRA,0.5,throughput,1,default,default,current,,,0.99,3669.606335014143,0.9836223506743738,0.9967774420946627,0.99,interpolated
+SIFT-1M,"Fixed retention (lambda=1, rho=0.5)",0.5,latency,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,0.0002671588545181727,0.9829245283018868,0.9963438735177865,0.99,interpolated
+SIFT-1M,"Fixed retention (lambda=1, rho=0.5)",0.5,throughput,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,3744.996496076348,0.9829245283018868,0.9963438735177865,0.99,interpolated
+SIFT-1M,"Automatic retention (lambda=1, rho=auto)",0.5,latency,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,0.0002682260558722171,0.9830028328611898,0.9963220675944334,0.99,interpolated
+SIFT-1M,"Automatic retention (lambda=1, rho=auto)",0.5,throughput,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,3730.5627489524386,0.9830028328611898,0.9963220675944334,0.99,interpolated
+SIFT-1M,Default CAGRA,0.9,latency,1,default,default,current,,,0.99,0.00026528641035632514,0.9892822966507177,0.9963438735177865,0.99,interpolated
+SIFT-1M,Default CAGRA,0.9,throughput,1,default,default,current,,,0.99,3769.9922918594857,0.9892822966507177,0.9963438735177865,0.99,interpolated
+SIFT-1M,"Fixed retention (lambda=1, rho=0.5)",0.9,latency,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,0.00026280485908152803,0.9890255439924314,0.9963654223968565,0.99,interpolated
+SIFT-1M,"Fixed retention (lambda=1, rho=0.5)",0.9,throughput,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,3805.890632108414,0.9890255439924314,0.9963654223968565,0.99,interpolated
+SIFT-1M,"Automatic retention (lambda=1, rho=auto)",0.9,latency,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,0.00026289081315355263,0.989056603773585,0.996259842519685,0.99,interpolated
+SIFT-1M,"Automatic retention (lambda=1, rho=auto)",0.9,throughput,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,3804.559646278211,0.989056603773585,0.996259842519685,0.99,interpolated
+GIST-1M,Default CAGRA,0.01,latency,1,default,default,current,,,0.99,0.0011583124615281624,0.9809798270893372,0.9933628318584071,0.99,interpolated
+GIST-1M,Default CAGRA,0.01,throughput,1,default,default,current,,,0.99,892.9953503756132,0.9809798270893372,0.9933628318584071,0.99,interpolated
+GIST-1M,"Fixed retention (lambda=1, rho=0.5)",0.01,latency,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,0.0014226308965963209,0.9880341880341881,0.9976923076923077,0.99,interpolated
+GIST-1M,"Fixed retention (lambda=1, rho=0.5)",0.01,throughput,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,734.8277712732728,0.9880341880341881,0.9976923076923077,0.99,interpolated
+GIST-1M,"Automatic retention (lambda=1, rho=auto)",0.01,latency,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,0.0025212885502883518,0.9885964912280701,0.9967741935483871,0.99,interpolated
+GIST-1M,"Automatic retention (lambda=1, rho=auto)",0.01,throughput,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,398.7543674305444,0.9885964912280701,0.9967741935483871,0.99,interpolated
+GIST-1M,Default CAGRA,0.1,latency,1,default,default,current,,,0.99,0.0005679817807600943,0.9836767036450079,0.995764705882353,0.99,interpolated
+GIST-1M,Default CAGRA,0.1,throughput,1,default,default,current,,,0.99,1840.1203447820826,0.9836767036450079,0.995764705882353,0.99,interpolated
+GIST-1M,"Fixed retention (lambda=1, rho=0.5)",0.1,latency,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,0.0005653568737207544,0.9824508320726173,0.9956916099773243,0.99,interpolated
+GIST-1M,"Fixed retention (lambda=1, rho=0.5)",0.1,throughput,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,1853.9452762651315,0.9824508320726173,0.9956916099773243,0.99,interpolated
+GIST-1M,"Automatic retention (lambda=1, rho=auto)",0.1,latency,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,0.0005599857124478297,0.9827856025039123,0.9959090909090909,0.99,interpolated
+GIST-1M,"Automatic retention (lambda=1, rho=auto)",0.1,throughput,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,1870.244044307516,0.9827856025039123,0.9959090909090909,0.99,interpolated
+GIST-1M,Default CAGRA,0.5,latency,1,default,default,current,,,0.99,0.00044540524197415757,0.9891935483870967,0.9930868167202572,0.99,interpolated
+GIST-1M,Default CAGRA,0.5,throughput,1,default,default,current,,,0.99,2245.603130767777,0.9891935483870967,0.9930868167202572,0.99,interpolated
+GIST-1M,"Fixed retention (lambda=1, rho=0.5)",0.5,latency,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,0.0004343557926524787,0.9875375375375376,0.9914596273291926,0.99,interpolated
+GIST-1M,"Fixed retention (lambda=1, rho=0.5)",0.5,throughput,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,2303.571574106642,0.9875375375375376,0.9914596273291926,0.99,interpolated
+GIST-1M,"Automatic retention (lambda=1, rho=auto)",0.5,latency,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,0.0004402004735181801,0.9869955156950673,0.9911764705882353,0.99,interpolated
+GIST-1M,"Automatic retention (lambda=1, rho=auto)",0.5,throughput,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,2273.5304910738964,0.9869955156950673,0.9911764705882353,0.99,interpolated
+GIST-1M,Default CAGRA,0.9,latency,1,default,default,current,,,0.99,0.00042152022047657335,0.9857344632768361,0.9913978494623656,0.99,interpolated
+GIST-1M,Default CAGRA,0.9,throughput,1,default,default,current,,,0.99,2375.572633484913,0.9857344632768361,0.9913978494623656,0.99,interpolated
+GIST-1M,"Fixed retention (lambda=1, rho=0.5)",0.9,latency,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,0.00043056039026123085,0.9832635983263598,0.9901689708141321,0.99,interpolated
+GIST-1M,"Fixed retention (lambda=1, rho=0.5)",0.9,throughput,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,2323.104502280162,0.9832635983263598,0.9901689708141321,0.99,interpolated
+GIST-1M,"Automatic retention (lambda=1, rho=auto)",0.9,latency,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,0.0004362749369656331,0.989618320610687,0.9927586206896551,0.99,interpolated
+GIST-1M,"Automatic retention (lambda=1, rho=auto)",0.9,throughput,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,2295.5580546939586,0.989618320610687,0.9927586206896551,0.99,interpolated
+BIGANN-1M,Default CAGRA,0.01,latency,1,default,default,current,,,0.99,0.00033580067882352943,0.9911764705882353,0.9911764705882353,0.9911764705882353,measured_feasible
+BIGANN-1M,Default CAGRA,0.01,throughput,1,default,default,current,,,0.99,2978.013153749635,0.9911764705882353,0.9911764705882353,0.9911764705882353,measured_feasible
+BIGANN-1M,"Fixed retention (lambda=1, rho=0.5)",0.01,latency,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,0.0003132063574709601,0.9355150214592275,0.9961496149614961,0.99,interpolated
+BIGANN-1M,"Fixed retention (lambda=1, rho=0.5)",0.01,throughput,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,3193.598847962408,0.9355150214592275,0.9961496149614961,0.99,interpolated
+BIGANN-1M,"Automatic retention (lambda=1, rho=auto)",0.01,latency,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,0.00030214797149617876,0.9699386503067484,0.9909989023051592,0.99,interpolated
+BIGANN-1M,"Automatic retention (lambda=1, rho=auto)",0.01,throughput,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,3310.030775574294,0.9699386503067484,0.9909989023051592,0.99,interpolated
+BIGANN-1M,Default CAGRA,0.1,latency,1,default,default,current,,,0.99,0.0002804703173020694,0.986779324055666,0.9939549180327869,0.99,interpolated
+BIGANN-1M,Default CAGRA,0.1,throughput,1,default,default,current,,,0.99,3566.440650567877,0.986779324055666,0.9939549180327869,0.99,interpolated
+BIGANN-1M,"Fixed retention (lambda=1, rho=0.5)",0.1,latency,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,0.000272637834145738,0.9805797101449275,0.9921782178217822,0.99,interpolated
+BIGANN-1M,"Fixed retention (lambda=1, rho=0.5)",0.1,throughput,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,3668.1895825636475,0.9805797101449275,0.9921782178217822,0.99,interpolated
+BIGANN-1M,"Automatic retention (lambda=1, rho=auto)",0.1,latency,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,0.00027278281350923925,0.9767307692307692,0.9905378486055777,0.99,interpolated
+BIGANN-1M,"Automatic retention (lambda=1, rho=auto)",0.1,throughput,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,3666.093502805859,0.9767307692307692,0.9905378486055777,0.99,interpolated
+BIGANN-1M,Default CAGRA,0.5,latency,1,default,default,current,,,0.99,0.00026894118055135975,0.9838249286393911,0.9971028971028971,0.99,interpolated
+BIGANN-1M,Default CAGRA,0.5,throughput,1,default,default,current,,,0.99,3720.5884277555547,0.9838249286393911,0.9971028971028971,0.99,interpolated
+BIGANN-1M,"Fixed retention (lambda=1, rho=0.5)",0.5,latency,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,0.0002671416203893388,0.9817244611059044,0.9962962962962963,0.99,interpolated
+BIGANN-1M,"Fixed retention (lambda=1, rho=0.5)",0.5,throughput,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,3745.6470878071723,0.9817244611059044,0.9962962962962963,0.99,interpolated
+BIGANN-1M,"Automatic retention (lambda=1, rho=auto)",0.5,latency,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,0.0002671469900053,0.9821529745042493,0.9958579881656805,0.99,interpolated
+BIGANN-1M,"Automatic retention (lambda=1, rho=auto)",0.5,throughput,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,3745.888123768696,0.9821529745042493,0.9958579881656805,0.99,interpolated
+BIGANN-1M,Default CAGRA,0.9,latency,1,default,default,current,,,0.99,0.0002610053264870932,0.9775735294117647,0.9900763358778626,0.99,interpolated
+BIGANN-1M,Default CAGRA,0.9,throughput,1,default,default,current,,,0.99,3831.4345351400316,0.9775735294117647,0.9900763358778626,0.99,interpolated
+BIGANN-1M,"Fixed retention (lambda=1, rho=0.5)",0.9,latency,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,0.0002621668143604004,0.9897920604914934,0.9965965965965966,0.99,interpolated
+BIGANN-1M,"Fixed retention (lambda=1, rho=0.5)",0.9,throughput,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,3814.8203398691185,0.9897920604914934,0.9965965965965966,0.99,interpolated
+BIGANN-1M,"Automatic retention (lambda=1, rho=auto)",0.9,latency,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,0.000260654250561352,0.9898400752587018,0.996780487804878,0.99,interpolated
+BIGANN-1M,"Automatic retention (lambda=1, rho=auto)",0.9,throughput,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,3836.7324313163554,0.9898400752587018,0.996780487804878,0.99,interpolated
+BIGANN-10M,Default CAGRA,0.01,latency,1,default,default,current,,,0.99,0.0003296136771504862,0.9814901047729918,0.9967703349282296,0.99,interpolated
+BIGANN-10M,Default CAGRA,0.01,throughput,1,default,default,current,,,0.99,3034.174098047457,0.9814901047729918,0.9967703349282296,0.99,interpolated
+BIGANN-10M,"Fixed retention (lambda=1, rho=0.5)",0.01,latency,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,0.00030530228802114537,0.9210695187165775,0.990979097909791,0.99,interpolated
+BIGANN-10M,"Fixed retention (lambda=1, rho=0.5)",0.01,throughput,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,3275.549763001818,0.9210695187165775,0.990979097909791,0.99,interpolated
+BIGANN-10M,"Automatic retention (lambda=1, rho=auto)",0.01,latency,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,0.00032461398863500634,0.9670526315789474,0.9907602339181286,0.99,interpolated
+BIGANN-10M,"Automatic retention (lambda=1, rho=auto)",0.01,throughput,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,3081.766095463987,0.9670526315789474,0.9907602339181286,0.99,interpolated
+BIGANN-10M,Default CAGRA,0.1,latency,1,default,default,current,,,0.99,0.0002993969546531463,0.9814507772020725,0.9945533769063181,0.99,interpolated
+BIGANN-10M,Default CAGRA,0.1,throughput,1,default,default,current,,,0.99,3343.8233075978737,0.9814507772020725,0.9945533769063181,0.99,interpolated
+BIGANN-10M,"Fixed retention (lambda=1, rho=0.5)",0.1,latency,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,0.0002855418488417369,0.9740777666999003,0.990216271884655,0.99,interpolated
+BIGANN-10M,"Fixed retention (lambda=1, rho=0.5)",0.1,throughput,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,3502.35972034307,0.9740777666999003,0.990216271884655,0.99,interpolated
+BIGANN-10M,"Automatic retention (lambda=1, rho=auto)",0.1,latency,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,0.00028553206610174074,0.9899896800825594,0.9980042016806723,0.99,interpolated
+BIGANN-10M,"Automatic retention (lambda=1, rho=auto)",0.1,throughput,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,3502.312959563255,0.9899896800825594,0.9980042016806723,0.99,interpolated
+BIGANN-10M,Default CAGRA,0.5,latency,1,default,default,current,,,0.99,0.0002800749025269833,0.9880402010050251,0.9979915433403805,0.99,interpolated
+BIGANN-10M,Default CAGRA,0.5,throughput,1,default,default,current,,,0.99,3572.3448572939083,0.9880402010050251,0.9979915433403805,0.99,interpolated
+BIGANN-10M,"Fixed retention (lambda=1, rho=0.5)",0.5,latency,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,0.0002764721964497835,0.987315634218289,0.9980187695516163,0.99,interpolated
+BIGANN-10M,"Fixed retention (lambda=1, rho=0.5)",0.5,throughput,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,3618.8295235316887,0.987315634218289,0.9980187695516163,0.99,interpolated
+BIGANN-10M,"Automatic retention (lambda=1, rho=auto)",0.5,latency,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,0.0002756739651761583,0.9870039682539683,0.9976165803108809,0.99,interpolated
+BIGANN-10M,"Automatic retention (lambda=1, rho=auto)",0.5,throughput,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,3629.3810736163323,0.9870039682539683,0.9976165803108809,0.99,interpolated
+BIGANN-10M,Default CAGRA,0.9,latency,1,default,default,current,,,0.99,0.00027480662649726254,0.9873517786561264,0.9970317297850563,0.99,interpolated
+BIGANN-10M,Default CAGRA,0.9,throughput,1,default,default,current,,,0.99,3640.8286214259238,0.9873517786561264,0.9970317297850563,0.99,interpolated
+BIGANN-10M,"Fixed retention (lambda=1, rho=0.5)",0.9,latency,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,0.00027433733448718457,0.9866666666666667,0.9967313585291113,0.99,interpolated
+BIGANN-10M,"Fixed retention (lambda=1, rho=0.5)",0.9,throughput,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,3646.759714533686,0.9866666666666667,0.9967313585291113,0.99,interpolated
+BIGANN-10M,"Automatic retention (lambda=1, rho=auto)",0.9,latency,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,0.0002761688687019137,0.986399217221135,0.9965005302226936,0.99,interpolated
+BIGANN-10M,"Automatic retention (lambda=1, rho=auto)",0.9,throughput,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,3622.0691193221805,0.986399217221135,0.9965005302226936,0.99,interpolated
+MSTuring-1M,Default CAGRA,0.01,latency,1,default,default,current,,,0.99,0.00038009027116972125,0.9768553459119497,0.992235609103079,0.99,interpolated
+MSTuring-1M,Default CAGRA,0.01,throughput,1,default,default,current,,,0.99,2633.501420452515,0.9768553459119497,0.992235609103079,0.99,interpolated
+MSTuring-1M,"Fixed retention (lambda=1, rho=0.5)",0.01,latency,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,0.0003804854946608947,0.9870440251572327,0.9903100775193798,0.99,interpolated
+MSTuring-1M,"Fixed retention (lambda=1, rho=0.5)",0.01,throughput,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,2629.157418336592,0.9870440251572327,0.9903100775193798,0.99,interpolated
+MSTuring-1M,"Automatic retention (lambda=1, rho=auto)",0.01,latency,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,0.00043220533680442654,0.989665211062591,0.9976109215017065,0.99,interpolated
+MSTuring-1M,"Automatic retention (lambda=1, rho=auto)",0.01,throughput,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,2315.965694171759,0.989665211062591,0.9976109215017065,0.99,interpolated
+MSTuring-1M,Default CAGRA,0.1,latency,1,default,default,current,,,0.99,0.00031454942455245354,0.9685224839400428,0.9933865450399088,0.99,interpolated
+MSTuring-1M,Default CAGRA,0.1,throughput,1,default,default,current,,,0.99,3180.654329774972,0.9685224839400428,0.9933865450399088,0.99,interpolated
+MSTuring-1M,"Fixed retention (lambda=1, rho=0.5)",0.1,latency,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,0.0003016872767592525,0.9623323013415893,0.991195652173913,0.99,interpolated
+MSTuring-1M,"Fixed retention (lambda=1, rho=0.5)",0.1,throughput,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,3314.8964304848696,0.9623323013415893,0.991195652173913,0.99,interpolated
+MSTuring-1M,"Automatic retention (lambda=1, rho=auto)",0.1,latency,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,0.0003016560888468973,0.9621761658031088,0.9911699779249448,0.99,interpolated
+MSTuring-1M,"Automatic retention (lambda=1, rho=auto)",0.1,throughput,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,3315.37954637516,0.9621761658031088,0.9911699779249448,0.99,interpolated
+MSTuring-1M,Default CAGRA,0.5,latency,1,default,default,current,,,0.99,0.00030839277855638695,0.9879347826086956,0.9906636670416198,0.99,interpolated
+MSTuring-1M,Default CAGRA,0.5,throughput,1,default,default,current,,,0.99,3243.0992959389137,0.9879347826086956,0.9906636670416198,0.99,interpolated
+MSTuring-1M,"Fixed retention (lambda=1, rho=0.5)",0.5,latency,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,0.00030025912905923567,0.989967637540453,0.9943023255813953,0.99,interpolated
+MSTuring-1M,"Fixed retention (lambda=1, rho=0.5)",0.5,throughput,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,3330.6084772714294,0.989967637540453,0.9943023255813953,0.99,interpolated
+MSTuring-1M,"Automatic retention (lambda=1, rho=auto)",0.5,latency,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,0.0003012734895608352,0.9862850971922246,0.9901727861771058,0.99,interpolated
+MSTuring-1M,"Automatic retention (lambda=1, rho=auto)",0.5,throughput,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,3319.37521738978,0.9862850971922246,0.9901727861771058,0.99,interpolated
+MSTuring-1M,Default CAGRA,0.9,latency,1,default,default,current,,,0.99,0.00030296886740493345,0.9781548250265112,0.9923245614035088,0.99,interpolated
+MSTuring-1M,Default CAGRA,0.9,throughput,1,default,default,current,,,0.99,3301.092258475243,0.9781548250265112,0.9923245614035088,0.99,interpolated
+MSTuring-1M,"Fixed retention (lambda=1, rho=0.5)",0.9,latency,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,0.0003046159654970528,0.9770544290288153,0.9918502202643171,0.99,interpolated
+MSTuring-1M,"Fixed retention (lambda=1, rho=0.5)",0.9,throughput,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,3283.2263361326886,0.9770544290288153,0.9918502202643171,0.99,interpolated
+MSTuring-1M,"Automatic retention (lambda=1, rho=auto)",0.9,latency,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,0.000304876505336816,0.9769722814498933,0.9914567360350492,0.99,interpolated
+MSTuring-1M,"Automatic retention (lambda=1, rho=auto)",0.9,throughput,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,3280.277636884833,0.9769722814498933,0.9914567360350492,0.99,interpolated
+MSTuring-10M,Default CAGRA,0.01,latency,1,default,default,current,,,0.99,0.000606634433939602,0.9720760233918129,0.9901918976545843,0.99,interpolated
+MSTuring-10M,Default CAGRA,0.01,throughput,1,default,default,current,,,0.99,1650.8605795305766,0.9720760233918129,0.9901918976545843,0.99,interpolated
+MSTuring-10M,"Fixed retention (lambda=1, rho=0.5)",0.01,latency,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,0.000765647141083988,0.983811475409836,0.992603550295858,0.99,interpolated
+MSTuring-10M,"Fixed retention (lambda=1, rho=0.5)",0.01,throughput,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,1341.0248505578224,0.983811475409836,0.992603550295858,0.99,interpolated
+MSTuring-10M,"Automatic retention (lambda=1, rho=auto)",0.01,latency,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,0.0007437110818446021,0.9860369609856263,0.9923076923076923,0.99,interpolated
+MSTuring-10M,"Automatic retention (lambda=1, rho=auto)",0.01,throughput,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,1383.4548912996802,0.9860369609856263,0.9923076923076923,0.99,interpolated
+MSTuring-10M,Default CAGRA,0.1,latency,1,default,default,current,,,0.99,0.0003676957690128492,0.9890356671070013,0.9930574098798398,0.99,interpolated
+MSTuring-10M,Default CAGRA,0.1,throughput,1,default,default,current,,,0.99,2720.1232838148994,0.9890356671070013,0.9930574098798398,0.99,interpolated
+MSTuring-10M,"Fixed retention (lambda=1, rho=0.5)",0.1,latency,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,0.00035402137393812264,0.9863694267515923,0.9919540229885058,0.99,interpolated
+MSTuring-10M,"Fixed retention (lambda=1, rho=0.5)",0.1,throughput,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,2826.332233584468,0.9863694267515923,0.9919540229885058,0.99,interpolated
+MSTuring-10M,"Automatic retention (lambda=1, rho=auto)",0.1,latency,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,0.000356602615036232,0.9865822784810127,0.9913705583756345,0.99,interpolated
+MSTuring-10M,"Automatic retention (lambda=1, rho=auto)",0.1,throughput,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,2805.6028446703635,0.9865822784810127,0.9913705583756345,0.99,interpolated
+MSTuring-10M,Default CAGRA,0.5,latency,1,default,default,current,,,0.99,0.00033270900016649197,0.9525263157894737,0.9926770708283313,0.99,interpolated
+MSTuring-10M,Default CAGRA,0.5,throughput,1,default,default,current,,,0.99,3009.1699417246023,0.9525263157894737,0.9926770708283313,0.99,interpolated
+MSTuring-10M,"Fixed retention (lambda=1, rho=0.5)",0.5,latency,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,0.0003185044040543482,0.9752847380410022,0.9921658986175115,0.99,interpolated
+MSTuring-10M,"Fixed retention (lambda=1, rho=0.5)",0.5,throughput,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,3139.7590814990353,0.9752847380410022,0.9921658986175115,0.99,interpolated
+MSTuring-10M,"Automatic retention (lambda=1, rho=auto)",0.5,latency,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,0.00031883681377965366,0.9755148741418764,0.9922626025791325,0.99,interpolated
+MSTuring-10M,"Automatic retention (lambda=1, rho=auto)",0.5,throughput,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,3136.5006126839025,0.9755148741418764,0.9922626025791325,0.99,interpolated
+MSTuring-10M,Default CAGRA,0.9,latency,1,default,default,current,,,0.99,0.0003176271857502517,0.9887115165336374,0.9953955135773318,0.99,interpolated
+MSTuring-10M,Default CAGRA,0.9,throughput,1,default,default,current,,,0.99,3148.97553445895,0.9887115165336374,0.9953955135773318,0.99,interpolated
+MSTuring-10M,"Fixed retention (lambda=1, rho=0.5)",0.9,latency,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,0.00031688344629072785,0.98875,0.9952718676122931,0.99,interpolated
+MSTuring-10M,"Fixed retention (lambda=1, rho=0.5)",0.9,throughput,1,favor_retention_safe,favor_retention_safe,current,1.0,0.5,0.99,3156.5597567089612,0.98875,0.9952718676122931,0.99,interpolated
+MSTuring-10M,"Automatic retention (lambda=1, rho=auto)",0.9,latency,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,0.00031777051594541615,0.9884090909090909,0.9955188679245283,0.99,interpolated
+MSTuring-10M,"Automatic retention (lambda=1, rho=auto)",0.9,throughput,1,automatic_retention,automatic_retention,current,1.0,0.0,0.99,3147.9267071261547,0.9884090909090909,0.9955188679245283,0.99,interpolated

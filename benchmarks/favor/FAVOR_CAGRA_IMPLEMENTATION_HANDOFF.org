@@ -112,7 +112,7 @@ score = d + D_effective
 Because =rho<1=, the penalty alone cannot move a candidate beyond the current retained boundary.
 The fixed method uses =lambda=1= and =rho=0.5=.
 
-Setting =favor_retention_fraction= to zero selects the automatic SINGLE_CTA rule:
+Setting =favor_retention_fraction= to zero selects the automatic rule in either CTA mode:
 
 #+begin_example
 E = s * B
@@ -121,9 +121,10 @@ smooth = pressure^2 * (3 - 2*pressure)
 rho = 0.5 + 0.4 * smooth
 #+end_example
 
-Here =k= is requested output count.  The rule remains at 0.5 when expected passing capacity
-=E>=k= and approaches 0.9 under severe shortfall, permitting a stronger demotion while retaining
-strict headroom.
+Here =k= is requested output count.  =SINGLE_CTA= uses its internal top-k for =B=;
+=MULTI_CTA= uses the user-configured global =itopk=, matching its reference-penalty convention.
+The rule remains at 0.5 when expected passing capacity =E>=k= and approaches 0.9 under severe
+shortfall, permitting a stronger demotion while retaining strict headroom.
 
 ** GPU kernel design
 
@@ -181,6 +182,8 @@ Main scripts:
 - =benchmarks/favor/plot_results.py= — produces zero-origin QPS/recall and latency/recall figures;
 - =benchmarks/favor/run_retention_safe_multi_confirmation.sh= — controlled MULTI_CTA matrix;
 - =benchmarks/favor/run_automatic_retention_single_full.sh= — automatic SINGLE_CTA matrix;
+- =benchmarks/favor/run_automatic_retention_multi_full.sh= — matched default/fixed/automatic
+  MULTI_CTA matrix;
 - =benchmarks/favor/run_favor_trace_diagnostics.py= and =favor_trace.py= — bounded diagnostics.
 
 One repetition is intentional: earlier checks found low variance.  Do not compare percentages at a
@@ -356,7 +359,8 @@ changed. See =termination_hash_diagnostic/FAVOR_TERMINATION_HASH_DIAGNOSTIC.org=
 
 - =FAVOR_CAGRA_SINGLE_MULTI_CTA_PERFORMANCE_REPORT_V2.org=: original static SINGLE/MULTI report.
 - =RETENTION_SAFE_FAVOR_SINGLE_MULTI_CTA_REPORT.org=: four-way default/static/retention comparison.
-- =AUTOMATIC_RETENTION_FAVOR_SINGLE_CTA_REPORT.org=: fixed versus automatic rho over the full matrix.
+- =AUTOMATIC_RETENTION_FAVOR_SINGLE_MULTI_CTA_REPORT.org=: default, fixed, and automatic rho
+  over the full SINGLE_CTA and MULTI_CTA matrices.
 - =DEEP_TRAVERSAL_DIAGNOSTIC_REPORT.org=: proof that sparse failures are unfinished traversal.
 - =TRACE_PARSING_AND_INTERPRETATION.org=: trace schema and interpretation guide.
 - =FAVOR_EARLY_TERMINATION_PLAN.org=: rationale and feasibility plan.
