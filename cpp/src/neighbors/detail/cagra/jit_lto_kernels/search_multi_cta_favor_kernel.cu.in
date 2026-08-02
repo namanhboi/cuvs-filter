@@ -48,7 +48,8 @@ extern "C" __global__ __launch_bounds__(1024, 1) void search_multi_cta_favor(
   const float favor_delta_d,
   const std::uint32_t favor_penalty_mode,
   const float favor_local_gap_multiplier,
-  const std::uint32_t configured_itopk_size)
+  const std::uint32_t configured_itopk_size,
+  const float favor_retention_fraction)
 {
   search_kernel_jit<true, data_t, index_t, distance_t, source_index_t>(result_indices_ptr,
                                                                        result_distances_ptr,
@@ -76,7 +77,8 @@ extern "C" __global__ __launch_bounds__(1024, 1) void search_multi_cta_favor(
                                                                        favor_delta_d,
                                                                        favor_penalty_mode,
                                                                        favor_local_gap_multiplier,
-                                                                       configured_itopk_size);
+                                                                       configured_itopk_size,
+                                                                       favor_retention_fraction);
 }
 
 static_assert(

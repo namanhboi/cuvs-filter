@@ -61,6 +61,8 @@ def load_points(
                 retention_fraction = float(match.group(1))
         if retention_fraction is not None:
             retention_fraction = float(retention_fraction)
+        if mode == "favor_retention_safe" and retention_fraction == 0.0:
+            mode = "automatic_retention"
         key = (
             mode,
             penalty_lambda,
@@ -117,6 +119,16 @@ def load_overlay_points(
         for series in points
         if series == overlay.mode or series.startswith(f"{overlay.mode}:")
     ]
+    # Before rho=0 became a first-class series, callers selected an automatic-retention-only
+    # result directory through its underlying FAVOR penalty mode. Keep that overlay contract while
+    # exposing automatic retention under an unambiguous native CSV/plot identity.
+    if not matches and overlay.mode == "favor_retention_safe":
+        matches = [
+            series
+            for series in points
+            if series == "automatic_retention"
+            or series.startswith("automatic_retention:")
+        ]
     if not matches:
         raise ValueError(
             f"{path} does not contain requested overlay mode {overlay.mode!r}"
@@ -306,6 +318,7 @@ def main() -> None:
         "favor": "#d62728",
         "favor_query_local": "#2ca02c",
         "favor_retention_safe": "#9467bd",
+        "automatic_retention": "#2ca02c",
         "current_static": "#d62728",
         "committed_static": "#ff7f0e",
     }
@@ -322,6 +335,7 @@ def main() -> None:
             "favor": f"Current static FAVOR{algo_suffix}",
             "favor_query_local": f"Query-local FAVOR{algo_suffix}",
             "favor_retention_safe": f"Retention-safe FAVOR{algo_suffix}",
+            "automatic_retention": f"Automatic-retention FAVOR{algo_suffix}",
         }
     else:
         labels = {
@@ -329,6 +343,7 @@ def main() -> None:
             "favor": f"Current static FAVOR filtering{algo_suffix}",
             "favor_query_local": f"Query-local FAVOR filtering{algo_suffix}",
             "favor_retention_safe": f"Retention-safe FAVOR filtering{algo_suffix}",
+            "automatic_retention": f"Automatic-retention FAVOR filtering{algo_suffix}",
         }
     overlay_by_key = {overlay.key: overlay for overlay in overlays}
     for overlay in overlays:
@@ -431,6 +446,7 @@ def main() -> None:
             "favor": 1,
             "favor_query_local": 2,
             "favor_retention_safe": 3,
+            "automatic_retention": 4,
             "current_static": 1,
             "committed_static": 4,
         }

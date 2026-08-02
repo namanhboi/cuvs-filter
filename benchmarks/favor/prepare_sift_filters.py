@@ -29,9 +29,18 @@ def read_matrix(path: Path, dtype: np.dtype) -> np.memmap:
 
 def write_matrix(path: Path, values: np.ndarray) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("wb") as stream:
+    temporary_path = path.with_name(f".{path.name}.tmp")
+    with temporary_path.open("wb") as stream:
         stream.write(struct.pack("<II", values.shape[0], values.shape[1]))
         values.tofile(stream)
+    temporary_path.replace(path)
+
+
+def write_json(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = path.with_name(f".{path.name}.tmp")
+    temporary_path.write_text(json.dumps(payload, indent=2) + "\n")
+    temporary_path.replace(path)
 
 
 def write_bitset(path: Path, passing: np.ndarray, rows: int) -> None:
@@ -200,9 +209,9 @@ def main() -> None:
             "neighbors": neighbors_path.name,
             "distances": distances_path.name,
         }
+        write_json(manifest_path, manifest)
 
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+    write_json(manifest_path, manifest)
 
 
 if __name__ == "__main__":

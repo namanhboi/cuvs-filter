@@ -501,9 +501,13 @@ struct search_plan_impl : public search_plan_impl_base {
           favor_penalty != favor_penalty_mode::CAGRA_RETENTION_SAFE) {
         error_message += "Automatic `favor_retention_fraction` requires CAGRA_RETENTION_SAFE. ";
       }
-      if (algo != search_algo::SINGLE_CTA && favor_retention_fraction != 0.5f) {
+      const bool multi_cta_automatic_retention =
+        algo == search_algo::MULTI_CTA && favor_retention_fraction == 0.0f;
+      if (algo != search_algo::SINGLE_CTA && !multi_cta_automatic_retention &&
+          favor_retention_fraction != 0.5f) {
         error_message +=
-          "Non-default `favor_retention_fraction` supports only SINGLE_CTA FAVOR filtering. ";
+          "Explicit non-default `favor_retention_fraction` supports only SINGLE_CTA FAVOR "
+          "filtering. ";
       }
     }
     if (thread_block_size != 0 && thread_block_size != 64 && thread_block_size != 128 &&

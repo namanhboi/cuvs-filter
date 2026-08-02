@@ -171,7 +171,8 @@ using search_multi_cta_favor_kernel_func_t =
        const float,
        const std::uint32_t,
        const float,
-       const std::uint32_t);
+       const std::uint32_t,
+       const float);
 
 }  // namespace multi_cta_search
 

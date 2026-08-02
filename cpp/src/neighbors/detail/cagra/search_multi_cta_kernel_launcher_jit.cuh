@@ -122,43 +122,46 @@ void select_and_run(const dataset_descriptor_host<DataT, IndexT, DistanceT>& dat
     const auto favor_local_gap_multiplier =
       favor_penalty_coefficient(ps.filtering_rate, configured_itopk_size) *
       ps.favor_penalty_lambda;
+    const auto favor_retention_fraction =
+      ps.favor_retention_fraction == 0.0f
+        ? favor_automatic_retention_fraction(ps.filtering_rate, configured_itopk_size, topk)
+        : ps.favor_retention_fraction;
     auto kernel_launcher = [&]() -> void {
-      launcher->dispatch<multi_cta_search::
-                           search_multi_cta_favor_kernel_func_t<DataT,
-                                                                 IndexT,
-                                                                 DistanceT,
-                                                                 SourceIndexT>>(
-        stream,
-        grid_dims,
-        block_dims,
-        smem_size,
-        topk_indices_ptr,
-        topk_distances_ptr,
-        dev_desc,
-        queries_ptr,
-        graph.data_handle(),
-        max_elements,
-        graph_degree_u32,
-        source_indices_ptr,
-        num_random_samplings_u,
-        ps.rand_xor_mask,
-        dev_seed_ptr,
-        num_seeds,
-        visited_hash_bitlen,
-        traversed_hashmap_ptr,
-        traversed_hash_bitlen_u32,
-        itopk_size_u32,
-        min_iterations_u32,
-        max_iterations_u32,
-        num_executed_iterations,
-        static_cast<IndexT>(graph.extent(0)),
-        query_id_offset,
-        filter_payload,
-        ps.filtering_rate,
-        ps.favor_delta_d,
-        favor_penalty_mode_value,
-        favor_local_gap_multiplier,
-        configured_itopk_size);
+      launcher
+        ->dispatch<multi_cta_search::
+                     search_multi_cta_favor_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>(
+          stream,
+          grid_dims,
+          block_dims,
+          smem_size,
+          topk_indices_ptr,
+          topk_distances_ptr,
+          dev_desc,
+          queries_ptr,
+          graph.data_handle(),
+          max_elements,
+          graph_degree_u32,
+          source_indices_ptr,
+          num_random_samplings_u,
+          ps.rand_xor_mask,
+          dev_seed_ptr,
+          num_seeds,
+          visited_hash_bitlen,
+          traversed_hashmap_ptr,
+          traversed_hash_bitlen_u32,
+          itopk_size_u32,
+          min_iterations_u32,
+          max_iterations_u32,
+          num_executed_iterations,
+          static_cast<IndexT>(graph.extent(0)),
+          query_id_offset,
+          filter_payload,
+          ps.filtering_rate,
+          ps.favor_delta_d,
+          favor_penalty_mode_value,
+          favor_local_gap_multiplier,
+          configured_itopk_size,
+          favor_retention_fraction);
     };
     cuvs::neighbors::detail::safely_launch_kernel_with_smem_size<
       multi_cta_search::

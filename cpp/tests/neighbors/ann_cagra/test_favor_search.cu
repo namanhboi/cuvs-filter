@@ -8,6 +8,7 @@
 
 #include "../../../src/neighbors/cagra_benchmark.hpp"
 #include "../../../src/neighbors/detail/cagra/favor_multi_seed_benchmark.cuh"
+#include "../../../src/neighbors/detail/cagra/favor_penalty.cuh"
 #include "../../../src/neighbors/detail/cagra/favor_search_diagnostics.hpp"
 
 #include <raft/core/copy.cuh>
@@ -298,14 +299,14 @@ TEST_F(CagraFavorSearchTest, TerminationShadowCapturesOrderedPassingTrajectory)
   RAFT_CUDA_TRY(cudaMemsetAsync(
     checkpoint_counts.data(), 0, checkpoint_counts.size() * sizeof(std::uint32_t), stream));
   cagra::detail::favor_search_diagnostics::context context_host{};
-  context_host.summaries                     = summaries.data();
-  context_host.termination_checkpoints       = checkpoints.data();
-  context_host.termination_checkpoint_counts = checkpoint_counts.data();
-  context_host.termination_checkpoint_stride = checkpoint_stride;
+  context_host.summaries                          = summaries.data();
+  context_host.termination_checkpoints            = checkpoints.data();
+  context_host.termination_checkpoint_counts      = checkpoint_counts.data();
+  context_host.termination_checkpoint_stride      = checkpoint_stride;
   context_host.termination_record_start_iteration = 1;
   context_host.termination_start_iteration        = 5;
   context_host.termination_parent_interval        = 3;
-  context_host.num_queries                   = kQueries;
+  context_host.num_queries                        = kQueries;
   raft::copy(context.data(), &context_host, 1, stream);
 
   search_result result;
@@ -335,10 +336,8 @@ TEST_F(CagraFavorSearchTest, TerminationShadowCapturesOrderedPassingTrajectory)
         auto const& previous = checkpoints_host[query * checkpoint_stride + slot - 1];
         EXPECT_LE(previous.cumulative_candidate_evaluations,
                   record.cumulative_candidate_evaluations);
-        EXPECT_LE(previous.cumulative_passing_candidates,
-                  record.cumulative_passing_candidates);
-        EXPECT_LE(previous.cumulative_candidate_duplicates,
-                  record.cumulative_candidate_duplicates);
+        EXPECT_LE(previous.cumulative_passing_candidates, record.cumulative_passing_candidates);
+        EXPECT_LE(previous.cumulative_candidate_duplicates, record.cumulative_candidate_duplicates);
       }
       EXPECT_LT(record.frontier_best, std::numeric_limits<float>::max());
       for (std::uint32_t rank = 0; rank < record.output_count; ++rank) {
@@ -582,6 +581,10 @@ TEST_F(CagraFavorSearchTest, RejectsMissingDeltaAndNonBitsetFilter)
   automatic_retention_fraction.favor_retention_fraction = 0.0f;
   EXPECT_NO_THROW(run(automatic_retention_fraction, filter));
 
+  auto automatic_retention_auto_algo = automatic_retention_fraction;
+  automatic_retention_auto_algo.algo = cagra::search_algo::AUTO;
+  EXPECT_NO_THROW(run(automatic_retention_auto_algo, filter));
+
   auto automatic_wrong_mode          = automatic_retention_fraction;
   automatic_wrong_mode.favor_penalty = cagra::favor_penalty_mode::CAGRA_QUERY_LOCAL;
   EXPECT_ANY_THROW(run(automatic_wrong_mode, filter));
@@ -602,7 +605,7 @@ TEST_F(CagraFavorSearchTest, RejectsMissingDeltaAndNonBitsetFilter)
 
   auto multi_cta_automatic_retention = automatic_retention_fraction;
   multi_cta_automatic_retention.algo = cagra::search_algo::MULTI_CTA;
-  EXPECT_ANY_THROW(run(multi_cta_automatic_retention, filter, 1));
+  EXPECT_NO_THROW(run(multi_cta_automatic_retention, filter, 1));
 }
 
 TEST_F(CagraFavorUint8SearchTest, ExplicitDefaultPreservesExistingResults)
@@ -711,6 +714,51 @@ TEST_F(CagraFavorSearchTest, MultiCtaLocalPenaltyModesReturnOnlyPassingRows)
   }
 }
 
+TEST_F(CagraFavorSearchTest, MultiCtaAutomaticRetentionAtMidpointMatchesExplicitDefault)
+{
+  auto filter                               = make_filter(kRows / 2);
+  auto automatic_params                     = multi_cta_params();
+  automatic_params.filter_mode              = cagra::filtering_mode::FAVOR;
+  automatic_params.filtering_rate           = 0.5f;
+  automatic_params.favor_delta_d            = 100.0f;
+  automatic_params.favor_penalty            = cagra::favor_penalty_mode::CAGRA_RETENTION_SAFE;
+  automatic_params.favor_retention_fraction = 0.0f;
+  auto explicit_default_params              = automatic_params;
+  explicit_default_params.favor_retention_fraction = 0.5f;
+
+  // With configured itopk=64, k=8, and 50% selectivity, the automatic formula resolves to 0.5.
+  auto expected = run(explicit_default_params, filter, 1);
+  auto actual   = run(automatic_params, filter, 1);
+  EXPECT_EQ(expected.neighbors, actual.neighbors);
+  EXPECT_EQ(expected.distances, actual.distances);
+  for (auto neighbor : actual.neighbors) {
+    ASSERT_NE(neighbor, std::numeric_limits<uint32_t>::max());
+    EXPECT_GE(neighbor, static_cast<uint32_t>(kRows / 2));
+  }
+}
+
+TEST_F(CagraFavorSearchTest, MultiCtaAutomaticRetentionExercisesSparsePolicy)
+{
+  constexpr int64_t passing_count = 12;
+  auto filter                     = make_filter(kRows - passing_count);
+  auto favor_params               = multi_cta_params();
+  favor_params.filter_mode        = cagra::filtering_mode::FAVOR;
+  favor_params.filtering_rate =
+    static_cast<float>(kRows - passing_count) / static_cast<float>(kRows);
+  favor_params.favor_delta_d            = 100.0f;
+  favor_params.favor_penalty            = cagra::favor_penalty_mode::CAGRA_RETENTION_SAFE;
+  favor_params.favor_retention_fraction = 0.0f;
+
+  ASSERT_GT(detail::favor_automatic_retention_fraction(
+              favor_params.filtering_rate, favor_params.itopk_size, k),
+            0.5f);
+  auto result = run(favor_params, filter, 1);
+  for (auto neighbor : result.neighbors) {
+    ASSERT_NE(neighbor, std::numeric_limits<uint32_t>::max());
+    EXPECT_GE(neighbor, static_cast<uint32_t>(kRows - passing_count));
+  }
+}
+
 TEST_F(CagraFavorSearchTest, MultiCtaAdjustedTraversalReturnsOnlyPassingRows)
 {
   auto filter                 = make_filter(kRows / 2);
@@ -766,6 +814,23 @@ TEST_F(CagraFavorUint8SearchTest, MultiCtaRetentionSafeReturnsOnlyPassingRows)
   favor_params.favor_delta_d        = 100.0f;
   favor_params.favor_penalty        = cagra::favor_penalty_mode::CAGRA_RETENTION_SAFE;
   favor_params.favor_penalty_lambda = 1.0f;
+
+  auto result = run(favor_params, filter, 1);
+  for (auto neighbor : result.neighbors) {
+    ASSERT_NE(neighbor, std::numeric_limits<uint32_t>::max());
+    EXPECT_GE(neighbor, static_cast<uint32_t>(kRows / 2));
+  }
+}
+
+TEST_F(CagraFavorUint8SearchTest, MultiCtaAutomaticRetentionReturnsOnlyPassingRows)
+{
+  auto filter                           = make_filter(kRows / 2);
+  auto favor_params                     = multi_cta_params();
+  favor_params.filter_mode              = cagra::filtering_mode::FAVOR;
+  favor_params.filtering_rate           = 0.5f;
+  favor_params.favor_delta_d            = 100.0f;
+  favor_params.favor_penalty            = cagra::favor_penalty_mode::CAGRA_RETENTION_SAFE;
+  favor_params.favor_retention_fraction = 0.0f;
 
   auto result = run(favor_params, filter, 1);
   for (auto neighbor : result.neighbors) {

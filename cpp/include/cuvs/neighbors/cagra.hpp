@@ -388,7 +388,9 @@ struct search_params : cuvs::neighbors::search_params {
    * Fraction of the current retention headroom that a rejected candidate's penalty may consume.
    * Explicit values must be finite and in (0, 1). Zero selects a CAGRA-local automatic value from
    * the expected number of passing entries in itopk. The default 0.5 preserves the original
-   * retention-safe midpoint rule. Non-default values are currently supported only by SINGLE_CTA.
+   * retention-safe midpoint rule. Automatic selection is supported by SINGLE_CTA and MULTI_CTA;
+   * MULTI_CTA uses the user-configured global itopk before traversal-breadth adjustment. Explicit
+   * non-default values are currently supported only by SINGLE_CTA.
    */
   float favor_retention_fraction = 0.5f;
 

@@ -62,7 +62,8 @@ __device__ void search_kernel_jit(
   const float favor_penalty_distance           = 0.0f,
   const std::uint32_t favor_penalty_mode_value = 0,
   const float favor_local_gap_multiplier       = 0.0f,
-  const uint32_t configured_itopk_size         = 0)
+  const uint32_t configured_itopk_size         = 0,
+  const float favor_retention_fraction         = 0.5f)
 {
   using DATA_T     = DataT;
   using INDEX_T    = IndexT;
@@ -348,7 +349,7 @@ __device__ void search_kernel_jit(
             favor_bitset,
             favor_penalty[0],
             favor_cutoff[0],
-            static_cast<DISTANCE_T>(0.5),
+            static_cast<DISTANCE_T>(favor_retention_fraction),
             local_traversed_hashmap_ptr,
             traversed_hash_bitlen,
             result_position,
@@ -375,7 +376,7 @@ __device__ void search_kernel_jit(
             favor_bitset,
             favor_penalty[0],
             favor_cutoff[0],
-            static_cast<DISTANCE_T>(0.5),
+            static_cast<DISTANCE_T>(favor_retention_fraction),
             local_traversed_hashmap_ptr,
             traversed_hash_bitlen,
             result_position,
@@ -402,7 +403,7 @@ __device__ void search_kernel_jit(
             favor_bitset,
             favor_penalty[0],
             favor_cutoff[0],
-            static_cast<DISTANCE_T>(0.5),
+            static_cast<DISTANCE_T>(favor_retention_fraction),
             local_traversed_hashmap_ptr,
             traversed_hash_bitlen,
             result_position,
