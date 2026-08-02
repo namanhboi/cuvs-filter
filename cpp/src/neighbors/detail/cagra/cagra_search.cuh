@@ -91,17 +91,21 @@ void search_main_core(
     auto _topk_indices_ptr   = neighbors.data_handle() + (topk * qid);
     auto _topk_distances_ptr = distances.data_handle() + (topk * qid);
     // todo(tfeher): one could keep distances optional and pass nullptr
-    const auto* _query_ptr = queries.data_handle() + (query_dim * qid);
+    const auto* _query_ptr         = queries.data_handle() + (query_dim * qid);
+    auto const* attached_seed_ptr  = favor_search_diagnostics::get_active_seed_ptr();
+    auto const attached_seed_count = favor_search_diagnostics::get_active_seed_count();
+    if (attached_seed_ptr != nullptr) { plan->num_seeds = attached_seed_count; }
     const auto* _seed_ptr =
-      plan->num_seeds > 0
+      attached_seed_ptr != nullptr
+        ? reinterpret_cast<const IndexT*>(attached_seed_ptr) + (attached_seed_count * qid)
+      : plan->num_seeds > 0
         ? reinterpret_cast<const IndexT*>(plan->dev_seed.data()) + (plan->num_seeds * qid)
         : nullptr;
     auto* diagnostic_context = favor_search_diagnostics::get_active_context();
     if (diagnostic_context != nullptr) {
       RAFT_LOG_INFO("CAGRA FAVOR diagnostic context attached for %u queries", n_queries);
     }
-    uint32_t* _num_executed_iterations =
-      reinterpret_cast<uint32_t*>(diagnostic_context);
+    uint32_t* _num_executed_iterations = reinterpret_cast<uint32_t*>(diagnostic_context);
 
     (*plan)(res,
             graph,

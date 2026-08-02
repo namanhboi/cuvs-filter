@@ -1,0 +1,45 @@
+{
+  "pass": false,
+  "rounds": {
+    "2": {
+      "pass": false,
+      "details": [
+        {
+          "dataset": "gist",
+          "recall_ok": false,
+          "qps_ok": true
+        },
+        {
+          "dataset": "msturing1m",
+          "recall_ok": false,
+          "qps_ok": true
+        },
+        {
+          "dataset": "msturing10m",
+          "recall_ok": false,
+          "qps_ok": true
+        }
+      ]
+    },
+    "3": {
+      "pass": false,
+      "details": [
+        {
+          "dataset": "gist",
+          "recall_ok": false,
+          "qps_ok": false
+        },
+        {
+          "dataset": "msturing1m",
+          "recall_ok": false,
+          "qps_ok": true
+        },
+        {
+          "dataset": "msturing10m",
+          "recall_ok": false,
+          "qps_ok": true
+        }
+      ]
+    }
+  }
+}

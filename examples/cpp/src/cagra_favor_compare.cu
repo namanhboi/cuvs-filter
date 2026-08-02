@@ -54,7 +54,7 @@ int run(char** argv,
         uint32_t bfs_depth,
         uint32_t subset_rows)
 {
-  auto dataset = load_bin<T>(argv[1], subset_rows);
+  auto dataset             = load_bin<T>(argv[1], subset_rows);
   constexpr uint32_t alpha = 10, beta = 64;
   if (compare_with_favor &&
       (json_number(favor_json, "rows") != dataset.extent(0) ||
@@ -122,7 +122,8 @@ try {
   if (argc < 3) {
     throw std::runtime_error(
       "usage: CAGRA_FAVOR_COMPARE BASE CAGRA.index [BFS_DEPTH] [SUBSET_ROWS]\n"
-      "   or: CAGRA_FAVOR_COMPARE BASE.fbin CAGRA.index FAVOR.json OUTPUT.json [BFS_DEPTH]");
+      "   or: CAGRA_FAVOR_COMPARE BASE.fbin CAGRA.index FAVOR.json OUTPUT.json [BFS_DEPTH] "
+      "[SUBSET_ROWS]");
   }
   const bool compare_with_favor =
     argc >= 5 && std::string(argv[3]).find_first_not_of("0123456789") != std::string::npos;
@@ -132,12 +133,13 @@ try {
     favor_json.assign(std::istreambuf_iterator<char>(favor_input), {});
     if (favor_json.empty()) throw std::runtime_error("cannot read FAVOR JSON");
   }
-  auto bfs_depth = compare_with_favor ? argc > 5 ? static_cast<uint32_t>(std::stoul(argv[5])) : 2u
-                   : argc == 4        ? static_cast<uint32_t>(std::stoul(argv[3]))
-                   : argc == 5        ? static_cast<uint32_t>(std::stoul(argv[3]))
-                                      : 2u;
-  auto subset_rows =
-    !compare_with_favor && argc == 5 ? static_cast<uint32_t>(std::stoul(argv[4])) : 0u;
+  auto bfs_depth   = compare_with_favor ? argc > 5 ? static_cast<uint32_t>(std::stoul(argv[5])) : 2u
+                     : argc == 4        ? static_cast<uint32_t>(std::stoul(argv[3]))
+                     : argc == 5        ? static_cast<uint32_t>(std::stoul(argv[3]))
+                                        : 2u;
+  auto subset_rows = compare_with_favor && argc > 6     ? static_cast<uint32_t>(std::stoul(argv[6]))
+                     : !compare_with_favor && argc == 5 ? static_cast<uint32_t>(std::stoul(argv[4]))
+                                                        : 0u;
   if (bfs_depth == 0) throw std::runtime_error("BFS_DEPTH must be positive");
   auto path = std::string(argv[1]);
   if (path.ends_with(".u8bin")) {

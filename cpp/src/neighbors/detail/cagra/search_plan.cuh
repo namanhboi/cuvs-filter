@@ -45,8 +45,8 @@ template <typename T>
 struct is_cagra_bitset_sample_filter : std::false_type {};
 
 template <typename BitsetT, typename IndexT>
-struct is_cagra_bitset_sample_filter<
-  cuvs::neighbors::filtering::bitset_filter<BitsetT, IndexT>> : std::true_type {};
+struct is_cagra_bitset_sample_filter<cuvs::neighbors::filtering::bitset_filter<BitsetT, IndexT>>
+  : std::true_type {};
 
 template <typename InnerFilterT>
 struct is_cagra_bitset_sample_filter<CagraSampleFilterWithQueryIdOffset<InnerFilterT>>
@@ -130,7 +130,7 @@ struct search_plan_impl_base : public search_params {
   size_t configured_max_iterations;
   std::uint32_t favor_adaptive_start_iteration = 0;
   std::uint32_t favor_adaptive_prefix_size     = 0;
-  float favor_penalty_distance = 0.0f;
+  float favor_penalty_distance                 = 0.0f;
   search_plan_impl_base(
     search_params params, int64_t dim, int64_t dataset_size, int64_t graph_degree, uint32_t topk)
     : search_params(params),
@@ -316,11 +316,10 @@ struct search_plan_impl : public search_plan_impl_base {
         favor_adaptive_start_iteration = budget.start_iteration;
         favor_adaptive_prefix_size     = budget.prefix_size;
         max_iterations                 = budget.hard_iteration;
-        RAFT_LOG_DEBUG(
-          "# sparse FAVOR adaptive termination: prefix=%u, start=%u, hard=%u",
-          favor_adaptive_prefix_size,
-          favor_adaptive_start_iteration,
-          static_cast<std::uint32_t>(max_iterations));
+        RAFT_LOG_DEBUG("# sparse FAVOR adaptive termination: prefix=%u, start=%u, hard=%u",
+                       favor_adaptive_prefix_size,
+                       favor_adaptive_start_iteration,
+                       static_cast<std::uint32_t>(max_iterations));
       }
     }
     team_size = dataset_desc.team_size;

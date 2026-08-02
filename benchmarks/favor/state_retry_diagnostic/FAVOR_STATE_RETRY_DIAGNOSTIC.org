@@ -1,0 +1,92 @@
+#+title: FAVOR Saved-State Retry Diagnostic
+
+* Question
+
+Independent B0 retries improve recall only slightly. This experiment determines whether a retry
+can become useful by preserving a small, explicit subset of the previous traversal state, or
+whether correctness requires continuing the complete in-kernel traversal (frontier plus visited
+hash and expansion state).
+
+This is a causal diagnostic. Its reported throughput is intentionally invalid and must not be
+used as a performance result.
+
+* Fixed experiment matrix
+
+Each workload uses the existing 1% gate, CAGRA graph degree 32/intermediate degree 64, itopk 512,
+automatic CAGRA-retention-safe FAVOR, and the same delta-d sidecar as the adaptive-termination
+report.
+
+| Workload | B0 | Rounds | Final cumulative budget |
+|----------+----+--------+-------------------------|
+| GIST-1M | 133 | 2 | 266 |
+| MSTuring-1M | 517 | 4 | 2068 |
+| MSTuring-10M | 518 | 7 | 3626 |
+
+The five strategies are:
+
+1. =independent=: a fresh B0 search and a distinct deterministic random mask each round.
+2. =passing=: a fresh B0 search seeded first by the best unique passing outputs accumulated from
+   prior rounds.
+3. =frontier=: a fresh B0 search seeded first by the prior round's valid, unexpanded terminal
+   fused-frontier entries, including both passing and rejected bridge nodes.
+4. =combined=: accumulated passing outputs followed by distinct unexpanded terminal frontier
+   entries.
+5. =oracle=: a single uninterrupted traversal rerun at B0, 2*B0, ..., R*B0. This preserves the
+   full visited hash, frontier ordering, expansion tags, and rejected bridge state within each
+   checkpoint search and is the upper bound for restart-style state preservation.
+
+All restart launches start with a fresh hash table. Unused explicit seed positions are filled with
+the exact deterministic CAGRA random initialization sequence, so differences are attributable to
+the saved prefix rather than missing initialization breadth.
+
+* Captured evidence
+
+For every query and round, =query_round.csv= records individual and accumulated recall, output
+overlap with the previous round, new result IDs, newly recovered ground-truth IDs, terminal
+unexpanded passing/rejected counts, retry prefix size, candidate evaluations, duplicate hash hits,
+and hash-full events.
+
+The compact binary artifacts retain every round's output and the tagged terminal frontier for 48
+deterministically selected queries (16 low-recall, 16 near 0.90, and 16 high-recall queries). The
+frontier snapshot is taken before final filter compaction; its flags distinguish valid, expanded,
+and filter-passing entries.
+
+* Decision rule
+
+- First, the full-state oracle must reach recall >= 0.90 on all three workloads. If it does not,
+  traversal depth is not confirmed as a sufficient explanation at these budgets.
+- A saved-state strategy is sufficient if its final accumulated recall reaches 0.90 everywhere.
+- A strategy receives a partial-result classification if, on every workload, it recovers at least
+  half of the oracle's recall gain over round one and exceeds independent retries by more than
+  0.01 recall.
+- If the oracle reaches the target but no restart strategy meets either saved-state rule, the
+  evidence favors preserving the complete in-kernel state rather than reseeding a fresh search.
+
+* Running
+
+#+begin_src bash
+benchmarks/favor/state_retry_diagnostic/setup_data.sh
+./build.sh bench-ann --limit-bench-ann=CUVS_CAGRA_ANN_BENCH
+benchmarks/favor/state_retry_diagnostic/run_experiment.sh
+#+end_src
+
+Raw captures are resumable under =results/captures=. A =manifest.json= written last marks a cell
+complete. The analyzer writes =results/summary.csv=, =results/gate.json=, and =results/report.md=.
+
+* Result (2026-08-02)
+
+| Dataset | Independent | Passing | Frontier | Combined | Full-state oracle |
+|-
+| GIST-1M | 0.85067 | 0.84891 | 0.86338 | 0.86383 | 0.92247 |
+| MSTuring-1M | 0.73792 | 0.73311 | 0.74867 | 0.74833 | 0.93077 |
+| MSTuring-10M | 0.72170 | 0.70839 | 0.72464 | 0.72438 | 0.93026 |
+
+The oracle clears 0.90 for every workload, but no fresh-hash retry strategy does. Frontier and
+combined reseeding recover only 12--35% of the oracle gain over round one and fail the predeclared
+partial-result gate. Passing-only retries converge on nearly identical outputs (last-round mean
+Jaccard 0.9507, 0.9998, and 1.0000) and finish below independent retries.
+
+The accepted decision is =full_in_kernel_state_required=. Terminal frontier preservation provides
+a real but insufficient traversal change; a viable state-saving retry must also retain traversal
+history such as the visited hash, frontier ordering, expansion tags, and rejected bridge nodes.
+See =results/report.md= and =results/gate.json=. Timing remains invalid by design.

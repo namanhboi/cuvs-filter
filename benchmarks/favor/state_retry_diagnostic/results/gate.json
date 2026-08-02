@@ -1,0 +1,98 @@
+{
+  "conclusion": "full_in_kernel_state_required",
+  "oracle_reaches_0_90_all": true,
+  "reseed_reaches_0_90_all": {
+    "passing": false,
+    "frontier": false,
+    "combined": false
+  },
+  "partial_gain_gate": {
+    "passing": {
+      "passes": false,
+      "details": [
+        {
+          "dataset": "gist",
+          "candidate_gain": 0.017940000000000067,
+          "oracle_gain": 0.09150000000000003,
+          "fraction_of_oracle_gain": 0.19606557377049247,
+          "margin_vs_independent": -0.0017599999999999838,
+          "passes": false
+        },
+        {
+          "dataset": "msturing1m",
+          "candidate_gain": 0.01094000000000006,
+          "oracle_gain": 0.2086,
+          "fraction_of_oracle_gain": 0.052444870565676226,
+          "margin_vs_independent": -0.004809999999999981,
+          "passes": false
+        },
+        {
+          "dataset": "msturing10m",
+          "candidate_gain": 0.012409999999999921,
+          "oracle_gain": 0.23427999999999993,
+          "fraction_of_oracle_gain": 0.05297080416595495,
+          "margin_vs_independent": -0.013310000000000044,
+          "passes": false
+        }
+      ]
+    },
+    "frontier": {
+      "passes": false,
+      "details": [
+        {
+          "dataset": "gist",
+          "candidate_gain": 0.03241000000000005,
+          "oracle_gain": 0.09150000000000003,
+          "fraction_of_oracle_gain": 0.3542076502732245,
+          "margin_vs_independent": 0.012709999999999999,
+          "passes": false
+        },
+        {
+          "dataset": "msturing1m",
+          "candidate_gain": 0.026499999999999968,
+          "oracle_gain": 0.2086,
+          "fraction_of_oracle_gain": 0.12703739213806312,
+          "margin_vs_independent": 0.010749999999999926,
+          "passes": false
+        },
+        {
+          "dataset": "msturing10m",
+          "candidate_gain": 0.028659999999999908,
+          "oracle_gain": 0.23427999999999993,
+          "fraction_of_oracle_gain": 0.12233225200614613,
+          "margin_vs_independent": 0.0029399999999999427,
+          "passes": false
+        }
+      ]
+    },
+    "combined": {
+      "passes": false,
+      "details": [
+        {
+          "dataset": "gist",
+          "candidate_gain": 0.03286,
+          "oracle_gain": 0.09150000000000003,
+          "fraction_of_oracle_gain": 0.35912568306010917,
+          "margin_vs_independent": 0.01315999999999995,
+          "passes": false
+        },
+        {
+          "dataset": "msturing1m",
+          "candidate_gain": 0.026160000000000072,
+          "oracle_gain": 0.2086,
+          "fraction_of_oracle_gain": 0.125407478427613,
+          "margin_vs_independent": 0.01041000000000003,
+          "passes": false
+        },
+        {
+          "dataset": "msturing10m",
+          "candidate_gain": 0.02839999999999998,
+          "oracle_gain": 0.23427999999999993,
+          "fraction_of_oracle_gain": 0.12122246884070338,
+          "margin_vs_independent": 0.0026800000000000157,
+          "passes": false
+        }
+      ]
+    }
+  }
+}

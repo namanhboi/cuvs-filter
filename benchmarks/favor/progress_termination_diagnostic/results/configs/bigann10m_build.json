@@ -1,0 +1,32 @@
+{
+  "dataset": {
+    "name": "BIGANN-10M",
+    "base_file": "bigann-10M/base.10M.u8bin",
+    "query_file": "bigann-10M/query.public.10K.u8bin",
+    "distance": "euclidean",
+    "dtype": "uint8"
+  },
+  "search_basic_param": {
+    "batch_size": 10,
+    "k": 10
+  },
+  "index": [
+    {
+      "name": "cagra-g32-ig64",
+      "algo": "cuvs_cagra",
+      "file": "bigann-10M/cagra_g32_ig64.index",
+      "build_param": {
+        "graph_build_algo": "NN_DESCENT",
+        "graph_degree": 32,
+        "intermediate_graph_degree": 64
+      },
+      "search_params": [
+        {
+          "algo": "single_cta",
+          "itopk": 64,
+          "search_width": 1
+        }
+      ]
+    }
+  ]
+}

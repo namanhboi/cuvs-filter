@@ -1,0 +1,52 @@
+{
+  "dataset": {
+    "name": "MSTuring-10M-s01-termination-shadow-forgetful",
+    "base_file": "msturing-10M/base.fbin",
+    "query_file": "msturing-10M/query.fbin",
+    "groundtruth_neighbors_file": "msturing-10M/favor/groundtruth_s01.ibin",
+    "filter_bitset_file": "msturing-10M/favor/filter_s01.bin",
+    "distance": "euclidean",
+    "dtype": "float"
+  },
+  "search_basic_param": {
+    "batch_size": 10000,
+    "k": 10
+  },
+  "index": [
+    {
+      "name": "cagra-g32-ig64",
+      "algo": "cuvs_cagra",
+      "file": "msturing-10M/cagra_g32_ig64.index",
+      "build_param": {
+        "graph_build_algo": "NN_DESCENT",
+        "graph_degree": 32,
+        "intermediate_graph_degree": 64
+      },
+      "search_params": [
+        {
+          "experiment_variant": "termination_shadow_forgetful",
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "itopk": 512,
+          "search_width": 1,
+          "max_iterations": 3626,
+          "max_queries": 2048,
+          "rand_xor_mask": 1213332,
+          "favor_penalty_mode": "cagra_retention_safe",
+          "favor_penalty_lambda": 1.0,
+          "favor_retention_fraction": 0.0,
+          "favor_delta_d_file": "/home/ubuntu/cuvs-filter/datasets/msturing-10M/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2,
+          "favor_diagnostics_output": "/home/ubuntu/cuvs-filter/benchmarks/favor/termination_hash_diagnostic/results/captures/msturing10m/forgetful",
+          "favor_diagnostics_groundtruth": "/home/ubuntu/cuvs-filter/datasets/msturing-10M/favor/groundtruth_s01.ibin",
+          "favor_diagnostics_dataset": "msturing10m",
+          "favor_diagnostics_variant": "forgetful",
+          "favor_termination_shadow_start_iteration": 518,
+          "favor_termination_shadow_parent_interval": 32
+        }
+      ]
+    }
+  ]
+}

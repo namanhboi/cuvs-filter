@@ -1,0 +1,40 @@
+[
+  {
+    "rows": 100000,
+    "dimensions": 960,
+    "M": 16,
+    "max_base_degree": 32,
+    "ef_construction": 64,
+    "alpha": 10,
+    "beta": 64,
+    "bfs_depth": 2,
+    "favor_delta_d": 0.01900501363,
+    "cagra_delta_d": 0.0174202323,
+    "signed_difference": -0.001584781334,
+    "absolute_difference": 0.001584781334,
+    "relative_percent_difference": 8.338753999,
+    "ratio": 0.91661246,
+    "favor_build_seconds": 2.822948316,
+    "cagra_compute_seconds": 2.29201675,
+    "dataset": "gist"
+  },
+  {
+    "rows": 100000,
+    "dimensions": 100,
+    "M": 16,
+    "max_base_degree": 32,
+    "ef_construction": 64,
+    "alpha": 10,
+    "beta": 64,
+    "bfs_depth": 2,
+    "favor_delta_d": 0.01347992849,
+    "cagra_delta_d": 0.01434238814,
+    "signed_difference": 0.0008624596482,
+    "absolute_difference": 0.0008624596482,
+    "relative_percent_difference": 6.398102548,
+    "ratio": 1.063981025,
+    "favor_build_seconds": 0.967810826,
+    "cagra_compute_seconds": 0.77901049,
+    "dataset": "msturing1m"
+  }
+]

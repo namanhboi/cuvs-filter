@@ -175,3 +175,94 @@ several sparse workloads, and query-local continuation recovers many missing nei
 specific one-pass policy is not a performance solution. It should remain disabled; a future
 attempt should avoid sizing every query for =Bhard=, for example by compacting and continuing only
 the hard-query subset in a second pass.
+
+* Follow-up: independent B0 retries (2026-08-02)
+
+The recommended retry-feasibility check is now complete. A benchmark-private staged path ran
+automatic-retention FAVOR for one, two, and three independent =B0= rounds with different
+deterministic =rand_xor_mask= values, then merged unique passing IDs by raw distance. It used the
+same three 1% gates, batch sizes 10 and 10,000, and three repetitions per cell.
+
+Full-query median results on one NVIDIA L4 were:
+
+| Dataset | B0 recall / QPS | Two masks recall / QPS | Three masks recall / QPS | Adaptive recall / QPS |
+|-
+| GIST-1M | 0.83091 / 5,399 | 0.85061 / 2,694 | 0.85934 / 1,795 | 0.92545 / 2,016 |
+| MSTuring-1M | 0.72220 / 28,785 | 0.73272 / 14,328 | 0.73580 / 9,414 | 0.94560 / 5,506 |
+| MSTuring-10M | 0.69601 / 28,601 | 0.70795 / 14,206 | 0.71293 / 9,328 | 0.89432 / 5,560 |
+
+The gate fails because no multi-seed variant reaches 0.90 recall on any full-query workload; the
+three-mask GIST point is also slower than adaptive termination. Independent starts do add a few
+neighbors, but mostly repeat the same shallow work. This rejects the full in-kernel accumulator
+when its retry rounds differ only by the random-start mask.
+
+The result narrows the two-pass recommendation: compacting hard queries can still avoid making all
+queries pay the continuation cost, but the second pass must provide more depth, retained frontier
+state, or a separately tested chained-reseeding mechanism. Merely rerunning =B0= is insufficient.
+
+See =multi_seed_b0/FAVOR_MULTI_SEED_B0_EXPERIMENT.org= and
+=multi_seed_b0/results/report.md=. The staged support is benchmark-only and leaves the installed
+API and ordinary search dispatch unchanged.
+
+* Follow-up: saved-state B0 retries (2026-08-02)
+
+A second benchmark-private diagnostic compared five mechanisms at the adaptive experiment's
+cumulative depth: independent B0 starts, accumulated-passing-result reseeding, unexpanded terminal
+frontier reseeding, their combination, and a continuous-traversal oracle. The restart variants
+always received a fresh visited hash. The oracle reran one uninterrupted traversal at each B0
+checkpoint and merged its passing checkpoint outputs, so it represents the full-state upper bound
+for an iterative accumulator.
+
+| Dataset | Rounds x B0 | Independent | Passing reseed | Frontier reseed | Combined reseed | Full-state oracle |
+|-
+| GIST-1M | 2 x 133 | 0.85067 | 0.84891 | 0.86338 | 0.86383 | 0.92247 |
+| MSTuring-1M | 4 x 517 | 0.73792 | 0.73311 | 0.74867 | 0.74833 | 0.93077 |
+| MSTuring-10M | 7 x 518 | 0.72170 | 0.70839 | 0.72464 | 0.72438 | 0.93026 |
+
+The oracle reaches 0.90 on all three workloads, confirming that the cumulative depth is
+sufficient. No restart strategy reaches 0.90. Passing-result reseeding is worse than independent
+starts, while frontier reseeding recovers only 12--35% of the oracle's recall gain over round one.
+It also fails the predeclared partial gate (at least half the oracle gain and >0.01 over independent
+on every workload).
+
+This resolves the open state question: merely feeding the terminal frontier into a fresh B0
+search does not preserve enough traversal history. A viable retry must continue the complete
+in-kernel state, including frontier ordering, expansion tags, rejected bridge nodes, and visited
+hash semantics, or give a compacted hard-query second pass a materially deeper independent
+budget. The data do not justify an in-kernel reset-and-reseed accumulator.
+
+The implementation, exact decision rule, per-query captures, and tracked report are under
+=state_retry_diagnostic/=. Diagnostic timing is intentionally invalid. No installed header or
+public search parameter changed.
+
+* Follow-up: termination shadow plus forgetful hash (2026-08-02)
+
+A joint follow-up tested CAGRA's native bounded =SMALL= hash and offline prefix/gap/top-10-stability
+termination rules. The hash itself is not recall-safe for sparse FAVOR: deep recall is 0.29276,
+0.16266, and 0.17353 on GIST, MSTuring-1M, and MSTuring-10M, versus 0.91928, 0.92728, and 0.92653
+with the exact hash. Between 72% and 95% of forgetful-hash queries underfill, despite zero hash-full
+events. Periodic forgetting creates repeated traversal and loses the distinct passing candidate
+set needed by final filtering.
+
+The predeclared global-policy gate therefore selected no policy, and no live v2 termination branch
+was implemented. See =termination_hash_diagnostic/FAVOR_TERMINATION_HASH_DIAGNOSTIC.org= and its
+=results/report.md=. The exact-hash default and installed API remain unchanged.
+
+* Follow-up: exact-state progress rule (2026-08-02)
+
+The bounded-hash path has now been removed from runtime dispatch.  A schema-4 exact-hash shadow
+recorded cumulative candidate evaluations and passing candidates from iteration 1, plus the
+ordered passing top-10 every 32 expanded parents.  It evaluated a predeclared family whose
+evidence was the conservative minimum of actual stale passing candidates and selectivity-scaled
+stale unique evaluations since the top-10 last changed.
+
+The signal is real but not dataset-independent.  The lowest-work admissible evidence multiplier
+is 2 on SIFT and both BIGANN scales, 8 on GIST, 16 on MSTuring-1M, and 32 on MSTuring-10M.  No
+single rule qualifies on the training cells of any leave-one-family-out fold.  Frontier-gap gates
+mostly force difficult queries to the cap and do not remove this conflict.
+
+The disposition is =reject_shadow_rule=.  The fresh DEEP-image1M holdout was not opened, no live
+termination condition was implemented, and no exact bitmap was allocated.  Full protocol and
+results are in
+=progress_termination_diagnostic/FAVOR_PROGRESS_TERMINATION_DIAGNOSTIC.org= and
+=progress_termination_diagnostic/results/report.md=.

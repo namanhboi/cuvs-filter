@@ -1,0 +1,13 @@
+dataset,hash,termination,recall,qps,underfilled_fraction,qps_vs_exact_current,recall_passes_0_90,accepted
+gist,exact,current_adaptive,0.9254,2023.7269858868242,0.0,1.0,True,False
+gist,forgetful,current_adaptive,0.2967,1395.3360131624045,0.7409,0.689488267386497,False,False
+gist,exact,v2,,,,,False,False
+gist,forgetful,v2,,,,,False,False
+msturing1m,exact,current_adaptive,0.9456,5805.680896038943,0.0,1.0,True,False
+msturing1m,forgetful,current_adaptive,0.16266,7985.076996233808,0.9481,1.3753902667440452,False,False
+msturing1m,exact,v2,,,,,False,False
+msturing1m,forgetful,v2,,,,,False,False
+msturing10m,exact,current_adaptive,0.89432,5800.411503698832,0.0,1.0,False,False
+msturing10m,forgetful,current_adaptive,0.17353,8336.181528687779,0.9177,1.4371707116593238,False,False
+msturing10m,exact,v2,,,,,False,False
+msturing10m,forgetful,v2,,,,,False,False

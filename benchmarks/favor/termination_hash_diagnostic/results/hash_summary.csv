@@ -1,0 +1,7 @@
+dataset,hash,b0_recall,b0_underfilled_fraction,final_recall,mean_candidate_evaluations,mean_candidate_duplicates,sum_candidate_hash_full,hash_bitlen,small_hash_bitlen,small_hash_reset_interval
+gist,exact,0.83093,0.002,0.9192799999999999,20815.7089,13104.2911,0,17,0,1048576
+gist,forgetful,0.2878,0.7285,0.29276,13731.0038,20188.9962,0,11,11,4
+msturing1m,exact,0.7222400000000001,0.0862,0.9272800000000001,44528.7489,21615.2511,0,18,0,1048576
+msturing1m,forgetful,0.16266,0.9496,0.16266,16199.6702,49944.3298,0,11,11,16
+msturing10m,exact,0.6960900000000001,0.0903,0.92653,80017.2163,35982.7837,0,18,0,1048576
+msturing10m,forgetful,0.17353,0.9195,0.17353,21716.9257,94283.0743,0,11,11,16

@@ -21,18 +21,39 @@ namespace cuvs::neighbors::cagra::detail::favor_search_diagnostics {
 CUVS_EXPORT auto get_active_context() noexcept -> context*;
 CUVS_EXPORT void set_active_context(context* value) noexcept;
 
+/** Benchmark-only explicit per-query initialization seeds for staged retry diagnostics. */
+CUVS_EXPORT auto get_active_seed_ptr() noexcept -> const std::uint32_t*;
+CUVS_EXPORT auto get_active_seed_count() noexcept -> std::uint32_t;
+CUVS_EXPORT void set_active_seeds(const std::uint32_t* values, std::uint32_t count) noexcept;
+
 class scoped_context {
  public:
   explicit scoped_context(context* value) : previous_{get_active_context()}
   {
     set_active_context(value);
   }
-  scoped_context(const scoped_context&)            = delete;
+  scoped_context(const scoped_context&)                    = delete;
   auto operator=(const scoped_context&) -> scoped_context& = delete;
   ~scoped_context() { set_active_context(previous_); }
 
  private:
   context* previous_;
+};
+
+class scoped_seeds {
+ public:
+  scoped_seeds(const std::uint32_t* values, std::uint32_t count)
+    : previous_values_{get_active_seed_ptr()}, previous_count_{get_active_seed_count()}
+  {
+    set_active_seeds(values, count);
+  }
+  scoped_seeds(const scoped_seeds&)                    = delete;
+  auto operator=(const scoped_seeds&) -> scoped_seeds& = delete;
+  ~scoped_seeds() { set_active_seeds(previous_values_, previous_count_); }
+
+ private:
+  const std::uint32_t* previous_values_;
+  std::uint32_t previous_count_;
 };
 
 }  // namespace cuvs::neighbors::cagra::detail::favor_search_diagnostics

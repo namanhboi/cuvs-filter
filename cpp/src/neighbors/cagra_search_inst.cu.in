@@ -5,6 +5,7 @@
 
 #include <cuvs/neighbors/cagra.hpp>
 #include <neighbors/cagra.cuh>
+#include <neighbors/cagra_benchmark.hpp>
 
 namespace {
 
@@ -33,3 +34,43 @@ CUVS_INST_CAGRA_SEARCH(data_t, uint32_t, int64_t);
 #undef CUVS_INST_CAGRA_SEARCH
 
 }  // namespace cuvs::neighbors::cagra
+
+namespace cuvs::neighbors::cagra::detail {
+
+template <>
+CUVS_EXPORT std::uint64_t benchmark_count_favor_bitset_matches<data_t>(
+  raft::resources const& res,
+  cagra::index<data_t, std::uint32_t> const& index,
+  cuvs::neighbors::filtering::base_filter const& sample_filter)
+{
+  using bitset_filter_type = cuvs::neighbors::filtering::bitset_filter<std::uint32_t, std::int64_t>;
+  auto const* bitset_filter = dynamic_cast<bitset_filter_type const*>(&sample_filter);
+  RAFT_EXPECTS(bitset_filter != nullptr,
+               "benchmark_count_favor_bitset_matches requires a uint32 bitset filter");
+  return count_favor_bitset_matches(res, index, *bitset_filter);
+}
+
+template <>
+CUVS_EXPORT void benchmark_search_favor_with_known_filtering_rate<data_t>(
+  raft::resources const& res,
+  cagra::search_params const& params,
+  cagra::index<data_t, std::uint32_t> const& index,
+  raft::device_matrix_view<const data_t, std::int64_t, raft::row_major> queries,
+  raft::device_matrix_view<std::int64_t, std::int64_t, raft::row_major> neighbors,
+  raft::device_matrix_view<float, std::int64_t, raft::row_major> distances,
+  cuvs::neighbors::filtering::base_filter const& sample_filter)
+{
+  using bitset_filter_type = cuvs::neighbors::filtering::bitset_filter<std::uint32_t, std::int64_t>;
+  auto const* bitset_filter = dynamic_cast<bitset_filter_type const*>(&sample_filter);
+  RAFT_EXPECTS(bitset_filter != nullptr,
+               "benchmark_search_favor_with_known_filtering_rate requires a uint32 bitset filter");
+  RAFT_EXPECTS(params.filter_mode == filtering_mode::FAVOR,
+               "benchmark_search_favor_with_known_filtering_rate requires FAVOR mode");
+  RAFT_EXPECTS(params.filtering_rate >= 0.0f && params.filtering_rate < 1.0f,
+               "benchmark_search_favor_with_known_filtering_rate requires a known filtering rate");
+  auto bitset_filter_copy = *bitset_filter;
+  search_with_filtering<data_t, std::uint32_t, bitset_filter_type, std::int64_t>(
+    res, params, index, queries, neighbors, distances, bitset_filter_copy);
+}
+
+}  // namespace cuvs::neighbors::cagra::detail

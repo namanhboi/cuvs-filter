@@ -1,0 +1,135 @@
+#+TITLE: Independent Multi-Seed B0 FAVOR Experiment
+#+OPTIONS: toc:2
+
+* Question
+
+Does repeating the existing automatic-retention SINGLE_CTA FAVOR search with
+independent shallow (=B0=) starts recover the exact filtered neighbors that one
+start fails to discover, without paying the adaptive deep-search cost?
+
+This is a diagnostic experiment, not a proposed public API. The benchmark runs
+one, two, and three independent searches with cumulative =rand_xor_mask= values,
+then merges unique passing ids by raw distance. It does not preserve frontier or
+visited state between rounds.
+
+* Fixed protocol
+
+The 1% gates are GIST-1M, MSTuring-1M, and MSTuring-10M. All use the same
+degree-32/intermediate-degree-64 graph, alpha 10, beta 64, BFS depth 2, exact
+bitset selectivity, =itopk=512, =max_iterations=0=, automatic retention
+(=favor_retention_fraction=0=), and penalty lambda 1. GIST uses search width 4;
+both MSTuring sizes use width 1.
+
+The cumulative masks are:
+
+#+begin_src text
+0x0000000000128394
+0x9e3779b97f58ff81
+0xd1b54a32d1806e97
+#+end_src
+
+Each workload is measured at batch sizes 10 and 10,000 with one benchmark
+thread, 0.1 seconds of warmup, a 0.2-second minimum measurement, and three
+repetitions. The analyzer reports median recall, QPS, latency, underfill,
+marginal recall per added round, and QPS ratios versus the one-pass automatic
+and adaptive controls.
+
+* Gate
+
+The result justifies an in-kernel iterative accumulator only if either the
+two-mask or three-mask variant:
+
+1. reaches recall at least 0.90 on all three 10,000-query workloads; and
+2. is faster than the same-machine one-pass adaptive-termination cell on every
+   workload.
+
+If neither variant passes, independent shallow multi-start is insufficient.
+That result does not by itself prove that preserving the full frontier is the
+only solution; chained reseeding from accumulated passing results remains a
+separate design.
+
+* Reproduction
+
+#+begin_src sh
+# Build libcuvs, the focused test, benchmark, and delta-d example first.
+benchmarks/favor/multi_seed_b0/setup_data.sh
+benchmarks/favor/multi_seed_b0/run_experiment.sh
+#+end_src
+
+Generated raw results, =summary.csv=, =gate.json=, and =report.md= are written
+under =benchmarks/favor/multi_seed_b0/results/=. Raw benchmark JSON and resolved
+configs remain ignored; the accepted summary, gate, and report are tracked.
+
+The run writes resolved copies of the JSON configs under =results/configs=. This
+keeps the checked-in configs portable while allowing an alternate dataset root to
+be passed as the first argument to =run_experiment.sh=.
+
+* Result (2026-08-02)
+
+The fixed matrix completed on one NVIDIA L4 with all variants rerun serially on
+the same machine. Each table entry below is the median of three 10,000-query
+repetitions. Absolute QPS should not be compared with the earlier A30 report;
+the adaptive control in this table is the valid same-machine comparison.
+
+| Dataset | B0 recall / QPS | Two masks recall / QPS | Three masks recall / QPS | Adaptive recall / QPS |
+|-
+| GIST-1M | 0.83091 / 5,399 | 0.85061 / 2,694 | 0.85934 / 1,795 | 0.92545 / 2,016 |
+| MSTuring-1M | 0.72220 / 28,785 | 0.73272 / 14,328 | 0.73580 / 9,414 | 0.94560 / 5,506 |
+| MSTuring-10M | 0.69601 / 28,601 | 0.70795 / 14,206 | 0.71293 / 9,328 | 0.89432 / 5,560 |
+
+The gate is =FAIL=. Neither the two- nor three-mask union reaches 0.90 recall on
+any of the full-query workloads. The third GIST round is also slower than the
+same-machine adaptive control. Marginal recall from round two to round three is
+only +0.00873 on GIST, +0.00308 on MSTuring-1M, and +0.00498 on MSTuring-10M.
+
+Independent B0 starts therefore provide some new candidates, but most of their
+work is redundant and they do not repair the demonstrated depth shortfall. This
+result rejects the proposed full in-kernel accumulator when its rounds differ
+only by =rand_xor_mask=. A future retry must change the traversal opportunity:
+preserve/restore frontier state, continue only compacted hard queries with a
+larger budget, or test the distinct chained-reseeding design from accumulated
+passing results.
+
+The complete result summary is
+=benchmarks/favor/multi_seed_b0/results/report.md=; machine-readable values are
+in =summary.csv= and =gate.json=.
+
+* Delta-d cross-check against the original FAVOR code
+
+The optimized CAGRA delta-d kernel was also checked against the actual
+=/home/ubuntu/FAVOR/include/favor.h= implementation. The reference harness builds
+FAVOR HNSW with =M=16 (base maximum degree 32), =ef_construction=64,
+=alpha=10=, and =beta=64=. On the full one-million-row inputs:
+
+| Dataset | FAVOR HNSW delta-d | CAGRA graph delta-d | Relative difference |
+|-
+| GIST-1M | 0.014793597 | 0.014487070 | 2.072% |
+| MSTuring-1M | 0.013661930 | 0.014244982 | 4.268% |
+
+The graph construction algorithms are different, so exact equality is not
+expected. This agreement, together with the deterministic CPU-reference tests
+covering the 8-, 16-, and 32-thread distance teams, is sufficient for this
+experiment. Reproduce the comparison with:
+
+#+begin_src sh
+python benchmarks/favor/multi_seed_b0/run_reference_validation.py \
+  --rows 1000000 --reuse-production-graphs
+#+end_src
+
+The accepted full-size comparison is stored at
+=benchmarks/favor/multi_seed_b0/results/reference_validation/summary_1000000.json=.
+
+* Implementation boundary
+
+=favor_seed_masks= and its merge path exist only in the cuVS benchmark wrapper
+and private source headers. No installed C++ header, public =search_params=
+field, ABI-visible public struct layout, or ordinary CAGRA/FAVOR dispatch was
+changed. An empty mask list follows the pre-existing path exactly. The staged
+path validates SINGLE_CTA automatic retention, at most three unique masks,
+=max_iterations=0=, a bitset filter, and incompatible benchmark features before
+launch.
+
+The runner now resumes complete result files. Because local =LD_PRELOAD= can
+produce a CUDA-context teardown exit after cuVS-bench has already written valid
+JSON, it accepts a nonzero process status only after verifying all expected
+parameter/repetition rows are present, unique, and error-free.

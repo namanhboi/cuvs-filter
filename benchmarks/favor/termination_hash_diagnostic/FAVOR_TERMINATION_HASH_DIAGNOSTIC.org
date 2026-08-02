@@ -1,0 +1,78 @@
+#+TITLE: FAVOR SINGLE_CTA termination and forgetful-hash diagnostic
+#+DATE: 2026-08-02
+
+* Question
+
+Can CAGRA's bounded =SMALL= hash remove the large exact visited-hash allocation, and can a cheap
+global retained-frontier rule stop a continuous sparse FAVOR traversal at Recall@10 >= 0.90?
+
+At the time of measurement the experiment was private and opt-in.  It did not add an installed
+header field or change ordinary CAGRA dispatch.  The experimental environment variable enabled
+=SMALL= only for bitset FAVOR, nonpersistent =SINGLE_CTA=.
+
+Following the negative result, that runtime branch was removed on 2026-08-02.  Filtered search now
+rejects =SMALL= unconditionally and the former environment variable is ignored.  The description
+below is historical evidence, not a currently available operating mode.
+
+* Protocol
+
+The three fixed 1% gates use =k=10=, =itopk=512=, graph degree 32, intermediate degree 64, and
+automatic retention-safe FAVOR. Exact and forgetful traversals run continuously to the
+full-state-oracle caps: 266 iterations for GIST, 2,068 for MSTuring-1M, and 3,626 for
+MSTuring-10M.
+
+The diagnostic records the retained state at =B0= and every 32 expanded-parent budget thereafter,
+plus the terminal cap. Each per-query checkpoint contains:
+
+- prefix-valid and prefix-passing counts for logical ranks 0--31;
+- nearest unexpanded frontier distance, rank-31 boundary, and kth passing distance;
+- ordered passing top-10 source IDs and raw distances;
+- iteration and expanded-parent counts.
+
+The offline sweep evaluates the current 16-of-32 rule, prefix thresholds 10/12/14, frontier/kth
+gaps 1.00/1.05/1.10, and ordered-top-10 stability windows 1/2/4/8. One global policy must reach
+instantaneous checkpoint recall >=0.905 on all three forgetful-hash cells. Among qualifying
+policies, the lowest geometric mean iteration count would be implemented live. Otherwise no live
+v2 kernel condition is added.
+
+* Result
+
+The forgetful hash fails before termination policy selection. It has no hash-full events, but
+forgetting nodes permits repeated traversal to consume the candidate budget and leaves most
+queries without ten passing results.
+
+| Dataset | Exact B0 / deep recall | Forgetful B0 / deep recall | Forgetful B0 underfill | Forgetful deep duplicates/query |
+|-
+| GIST-1M | 0.83093 / 0.91928 | 0.28780 / 0.29276 | 0.7285 | 20,189 |
+| MSTuring-1M | 0.72224 / 0.92728 | 0.16266 / 0.16266 | 0.9496 | 49,944 |
+| MSTuring-10M | 0.69609 / 0.92653 | 0.17353 / 0.17353 | 0.9195 | 94,283 |
+
+The native sizes were the expected 2,048-entry (11-bit) shared hash, reset every four iterations
+on GIST (=search_width=4) and every sixteen on MSTuring (=search_width=1). Exact controls used
+17--18-bit per-query hashes. Thus the result is not caused by an undersized table returning
+=full=; it is the intended forgetting behavior interacting badly with sparse filtered traversal.
+
+An uninstrumented current-adaptive check confirms that the speedups are invalid operating points.
+The forgetful variant reaches only 0.29670, 0.16266, and 0.17353 recall. MSTuring QPS increases by
+38--44%, but 92--95% of queries underfill. GIST is both slower and wrong. No cell satisfies the
+joint recall/QPS gate.
+
+* Decision
+
+The machine-readable disposition is =reject_forgetful_hash_no_live_v2=. No live v2 termination
+condition was implemented. The exact visited set is semantically important for this FAVOR path,
+not just a capacity cost.
+
+The trajectory evidence remains useful, but the opt-in hash branch no longer exists. The
+production default and public API are unchanged. If hash memory is revisited, the next candidate
+should preserve an exact visited-set abstraction (for example a compact exact representation or a
+two-level design), not periodically forget visited nodes.
+
+Artifacts are under =results/=: =hash_summary.csv=, =policy_summary.csv=,
+=factorial_summary.csv=, =gate.json=, and =report.md=. Raw trajectory binaries and benchmark JSON
+are ignored because they total hundreds of MiB.  The historical forgetful run is intentionally
+not reproducible from current runtime dispatch; the runner refuses rather than silently measuring
+the exact hash under a stale experiment label.
+
+Instrumented shadow timings are invalid by design. The factorial's current-adaptive rows are
+uninstrumented and use the median of three repetitions.

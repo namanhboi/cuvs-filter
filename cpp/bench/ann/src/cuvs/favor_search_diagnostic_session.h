@@ -5,8 +5,8 @@
 
 #pragma once
 
-#include "../common/blob.hpp"
 #include "../../../../src/neighbors/detail/cagra/favor_search_diagnostics.hpp"
+#include "../common/blob.hpp"
 
 #include <raft/core/resource/cuda_stream.hpp>
 #include <raft/core/resources.hpp>
@@ -35,9 +35,16 @@ struct favor_diagnostic_config {
   std::string selected_queries_file;
   std::string dataset;
   std::string variant;
-  std::uint32_t max_trace_iterations = 0;
+  std::uint32_t max_trace_iterations               = 0;
+  std::uint32_t termination_record_start_iteration = 0;
+  std::uint32_t termination_start_iteration        = 0;
+  std::uint32_t termination_parent_interval        = 0;
 
   [[nodiscard]] bool enabled() const noexcept { return !output_directory.empty(); }
+  [[nodiscard]] bool termination_shadow_enabled() const noexcept
+  {
+    return termination_start_iteration != 0 || termination_parent_interval != 0;
+  }
 };
 
 /** Owns one deliberately untimed diagnostic capture for a cuVS Bench CAGRA configuration. */
@@ -68,10 +75,10 @@ class favor_diagnostic_session {
       throw std::invalid_argument("favor_diagnostics_groundtruth must be specified");
     }
 
-    auto stream = raft::resource::get_cuda_stream(res);
+    auto stream            = raft::resource::get_cuda_stream(res);
     auto ground_truth_host = load_ground_truth(num_queries);
-    auto selected          = device_telemetry ? load_selected_queries(num_queries)
-                                              : std::vector<std::uint32_t>{};
+    auto selected =
+      device_telemetry ? load_selected_queries(num_queries) : std::vector<std::uint32_t>{};
     std::vector<std::int32_t> trace_slot_by_query(num_queries, -1);
     for (std::size_t slot = 0; slot < selected.size(); ++slot) {
       trace_slot_by_query[selected[slot]] = static_cast<std::int32_t>(slot);
@@ -85,13 +92,42 @@ class favor_diagnostic_session {
     const std::uint32_t candidates_per_iteration = graph_degree * search_width;
     const std::uint64_t iteration_count =
       static_cast<std::uint64_t>(selected.size()) * max_trace_iterations;
-    const std::uint64_t candidate_count = iteration_count * candidates_per_iteration;
+    const std::uint64_t candidate_count         = iteration_count * candidates_per_iteration;
+    std::uint32_t termination_checkpoint_stride = 0;
+    if (config_.termination_shadow_enabled()) {
+      if (config_.termination_start_iteration == 0 || config_.termination_parent_interval == 0) {
+        throw std::invalid_argument(
+          "termination shadow requires both start_iteration and parent_interval");
+      }
+      if (configured_max_iterations < config_.termination_start_iteration) {
+        throw std::invalid_argument(
+          "termination shadow start_iteration exceeds configured max_iterations");
+      }
+      const auto record_start_iteration = config_.termination_record_start_iteration == 0
+                                            ? config_.termination_start_iteration
+                                            : config_.termination_record_start_iteration;
+      if (record_start_iteration > config_.termination_start_iteration) {
+        throw std::invalid_argument(
+          "termination shadow record_start_iteration must not exceed start_iteration");
+      }
+      const auto parent_span =
+        (configured_max_iterations - record_start_iteration) * search_width;
+      // One periodic series plus independently forced B0 and terminal checkpoints.
+      termination_checkpoint_stride =
+        3 + raft::ceildiv(parent_span, config_.termination_parent_interval);
+    }
+    const std::uint64_t termination_checkpoint_count =
+      static_cast<std::uint64_t>(num_queries) * termination_checkpoint_stride;
 
     rmm::device_uvector<favor_diag::query_summary> summaries(num_queries, stream);
     rmm::device_uvector<std::uint32_t> ground_truth(ground_truth_host.size(), stream);
     rmm::device_uvector<std::int32_t> trace_slots(trace_slot_by_query.size(), stream);
     rmm::device_uvector<favor_diag::iteration_record> iterations(iteration_count, stream);
     rmm::device_uvector<favor_diag::candidate_record> candidates(candidate_count, stream);
+    rmm::device_uvector<favor_diag::termination_checkpoint_record> termination_checkpoints(
+      termination_checkpoint_count, stream);
+    rmm::device_uvector<std::uint32_t> termination_checkpoint_counts(
+      termination_checkpoint_stride == 0 ? 0 : num_queries, stream);
     rmm::device_uvector<favor_diag::context> context(1, stream);
 
     RAFT_CUDA_TRY(cudaMemcpyAsync(ground_truth.data(),
@@ -110,21 +146,38 @@ class favor_diagnostic_session {
       RAFT_CUDA_TRY(cudaMemsetAsync(
         candidates.data(), 0, candidate_count * sizeof(favor_diag::candidate_record), stream));
     }
+    if (termination_checkpoint_count != 0) {
+      RAFT_CUDA_TRY(cudaMemsetAsync(
+        termination_checkpoints.data(),
+        0,
+        termination_checkpoint_count * sizeof(favor_diag::termination_checkpoint_record),
+        stream));
+      RAFT_CUDA_TRY(cudaMemsetAsync(
+        termination_checkpoint_counts.data(), 0, num_queries * sizeof(std::uint32_t), stream));
+    }
 
     favor_diag::context host_context{};
-    host_context.summaries               = summaries.data();
-    host_context.ground_truth_ids         = ground_truth.data();
-    host_context.trace_slot_by_query      = trace_slots.data();
-    host_context.iteration_records        = iterations.data();
-    host_context.candidate_records        = candidates.data();
-    host_context.num_queries              = num_queries;
-    host_context.max_trace_iterations     = max_trace_iterations;
-    host_context.candidates_per_iteration = candidates_per_iteration;
-    RAFT_CUDA_TRY(cudaMemcpyAsync(context.data(),
-                                  &host_context,
-                                  sizeof(host_context),
-                                  cudaMemcpyHostToDevice,
-                                  stream));
+    host_context.summaries           = summaries.data();
+    host_context.ground_truth_ids    = ground_truth.data();
+    host_context.trace_slot_by_query = trace_slots.data();
+    host_context.iteration_records   = iterations.data();
+    host_context.candidate_records   = candidates.data();
+    host_context.termination_checkpoints =
+      termination_checkpoint_stride == 0 ? nullptr : termination_checkpoints.data();
+    host_context.termination_checkpoint_counts =
+      termination_checkpoint_stride == 0 ? nullptr : termination_checkpoint_counts.data();
+    host_context.termination_checkpoint_stride = termination_checkpoint_stride;
+    host_context.termination_record_start_iteration =
+      config_.termination_record_start_iteration == 0
+        ? config_.termination_start_iteration
+        : config_.termination_record_start_iteration;
+    host_context.termination_start_iteration   = config_.termination_start_iteration;
+    host_context.termination_parent_interval   = config_.termination_parent_interval;
+    host_context.num_queries                   = num_queries;
+    host_context.max_trace_iterations          = max_trace_iterations;
+    host_context.candidates_per_iteration      = candidates_per_iteration;
+    RAFT_CUDA_TRY(cudaMemcpyAsync(
+      context.data(), &host_context, sizeof(host_context), cudaMemcpyHostToDevice, stream));
 
     if (device_telemetry) {
       favor_diag::scoped_context diagnostic_scope{context.data()};
@@ -137,6 +190,10 @@ class favor_diagnostic_session {
     std::vector<favor_diag::query_summary> summaries_host(num_queries);
     std::vector<favor_diag::iteration_record> iterations_host(iteration_count);
     std::vector<favor_diag::candidate_record> candidates_host(candidate_count);
+    std::vector<favor_diag::termination_checkpoint_record> termination_checkpoints_host(
+      termination_checkpoint_count);
+    std::vector<std::uint32_t> termination_checkpoint_counts_host(
+      termination_checkpoint_stride == 0 ? 0 : num_queries);
     std::vector<std::int64_t> result_indices_host(static_cast<std::uint64_t>(num_queries) * topk);
     if (device_telemetry) {
       RAFT_CUDA_TRY(cudaMemcpy(summaries_host.data(),
@@ -159,28 +216,39 @@ class favor_diagnostic_session {
                                candidates_host.size() * sizeof(favor_diag::candidate_record),
                                cudaMemcpyDeviceToHost));
     }
+    if (termination_checkpoint_count != 0) {
+      RAFT_CUDA_TRY(cudaMemcpy(
+        termination_checkpoints_host.data(),
+        termination_checkpoints.data(),
+        termination_checkpoints_host.size() * sizeof(favor_diag::termination_checkpoint_record),
+        cudaMemcpyDeviceToHost));
+      RAFT_CUDA_TRY(cudaMemcpy(termination_checkpoint_counts_host.data(),
+                               termination_checkpoint_counts.data(),
+                               termination_checkpoint_counts_host.size() * sizeof(std::uint32_t),
+                               cudaMemcpyDeviceToHost));
+    }
     RAFT_CUDA_TRY(cudaMemcpy(result_indices_host.data(),
                              result_indices,
                              result_indices_host.size() * sizeof(std::int64_t),
                              cudaMemcpyDeviceToHost));
 
     for (std::uint32_t query = 0; query < num_queries; ++query) {
-      std::uint32_t matches = 0;
+      std::uint32_t matches       = 0;
       std::uint32_t valid_outputs = 0;
       for (std::uint32_t rank = 0; rank < topk; ++rank) {
         const auto candidate = result_indices_host[static_cast<std::uint64_t>(query) * topk + rank];
         valid_outputs += candidate >= 0 && candidate < dataset_size;
         for (std::uint32_t gt_rank = 0; gt_rank < favor_diag::ground_truth_k; ++gt_rank) {
-          if (candidate == ground_truth_host[static_cast<std::uint64_t>(query) *
-                                               favor_diag::ground_truth_k +
-                                             gt_rank]) {
+          if (candidate ==
+              ground_truth_host[static_cast<std::uint64_t>(query) * favor_diag::ground_truth_k +
+                                gt_rank]) {
             ++matches;
             break;
           }
         }
       }
-      summaries_host[query].recall =
-        static_cast<float>(matches) / static_cast<float>(std::min(topk, favor_diag::ground_truth_k));
+      summaries_host[query].recall = static_cast<float>(matches) /
+                                     static_cast<float>(std::min(topk, favor_diag::ground_truth_k));
       summaries_host[query].output_count = valid_outputs;
     }
 
@@ -197,7 +265,10 @@ class favor_diagnostic_session {
                   configured_max_iterations,
                   filtering_rate,
                   max_trace_iterations,
-                  candidates_per_iteration);
+                  candidates_per_iteration,
+                  termination_checkpoints_host,
+                  termination_checkpoint_counts_host,
+                  termination_checkpoint_stride);
     captured_ = true;
   }
 
@@ -213,7 +284,8 @@ class favor_diagnostic_session {
     for (std::uint32_t query = 0; query < num_queries; ++query) {
       for (std::uint32_t rank = 0; rank < favor_diag::ground_truth_k; ++rank) {
         result[static_cast<std::uint64_t>(query) * favor_diag::ground_truth_k + rank] =
-          static_cast<std::uint32_t>(gt.data()[static_cast<std::uint64_t>(query) * gt.n_cols() + rank]);
+          static_cast<std::uint32_t>(
+            gt.data()[static_cast<std::uint64_t>(query) * gt.n_cols() + rank]);
       }
     }
     return result;
@@ -231,7 +303,9 @@ class favor_diagnostic_session {
       if (query >= num_queries) { throw std::out_of_range("selected query is outside the batch"); }
       if (unique.insert(query).second) { selected.push_back(query); }
     }
-    if (selected.size() > 48) { throw std::invalid_argument("at most 48 deep-trace queries are allowed"); }
+    if (selected.size() > 48) {
+      throw std::invalid_argument("at most 48 deep-trace queries are allowed");
+    }
     return selected;
   }
 
@@ -243,20 +317,24 @@ class favor_diagnostic_session {
     output.write(reinterpret_cast<const char*>(values.data()), values.size() * sizeof(T));
   }
 
-  void write_capture(const std::vector<favor_diag::query_summary>& summaries,
-                     const std::vector<favor_diag::iteration_record>& iterations,
-                     const std::vector<favor_diag::candidate_record>& candidates,
-                     const std::vector<std::uint32_t>& selected,
-                     std::uint32_t num_queries,
-                     std::uint32_t topk,
-                     std::uint32_t graph_degree,
-                     std::uint32_t search_width,
-                     std::int64_t dataset_size,
-                     std::uint32_t itopk,
-                     std::uint32_t configured_max_iterations,
-                     float filtering_rate,
-                     std::uint32_t max_trace_iterations,
-                     std::uint32_t candidates_per_iteration) const
+  void write_capture(
+    const std::vector<favor_diag::query_summary>& summaries,
+    const std::vector<favor_diag::iteration_record>& iterations,
+    const std::vector<favor_diag::candidate_record>& candidates,
+    const std::vector<std::uint32_t>& selected,
+    std::uint32_t num_queries,
+    std::uint32_t topk,
+    std::uint32_t graph_degree,
+    std::uint32_t search_width,
+    std::int64_t dataset_size,
+    std::uint32_t itopk,
+    std::uint32_t configured_max_iterations,
+    float filtering_rate,
+    std::uint32_t max_trace_iterations,
+    std::uint32_t candidates_per_iteration,
+    const std::vector<favor_diag::termination_checkpoint_record>& termination_checkpoints,
+    const std::vector<std::uint32_t>& termination_checkpoint_counts,
+    std::uint32_t termination_checkpoint_stride) const
   {
     namespace fs = std::filesystem;
     const fs::path output_dir{config_.output_directory};
@@ -282,13 +360,15 @@ class favor_diagnostic_session {
           << s.terminal_unexpanded_reject << ',' << s.expanded_pass_parents << ','
           << s.expanded_reject_parents << ',' << s.candidate_attempts << ','
           << s.candidate_evaluations << ',' << s.candidate_duplicate_or_full << ','
-          << s.candidate_duplicates << ',' << s.candidate_hash_full << ','
-          << s.passing_candidates << ',' << s.rejected_candidates << ','
-          << s.penalized_candidates << ',' << s.gt_seen_mask << ',' << s.output_count << ','
-          << s.hash_bitlen << ',' << s.small_hash_bitlen << ',' << s.small_hash_reset_interval << ','
-          << s.query_penalty << ',' << s.terminal_cutoff << ',' << s.best_unexpanded_distance << ','
-          << s.worst_retained_distance << ',' << s.kth_passing_raw_distance;
-      for (auto first : s.gt_first_iteration) { csv << ',' << first; }
+          << s.candidate_duplicates << ',' << s.candidate_hash_full << ',' << s.passing_candidates
+          << ',' << s.rejected_candidates << ',' << s.penalized_candidates << ',' << s.gt_seen_mask
+          << ',' << s.output_count << ',' << s.hash_bitlen << ',' << s.small_hash_bitlen << ','
+          << s.small_hash_reset_interval << ',' << s.query_penalty << ',' << s.terminal_cutoff
+          << ',' << s.best_unexpanded_distance << ',' << s.worst_retained_distance << ','
+          << s.kth_passing_raw_distance;
+      for (auto first : s.gt_first_iteration) {
+        csv << ',' << first;
+      }
       csv << '\n';
     }
 
@@ -299,6 +379,8 @@ class favor_diagnostic_session {
     }
     write_binary(output_dir / "iteration_trace.bin", iterations);
     write_binary(output_dir / "candidate_trace.bin", candidates);
+    write_binary(output_dir / "termination_checkpoints.bin", termination_checkpoints);
+    write_binary(output_dir / "termination_checkpoint_counts.bin", termination_checkpoint_counts);
 
     std::ofstream manifest{output_dir / "manifest.json"};
     manifest << "{\n"
@@ -318,6 +400,18 @@ class favor_diagnostic_session {
              << "  \"candidates_per_iteration\": " << candidates_per_iteration << ",\n"
              << "  \"iteration_record_size\": " << sizeof(favor_diag::iteration_record) << ",\n"
              << "  \"candidate_record_size\": " << sizeof(favor_diag::candidate_record) << ",\n"
+             << "  \"termination_record_start_iteration\": "
+             << (config_.termination_record_start_iteration == 0
+                   ? config_.termination_start_iteration
+                   : config_.termination_record_start_iteration)
+             << ",\n"
+             << "  \"termination_start_iteration\": " << config_.termination_start_iteration
+             << ",\n"
+             << "  \"termination_parent_interval\": " << config_.termination_parent_interval
+             << ",\n"
+             << "  \"termination_checkpoint_stride\": " << termination_checkpoint_stride << ",\n"
+             << "  \"termination_checkpoint_record_size\": "
+             << sizeof(favor_diag::termination_checkpoint_record) << ",\n"
              << "  \"timing_valid\": false\n"
              << "}\n";
   }
@@ -330,5 +424,6 @@ class favor_diagnostic_session {
 static_assert(sizeof(favor_diag::query_summary) == 164);
 static_assert(sizeof(favor_diag::iteration_record) == 84);
 static_assert(sizeof(favor_diag::candidate_record) == 36);
+static_assert(sizeof(favor_diag::termination_checkpoint_record) == 136);
 
 }  // namespace cuvs::bench::detail

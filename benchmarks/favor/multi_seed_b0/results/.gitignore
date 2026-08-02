@@ -1,0 +1,9 @@
+*
+!.gitignore
+!gate.json
+!report.md
+!summary.csv
+!reference_validation/
+reference_validation/*
+!reference_validation/summary_100000.json
+!reference_validation/summary_1000000.json

@@ -157,9 +157,10 @@ float cpu_delta(std::vector<float> const& data,
                 uint32_t degree,
                 uint32_t alpha,
                 uint32_t beta,
-                uint32_t depth)
+                uint32_t depth,
+                uint32_t dimension = 1)
 {
-  auto n       = static_cast<uint32_t>(data.size());
+  auto n       = static_cast<uint32_t>(data.size() / dimension);
   double total = 0.0;
   for (uint32_t root = 0; root < n; ++root) {
     std::vector<uint32_t> candidates;
@@ -182,8 +183,12 @@ float cpu_delta(std::vector<float> const& data,
     if (candidates.size() < beta) { continue; }
     std::vector<float> distances;
     for (auto candidate : candidates) {
-      auto difference = data[root] - data[candidate];
-      distances.push_back(difference * difference);
+      float distance = 0.0f;
+      for (uint32_t d = 0; d < dimension; ++d) {
+        auto difference = data[root * dimension + d] - data[candidate * dimension + d];
+        distance += difference * difference;
+      }
+      distances.push_back(distance);
     }
     std::sort(distances.begin(), distances.end());
     total += 5.0 * (distances[beta - 1] - distances[alpha - 1]) / (beta - alpha);
@@ -212,6 +217,20 @@ TEST(CagraFavorDeltaD, MatchesDeterministicCpuBfs)
     auto expected = cpu_delta(values, edges, degree, 1, 3, depth);
     auto actual   = cuvs::neighbors::cagra::compute_favor_delta_d(res, {1, 3, depth}, index);
     EXPECT_FLOAT_EQ(actual, expected);
+  }
+
+  for (uint32_t dimension : {65u, 129u, 513u}) {
+    std::vector<float> multi_dimensional(n * dimension);
+    for (uint32_t row = 0; row < n; ++row) {
+      for (uint32_t d = 0; d < dimension; ++d) {
+        multi_dimensional[row * dimension + d] =
+          static_cast<float>((row + 1) * ((d % 17) + 1)) / static_cast<float>(d + 3);
+      }
+    }
+    auto multi_index = make_index<float>(res, multi_dimensional, dimension, edges, degree);
+    auto expected    = cpu_delta(multi_dimensional, edges, degree, 1, 3, 2, dimension);
+    auto actual      = cuvs::neighbors::cagra::compute_favor_delta_d(res, {1, 3, 2}, multi_index);
+    EXPECT_NEAR(actual, expected, std::max(1e-5f, std::abs(expected) * 1e-5f));
   }
 }
 

@@ -1,0 +1,125 @@
+#+title: Exact-State FAVOR Progress Termination Diagnostic
+#+date: 2026-08-02
+
+* Question and disposition
+
+This experiment asks whether a small, dataset-independent progress rule can decide how long a
+sparse automatic-retention FAVOR =SINGLE_CTA= query should continue while preserving CAGRA's full
+in-kernel state.  It does not restart search and does not modify live termination.
+
+The disposition is =reject_shadow_rule=.  The exact-state captures are healthy and deeper
+continuous traversal reaches the target everywhere, but no one rule in the predeclared family
+passes the work and recall gates across dataset families.  Therefore the DEEP-image1M holdout was
+not opened, no live rule was implemented, and no bitmap allocation was added.
+
+* Runtime boundary
+
+The diagnostic ABI is schema 4.  Every 32 expanded parents it records:
+
+- cumulative exact-hash candidate evaluations, passing candidates, and duplicates;
+- the ordered passing top-10 IDs and raw distances;
+- expanded-parent count, frontier distance, and prefix state.
+
+Recording starts at iteration 1.  =B0= and the terminal cap are forced checkpoints even if they
+fall between the 32-parent intervals.  This path is benchmark-private and is active only when a
+diagnostic context is attached.  Public headers, default CAGRA, explicit =max_iterations=,
+=MULTI_CTA=, UDF filtering, and ordinary FAVOR termination are unchanged.
+
+The bounded periodically reset =SMALL= hash experiment was removed from runtime dispatch.  A
+filtered search now rejects =SMALL= unconditionally; setting the former
+=CUVS_FAVOR_EXPERIMENTAL_FORGETFUL_HASH= environment variable has no effect.  Its negative report
+and summarized artifacts remain under =termination_hash_diagnostic/=.
+
+* Rule family
+
+For each query, a change to the ordered passing top-10 resets the stale counters.  Incomplete
+top-10 state also resets them.  Otherwise:
+
+#+begin_example
+stale_unique  = cumulative_unique_evaluations - value_at_last_top10_change
+stale_passing = cumulative_passing_candidates - value_at_last_top10_change
+evidence      = min(stale_passing, selectivity * stale_unique)
+#+end_example
+
+A rule may fire only at or after =B0=, with ten passing outputs, and when
+=evidence >= C * k=.  The fixed sweep was:
+
+- =C in {2, 4, 8, 12, 16, 24, 32, 48, 64}=;
+- frontier gap disabled, =1.00=, or =1.05=.
+
+The gap compares the best unexpanded distance with the passing kth raw distance.  A rule that
+never fires falls back to the predeclared cap.
+
+* Data and controls
+
+All development cells use exact 1% bitsets and filtered ground truth, =k=10=, =itopk=512=, graph
+degree 32, intermediate degree 64, automatic CAGRA retention, and the exact visited hash.  The two
+BIGANN scales form one held-out family and the two MSTuring scales form another.
+
+| Dataset | B0 recall / work | First fixed >=.905 iteration / work | Cap recall / work |
+|-
+| SIFT-1M | 0.95008 / 9,598 | 97 / 7,189 | 0.98191 / 17,540 |
+| GIST-1M | 0.83094 / 11,292 | 237 / 18,832 | 0.91924 / 20,815 |
+| BIGANN-1M | 0.94291 / 8,240 | 385 / 6,415 | 0.96949 / 15,076 |
+| BIGANN-10M | 0.92280 / 10,225 | 449 / 8,967 | 0.96757 / 19,086 |
+| MSTuring-1M | 0.72224 / 12,005 | 1,669 / 36,212 | 0.92728 / 44,529 |
+| MSTuring-10M | 0.69609 / 11,077 | 2,694 / 59,111 | 0.92653 / 80,017 |
+
+Work is cumulative unique candidate evaluation count, not diagnostic wall time.  All six captures
+have zero hash-full events.  The GIST and MSTuring B0/cap recalls reproduce the earlier exact-hash
+diagnostic within rounding.
+
+* Gate and result
+
+For each leave-one-family-out fold, a candidate had to reach Recall@10 >=0.905 on every training
+cell.  Among candidates satisfying the work ceiling, selection used the lowest geometric mean
+work.  Each held-out cell then had to reach >=0.90 without exceeding its work ceiling.  Failure
+cells were limited to 1.10 times their fixed-.905 work; already-easy B0 cells were limited to 1.25
+times B0 work.
+
+No fold has a qualifying training rule.  Per-dataset best admissible rules make the conflict
+explicit:
+
+| Dataset | Best admissible rule | Recall | Work / limit |
+|-
+| SIFT-1M | C=2, gap off | 0.95372 | 10,256 / 11,998 |
+| GIST-1M | C=8, gap off | 0.90824 | 19,027 / 20,715 |
+| BIGANN-1M | C=2, gap off | 0.95336 | 9,389 / 10,300 |
+| BIGANN-10M | C=2, gap off | 0.93208 | 11,049 / 12,781 |
+| MSTuring-1M | C=16, gap off | 0.91232 | 38,159 / 39,833 |
+| MSTuring-10M | C=32, gap off | 0.91310 | 63,179 / 65,022 |
+
+The required evidence multiplier grows from 2 on the easy controls to 8 on GIST, 16 on
+MSTuring-1M, and 32 on MSTuring-10M.  Gap gates do not resolve this: on BIGANN and MSTuring they
+usually delay almost every query to the cap, violating the easy-cell work ceiling without
+providing a usable global threshold.
+
+The signal is measuring local output stability, but stability is not calibrated to remaining
+graph depth.  At =B0=, median evidence is already about 18--28 on SIFT/GIST/BIGANN, while it is
+only 1 on both MSTuring scales.  Conversely, deep median maximum evidence rises to 193 and 452 on
+MSTuring.  This family-dependent timescale is precisely what a fixed =C= was meant to avoid.
+
+* Decision
+
+- Do not implement this rule live and do not tune =C= by dataset identity.
+- Do not inspect or retune on DEEP-image1M; the frozen-holdout gate was never reached.
+- Do not allocate an exact bitmap for the rule.  There is no accepted rule whose overhead could
+  justify profiling that alternative.
+- Retain tuned fixed depths only as positive performance ceilings, not as supported automatic
+  termination.
+- The next termination attempt needs a genuinely scale-normalized remaining-work signal or a
+  changed execution design.  The smaller execution alternative remains hard-query compaction
+  followed by materially deeper continuation; preserving full CTA state remains the exact but
+  larger redesign.
+
+* Reproduction
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter
+./benchmarks/favor/progress_termination_diagnostic/run_experiment.sh
+#+end_src
+
+BIGANN base/query inputs are symlinked from =/home/ubuntu/big-ann-benchmarks/data/bigann=.  Raw
+captures and benchmark JSON are ignored; configs, =results/controls.csv=,
+=results/candidate_results.csv=, =results/gate.json=, and =results/report.md= are retained.  The
+runner contains the frozen DEEP-image1M path but invokes it only after a development gate pass.

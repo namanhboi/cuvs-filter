@@ -1,13 +1,14 @@
 #+title: FAVOR for CAGRA — Implementation and Continuation Handoff
-#+date: 2026-08-01
+#+date: 2026-08-02
 #+options: toc:3 num:t
 
 * Read this first
 
 This is the continuation document for a human reviewer or a new Codex session.  The repository is
-=/users/namanh/cuvs-filter= on branch =favor-filtered-search=.  Commit =f574e784= contains the
-latest implementation, diagnostics, matched benchmark artifacts, and the rejected adaptive
-termination experiment.  The branch preserves default CAGRA behavior unless FAVOR is selected.
+=/home/ubuntu/cuvs-filter= on branch =favor-filtered-search=.  Commit =19437baa= is the base of the
+current uncommitted follow-up.  It records the implementation, diagnostics, matched benchmark
+artifacts, rejected adaptive-termination experiment, and the prior handoff.  The branch preserves
+default CAGRA behavior unless FAVOR is selected.
 
 The current high-level result is:
 
@@ -20,6 +21,10 @@ The current high-level result is:
   delta-d value.
 - A one-pass adaptive termination experiment recovers much of the missing recall but loses too much
   throughput.  It is disabled by default and must not be presented as the supported solution.
+- The completed independent multi-seed B0 experiment is also negative.  Two or three deterministic
+  starts add only 0.011--0.028 absolute recall on the full GIST/MSTuring gates and none reaches
+  0.90.  Do not implement the proposed in-kernel accumulator if its only source of diversity is a
+  reset plus a different =rand_xor_mask=.
 
 The working tree contains many pre-existing, untracked experimental reports and result directories.
 Do not run =git clean=, =git reset --hard=, or bulk-add untracked files.  Treat them as user data.
@@ -61,8 +66,18 @@ and averages valid roots.  The benchmarked configuration is =alpha=10=, =beta=64
 
 The versioned 80-byte sidecar is bound to graph metadata, logical dataset contents, distance
 metric, calculation parameters, and fingerprints.  Loading rejects incompatible or corrupt data.
+The follow-up workspace optimizes sidecar generation without changing its API or file format: BFS
+duplicate detection uses a shared-memory open-addressed set instead of a quadratic scan, the root
+vector is staged once, and candidate distances use CAGRA's 8/16/32-lane team layout for dimensions
+up to 128/256/above 256.  GIST-1M delta-d generation now completes in about 36 seconds on the L4;
+the former serial-reduction kernel had not completed after 22 minutes.
+
 The CAGRA estimate was compared with the reference FAVOR/HNSW construction and was close enough to
-rule out delta-d calculation as the main BIGANN/MSTuring failure.
+rule out delta-d calculation as the main BIGANN/MSTuring failure.  The full one-million-row
+cross-check against the actual =/home/ubuntu/FAVOR/include/favor.h= code used matched
+=M=16=/maximum base degree 32, =ef_construction=64, =alpha=10=, and =beta=64=.  CAGRA differed by
+2.072% on GIST and 4.268% on MSTuring-1M; exact equality is not expected because the graphs are
+constructed by different algorithms.
 
 Key files:
 
@@ -186,7 +201,7 @@ All graphs are =cagra_g32_ig64.index= with graph degree 32 and intermediate degr
 | MSTuring-10M | 10M | 100 | float32 | Cropped base symlink |
 
 Do not copy the external BIGANN/MSTuring bases into the repository.  Existing links point under
-=/users/namanh/big-ann-benchmarks/data=.
+=/home/ubuntu/big-ann-benchmarks/data=.
 
 * Established performance conclusions
 
@@ -224,7 +239,7 @@ Most missing ground-truth neighbors were never discovered, rather than discovere
 Zero penalty did not repair the failures.  This is why further penalty-only tuning is unlikely to
 solve sparse SINGLE_CTA by itself.
 
-* Latest adaptive-termination experiment — rejected/default-off
+* Prior adaptive-termination experiment — rejected/default-off
 
 The experiment defines =m=32= for =k=10= and, only after the old automatic budget =B0=, stops when
 all prefix entries are valid, at least 16 pass, and the nearest unexpanded penalized distance is
@@ -255,6 +270,88 @@ FAVOR_ADAPTIVE_TERMINATION=1                    # run_benchmarks.sh wrapper
 
 Do not enable this by default without a new successful gate.
 
+* Latest independent multi-seed B0 experiment — rejected
+
+This staged experiment reruns existing automatic-retention SINGLE_CTA FAVOR one, two, or three
+times with independent deterministic =rand_xor_mask= values and merges unique passing IDs by raw
+distance.  Every round receives the ordinary derived =B0= budget.  It intentionally does not
+preserve frontier or visited state, so it directly tests whether independent shallow starts alone
+recover the missing neighbors.
+
+Matched NVIDIA L4 results at 1% selectivity, =k=10=, =itopk=512=, three repetitions, and 10,000
+queries are:
+
+| Dataset | B0 recall / QPS | Two masks recall / QPS | Three masks recall / QPS | Adaptive recall / QPS |
+|-
+| GIST-1M | 0.83091 / 5,399 | 0.85061 / 2,694 | 0.85934 / 1,795 | 0.92545 / 2,016 |
+| MSTuring-1M | 0.72220 / 28,785 | 0.73272 / 14,328 | 0.73580 / 9,414 | 0.94560 / 5,506 |
+| MSTuring-10M | 0.69601 / 28,601 | 0.70795 / 14,206 | 0.71293 / 9,328 | 0.89432 / 5,560 |
+
+The declared gate required either two or three rounds to reach recall 0.90 on all three workloads
+and beat the same-machine adaptive control.  It fails: neither variant reaches 0.90 anywhere, and
+the third GIST round is slower than adaptive.  The small marginal gains show that different starts
+do discover some new neighbors, but repeat too much work to repair the depth shortfall.
+
+The implementation is benchmark-only.  =favor_seed_masks= is parsed into a wrapper-private search
+parameter, calls a private typed bridge that avoids recounting the exact bitset per round, and uses
+a deterministic GPU merge ordered by =(raw distance, id)=.  No installed header or public API was
+modified; an empty mask list follows the original dispatch.
+
+Artifacts and reproduction live under =benchmarks/favor/multi_seed_b0/=.  The accepted report is
+=results/report.md=, the full machine-readable table is =results/summary.csv=, and the gate is
+=results/gate.json=.  Raw result JSON remains intentionally ignored.
+
+* Latest saved-state retry diagnostic — full state required
+
+The completed causal matrix tests whether a fresh B0 retry becomes useful when seeded from prior
+passing outputs or from the actual pre-compaction unexpanded fused frontier. It also includes a
+continuous-traversal oracle at the same cumulative budgets. All cells use the existing 1% filters,
+=k=10=, =itopk=512=, and automatic retention-safe SINGLE_CTA FAVOR.
+
+| Dataset | Rounds x B0 | Independent | Passing | Frontier | Combined | Oracle |
+|-
+| GIST-1M | 2 x 133 | 0.85067 | 0.84891 | 0.86338 | 0.86383 | 0.92247 |
+| MSTuring-1M | 4 x 517 | 0.73792 | 0.73311 | 0.74867 | 0.74833 | 0.93077 |
+| MSTuring-10M | 7 x 518 | 0.72170 | 0.70839 | 0.72464 | 0.72438 | 0.93026 |
+
+The oracle clears 0.90 everywhere, while no restart variant does. Frontier/combined reseeding is
+better than independent starts by 0.010--0.013 on GIST/MSTuring-1M but by only about 0.003 on
+MSTuring-10M; it captures just 12--35% of the oracle gain. Passing-only retries rapidly become the
+same search (last-round mean Jaccard is 0.9507, 0.9998, and 1.0000) and are worse than independent
+starts at the final round count.
+
+The benchmark-only implementation attaches explicit per-query initialization seeds through
+thread-local private state and snapshots the terminal tagged frontier before filter compaction.
+Flags retain validity, expanded state, and filter outcome. Per-query CSVs record newly recovered
+ground-truth IDs, output overlap, frontier composition, retry-prefix size, candidate evaluations,
+duplicates, and exact hash-full events. Forty-eight deterministic query traces retain compact
+terminal-frontier binaries for each round.
+
+The accepted conclusion is =full_in_kernel_state_required=. A reset-and-reseed accumulator is not
+justified. If retry work continues, preserve the full traversal state or compact hard queries and
+give the second pass a materially larger budget. Artifacts, runner, analyzer, and protocol live in
+=benchmarks/favor/state_retry_diagnostic/=. The final report is =results/report.md= and the
+machine-readable decision is =results/gate.json=. Timings are invalid by design.
+
+* Termination plus forgetful-hash diagnostic (2026-08-02)
+
+The next joint experiment is also complete. A benchmark-private opt-in enabled CAGRA's bounded,
+periodically restored =SMALL= hash only for bitset FAVOR =SINGLE_CTA=, while a sparse shadow trace
+recorded ordered passing top-10 state every 32 expanded parents. The predeclared gate would
+implement a live condition only if one global prefix/gap/stability rule reached checkpoint recall
+>=0.905 on GIST and both MSTuring 1% workloads.
+
+The hash fails independently of termination. At =B0=, forgetful-hash recall is 0.28780, 0.16266,
+and 0.17353, compared with exact-hash 0.83093, 0.72224, and 0.69609. Deep traversal reaches only
+0.29276, 0.16266, and 0.17353 and underfills 72--95% of queries. There are zero hash-full events;
+periodic forgetting instead causes large repeated-node traffic and prevents enough distinct
+passing results from surviving.
+
+The disposition is =reject_forgetful_hash_no_live_v2=. No live v2 termination path was added.
+Ordinary filtered CAGRA still forces the exact hash, and no installed header or public parameter
+changed. See =termination_hash_diagnostic/FAVOR_TERMINATION_HASH_DIAGNOSTIC.org= and
+=termination_hash_diagnostic/results/report.md=.
+
 * Reports: which document answers what
 
 - =FAVOR_CAGRA_SINGLE_MULTI_CTA_PERFORMANCE_REPORT_V2.org=: original static SINGLE/MULTI report.
@@ -263,7 +360,16 @@ Do not enable this by default without a new successful gate.
 - =DEEP_TRAVERSAL_DIAGNOSTIC_REPORT.org=: proof that sparse failures are unfinished traversal.
 - =TRACE_PARSING_AND_INTERPRETATION.org=: trace schema and interpretation guide.
 - =FAVOR_EARLY_TERMINATION_PLAN.org=: rationale and feasibility plan.
-- =FAVOR_ADAPTIVE_TERMINATION_SINGLE_CTA_REPORT.org=: latest negative experiment and exact results.
+- =FAVOR_ADAPTIVE_TERMINATION_SINGLE_CTA_REPORT.org=: rejected adaptive experiment and its
+  independent-retry follow-up.
+- =multi_seed_b0/FAVOR_MULTI_SEED_B0_EXPERIMENT.org=: latest independent-retry protocol, result,
+  implementation boundary, and FAVOR-code delta-d cross-check.
+- =state_retry_diagnostic/FAVOR_STATE_RETRY_DIAGNOSTIC.org=: saved-state retry protocol and
+  decision rule; =state_retry_diagnostic/results/report.md= contains the accepted result.
+- =termination_hash_diagnostic/FAVOR_TERMINATION_HASH_DIAGNOSTIC.org=: joint termination and
+  forgetful-hash gate; the bounded hash and live-v2 condition are rejected.
+- =progress_termination_diagnostic/FAVOR_PROGRESS_TERMINATION_DIAGNOSTIC.org=: exact-state
+  cumulative-progress rule, leave-one-family-out failure, and permanent bounded-hash removal.
 - =COMMITTED_PERFORMANCE_REPORT.org=: historical committed-static baseline.
 
 Prefer tracked documents with these exact names.  Several similarly named untracked drafts are
@@ -274,7 +380,7 @@ stale and should not be cited without verification.
 Use the existing micromamba =cuvs= environment and all host threads:
 
 #+begin_src sh
-cd /users/namanh/cuvs-filter
+cd /home/ubuntu/cuvs-filter
 micromamba activate cuvs
 PARALLEL_LEVEL=$(nproc) ./build.sh libcuvs tests bench-ann -n \
   --limit-tests="NEIGHBORS_ANN_CAGRA_FAVOR_DELTA_D_TEST;NEIGHBORS_ANN_CAGRA_FAVOR_SEARCH_TEST;NEIGHBORS_ANN_CAGRA_FILTER_UDF_TEST" \
@@ -292,8 +398,11 @@ LD_PRELOAD=$PWD/cpp/build/libcuvs.so \
   cpp/build/gtests/NEIGHBORS_ANN_CAGRA_FILTER_UDF_TEST
 #+end_src
 
-At handoff, these pass 13/13, 21/21, and 24/24.  A teardown-only CUDA
-=context is destroyed= error can occur after cuVS-bench has written a complete result; runners
+At handoff, the focused delta-d, FAVOR search, and filter-UDF suites pass 13/13, 28/28, and 24/24.
+The FAVOR suite covers opt-in isolation, permanent filtered-=SMALL= rejection, and sparse
+termination checkpoint ordering in addition to the earlier search behavior.
+A teardown-only CUDA =context is destroyed= error can occur after cuVS-bench has written a complete
+result; runners
 validate output completeness before accepting it.
 
 * Recommended continuation
@@ -301,18 +410,26 @@ validate output completeness before accepting it.
 The next high-value work is sparse =SINGLE_CTA=, not MULTI_CTA.
 
 1. Do not continue tuning the one-pass virtual-prefix condition; it is already a clear negative.
-2. Avoid a larger up-front =max_iterations= because it increases the exact visited-hash allocation
+2. Do not implement an in-kernel retry accumulator whose rounds merely reset state and change
+   =rand_xor_mask=; the completed focused matrix rejects that mechanism.
+3. Avoid a larger up-front =max_iterations= because it increases the exact visited-hash allocation
    for every query.
-3. Test a minimal two-pass hard-query continuation: run all queries to =B0=, compact only queries
-   whose frontier remains unfinished/whose valid-result condition is unmet, then rerun that small
-   subset with a larger budget and different deterministic seeds.
-4. First measure the hard-query fraction and duplicate-work cost from existing summaries.  Gate on
-   GIST and MSTuring 1% before any full matrix.
-5. Acceptance remains Recall@10 >=0.90 and higher QPS than default near that range for SINGLE_CTA.
-   If the focused gate fails, stop rather than launching all datasets/selectivities.
+4. The saved-state diagnostic rejects passing-result and terminal-frontier reseeding into a fresh
+   =B0= search. If retry work continues, compact the hard-query subset and either give it a
+   materially deeper second pass or preserve complete traversal state: frontier order, expansion
+   tags, rejected bridge nodes, and the visited hash.
+5. Gate any such minimal prototype on these three 1% cells.  Acceptance remains Recall@10 >=0.90
+   and higher QPS than default near that range; stop before a full matrix if the focused gate fails.
+6. Do not use the native forgetful =SMALL= hash for sparse FAVOR. It collapses recall and underfills
+   results despite zero hash-full events. Any hash-memory replacement must retain exact visited-set
+   semantics.
+7. Do not implement the fixed-multiplier stale-evidence rule.  Cross-family validation requires
+   incompatible multipliers (2 on the easy controls, then 8, 16, and 32 on GIST and the two
+   MSTuring scales).  The DEEP holdout and bitmap gate were intentionally not reached.
 
-Preserving CTA state between passes or implementing separate HNSW-style frontier/result queues is a
-much larger traversal redesign and should not be the first follow-up.
+Preserving full CTA state is a larger traversal redesign, but it is now the only state-saving retry
+path supported by the diagnostic. A compacted, materially deeper second pass is the smaller
+alternative.
 
 * Commit timeline
 
@@ -327,6 +444,7 @@ much larger traversal redesign and should not be the first follow-up.
 | =e0715aab= | Automatic retention for SINGLE_CTA |
 | =6dc54be3= | Report plot axes start at zero |
 | =f574e784= | Deep diagnostics and rejected adaptive termination experiment |
+| =19437baa= | Implementation and continuation handoff |
 
 * Workspace safety checklist
 

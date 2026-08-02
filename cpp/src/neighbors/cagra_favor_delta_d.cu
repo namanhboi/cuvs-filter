@@ -312,6 +312,8 @@ __global__ void favor_delta_d_kernel(const T* dataset,
                                      uint32_t beta,
                                      uint32_t bfs_depth,
                                      uint32_t capacity,
+                                     uint32_t seen_capacity,
+                                     uint32_t team_size_bits,
                                      cuvs::distance::DistanceType metric,
                                      float* roots)
 {
@@ -321,10 +323,17 @@ __global__ void favor_delta_d_kernel(const T* dataset,
   extern __shared__ unsigned char storage[];
   auto nodes     = reinterpret_cast<uint32_t*>(storage);
   auto distances = reinterpret_cast<float*>(storage);
+  auto seen      = nodes + capacity;
   __shared__ uint32_t count;
 
+  constexpr auto empty = std::numeric_limits<uint32_t>::max();
+  if (threadIdx.x == 0) { count = 0; }
+  for (uint32_t i = threadIdx.x; i < seen_capacity; i += blockDim.x) {
+    seen[i] = empty;
+  }
+  __syncthreads();
+
   if (threadIdx.x == 0) {
-    count                   = 0;
     uint32_t frontier_begin = 0;
     uint32_t frontier_end   = 1;
 
@@ -336,14 +345,15 @@ __global__ void favor_delta_d_kernel(const T* dataset,
         for (uint32_t edge = 0; edge < degree; ++edge) {
           auto candidate = graph[static_cast<uint64_t>(src) * degree + edge];
           if (candidate >= n_rows || candidate == root) { continue; }
-          bool duplicate = false;
-          for (uint32_t i = 0; i < count; ++i) {
-            if (nodes[i] == candidate) {
-              duplicate = true;
-              break;
-            }
+          if (count == capacity) { continue; }
+
+          auto slot = (candidate * 0x9e3779b9u) & (seen_capacity - 1);
+          while (seen[slot] != empty && seen[slot] != candidate) {
+            slot = (slot + 1) & (seen_capacity - 1);
           }
-          if (!duplicate && count < capacity) { nodes[count++] = candidate; }
+          if (seen[slot] == candidate) { continue; }
+          seen[slot]     = candidate;
+          nodes[count++] = candidate;
         }
       }
       frontier_begin = level_end;
@@ -357,32 +367,59 @@ __global__ void favor_delta_d_kernel(const T* dataset,
     return;
   }
 
-  for (uint32_t i = threadIdx.x; i < count; i += blockDim.x) {
-    auto candidate       = nodes[i];
+  // CAGRA stages the query in shared memory once and reuses it across all candidate teams. The
+  // current root is the query for this delta-d block; the BFS hash storage is dead after this point
+  // and can be reused for the float query vector.
+  auto root_values = reinterpret_cast<float*>(seen);
+  for (uint32_t d = threadIdx.x; d < dim; d += blockDim.x) {
+    root_values[d] = as_float(dataset[static_cast<uint64_t>(root) * stride + d]);
+  }
+  __syncthreads();
+
+  // Match CAGRA's standard distance-comparison layout: one power-of-two thread team per
+  // candidate, contiguous dimensions across lanes, lane-local accumulation, then an XOR team
+  // reduction. CAGRA uses teams 8/16/32 for dimensions <=128/<=256/>256 respectively.
+  auto const team_size       = 1u << team_size_bits;
+  auto const lane_id         = threadIdx.x & (team_size - 1);
+  auto const team_id         = threadIdx.x >> team_size_bits;
+  auto const teams_per_block = blockDim.x >> team_size_bits;
+  auto const max_i           = ((count + teams_per_block - 1) / teams_per_block) * teams_per_block;
+  for (uint32_t i = team_id; i < max_i; i += teams_per_block) {
+    auto const valid     = i < count;
+    auto const candidate = valid ? nodes[i] : uint32_t{0};
     float value          = 0.0f;
     float root_norm      = 0.0f;
     float candidate_norm = 0.0f;
-    for (uint32_t d = 0; d < dim; ++d) {
-      auto x = as_float(dataset[static_cast<uint64_t>(root) * stride + d]);
-      auto y = as_float(dataset[static_cast<uint64_t>(candidate) * stride + d]);
-      if (metric == cuvs::distance::DistanceType::L2Expanded) {
-        auto diff = x - y;
-        value += diff * diff;
-      } else if (metric == cuvs::distance::DistanceType::L1) {
-        value += fabsf(x - y);
-      } else {
-        value -= x * y;
-        if (metric == cuvs::distance::DistanceType::CosineExpanded) {
-          root_norm += x * x;
-          candidate_norm += y * y;
+    if (valid) {
+      for (uint32_t d = lane_id; d < dim; d += team_size) {
+        auto const x = root_values[d];
+        auto const y = as_float(dataset[static_cast<uint64_t>(candidate) * stride + d]);
+        if (metric == cuvs::distance::DistanceType::L2Expanded) {
+          auto const diff = x - y;
+          value += diff * diff;
+        } else if (metric == cuvs::distance::DistanceType::L1) {
+          value += fabsf(x - y);
+        } else {
+          value -= x * y;
+          if (metric == cuvs::distance::DistanceType::CosineExpanded) {
+            root_norm += x * x;
+            candidate_norm += y * y;
+          }
         }
       }
     }
-    if (metric == cuvs::distance::DistanceType::CosineExpanded) {
-      auto denom = sqrtf(root_norm * candidate_norm);
-      value      = denom > 0.0f ? value / denom : 0.0f;
+    for (uint32_t reduction_stride = team_size >> 1; reduction_stride > 0; reduction_stride >>= 1) {
+      value += __shfl_xor_sync(0xffffffffu, value, reduction_stride, team_size);
+      root_norm += __shfl_xor_sync(0xffffffffu, root_norm, reduction_stride, team_size);
+      candidate_norm += __shfl_xor_sync(0xffffffffu, candidate_norm, reduction_stride, team_size);
     }
-    distances[i] = value;
+    if (valid && lane_id == 0) {
+      if (metric == cuvs::distance::DistanceType::CosineExpanded) {
+        auto const denom = sqrtf(root_norm * candidate_norm);
+        value            = denom > 0.0f ? value / denom : 0.0f;
+      }
+      distances[i] = value;
+    }
   }
   __syncthreads();
 
@@ -438,7 +475,17 @@ float compute_favor_delta_d_impl(raft::resources const& res,
     capacity = std::min<uint64_t>(capacity + frontier, index.size() - 1);
   }
   RAFT_EXPECTS(capacity >= params.beta, "BFS depth and graph degree cannot yield beta candidates");
-  auto shared_bytes = capacity * sizeof(uint32_t);
+  RAFT_EXPECTS(capacity <= std::numeric_limits<uint32_t>::max() / 2,
+               "Complete BFS neighborhood is too large for FAVOR delta-d");
+  uint64_t seen_capacity = 1;
+  while (seen_capacity < 2 * capacity) {
+    seen_capacity *= 2;
+  }
+  constexpr uint64_t block_size = 256;
+  auto const reusable_bytes =
+    std::max<uint64_t>(seen_capacity * sizeof(uint32_t), dataset.extent(1) * sizeof(float));
+  auto const shared_bytes   = capacity * sizeof(uint32_t) + reusable_bytes;
+  auto const team_size_bits = dataset.extent(1) <= 128 ? 3u : dataset.extent(1) <= 256 ? 4u : 5u;
   int device{};
   int max_shared_bytes{};
   RAFT_CUDA_TRY(cudaGetDevice(&device));
@@ -453,7 +500,7 @@ float compute_favor_delta_d_impl(raft::resources const& res,
                                        cudaFuncAttributeMaxDynamicSharedMemorySize,
                                        static_cast<int>(shared_bytes)));
   }
-  favor_delta_d_kernel<<<dataset.extent(0), 256, shared_bytes, stream>>>(
+  favor_delta_d_kernel<<<dataset.extent(0), block_size, shared_bytes, stream>>>(
     dataset.data_handle(),
     dataset.stride(0),
     dataset.extent(0),
@@ -464,6 +511,8 @@ float compute_favor_delta_d_impl(raft::resources const& res,
     params.beta,
     params.bfs_depth,
     static_cast<uint32_t>(capacity),
+    static_cast<uint32_t>(seen_capacity),
+    team_size_bits,
     index.metric(),
     roots.data());
   RAFT_CUDA_TRY(cudaPeekAtLastError());

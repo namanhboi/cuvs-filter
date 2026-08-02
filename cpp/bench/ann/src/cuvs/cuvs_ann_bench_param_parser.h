@@ -479,6 +479,9 @@ void parse_search_param(const nlohmann::json& conf,
   if (conf.contains("itopk")) { param.p.itopk_size = conf.at("itopk"); }
   if (conf.contains("search_width")) { param.p.search_width = conf.at("search_width"); }
   if (conf.contains("max_iterations")) { param.p.max_iterations = conf.at("max_iterations"); }
+  if (conf.contains("rand_xor_mask")) {
+    param.p.rand_xor_mask = conf.at("rand_xor_mask").get<std::uint64_t>();
+  }
   if (conf.contains("hashmap_max_fill_rate")) {
     param.p.hashmap_max_fill_rate = conf.at("hashmap_max_fill_rate");
   }
@@ -512,6 +515,12 @@ void parse_search_param(const nlohmann::json& conf,
   if (conf.contains("favor_retention_fraction")) {
     param.p.favor_retention_fraction = conf.at("favor_retention_fraction");
   }
+  if (conf.contains("favor_seed_masks")) {
+    if (!conf.at("favor_seed_masks").is_array() || conf.at("favor_seed_masks").empty()) {
+      THROW("favor_seed_masks must be a non-empty JSON array");
+    }
+    param.favor_seed_masks = conf.at("favor_seed_masks").get<std::vector<std::uint64_t>>();
+  }
   if (conf.contains("favor_delta_d_file")) {
     param.favor_delta_d_file = conf.at("favor_delta_d_file").get<std::string>();
   }
@@ -535,6 +544,23 @@ void parse_search_param(const nlohmann::json& conf,
     param.favor_diagnostics.variant = conf.value("favor_diagnostics_variant", std::string{});
     param.favor_diagnostics.max_trace_iterations =
       conf.value("favor_diagnostics_max_trace_iterations", 0u);
+    param.favor_diagnostics.termination_record_start_iteration =
+      conf.value("favor_termination_shadow_record_start_iteration", 0u);
+    param.favor_diagnostics.termination_start_iteration =
+      conf.value("favor_termination_shadow_start_iteration", 0u);
+    param.favor_diagnostics.termination_parent_interval =
+      conf.value("favor_termination_shadow_parent_interval", 0u);
+  }
+  if (conf.contains("favor_retry_diagnostics_output")) {
+    param.favor_retry_diagnostics.output_directory =
+      conf.at("favor_retry_diagnostics_output").get<std::string>();
+    param.favor_retry_diagnostics.ground_truth_file =
+      conf.value("favor_retry_diagnostics_groundtruth", std::string{});
+    param.favor_retry_diagnostics.dataset =
+      conf.value("favor_retry_diagnostics_dataset", std::string{});
+    param.favor_retry_diagnostics.strategy = conf.value("favor_retry_strategy", std::string{});
+    param.favor_retry_diagnostics.rounds   = conf.value("favor_retry_rounds", 0u);
+    param.favor_retry_diagnostics.b0       = conf.value("favor_retry_b0", 0u);
   }
   if (conf.contains("persistent")) { param.p.persistent = conf.at("persistent"); }
   if (conf.contains("persistent_lifetime")) {

@@ -400,6 +400,58 @@ The broad grid pass that was stopped after it was found to include irrelevant hi
 moved, without deleting it, to
 =benchmarks/favor/results_retention_formula_grid_broad_partial_20260731=.
 
+** Independent shallow-retry gate (implemented 2026-08-02)
+
+Before implementing the in-kernel accumulator proposed above, a benchmark-private staged path ran
+the existing automatic-retention search for one, two, and three independent =B0= rounds. Rounds
+used distinct deterministic =rand_xor_mask= values and the host wrapper merged unique passing
+results by raw distance. The experiment deliberately reset all traversal state, so it isolated the
+value of independent shallow starts without adding a public =max_retries= parameter.
+
+The declared gate required either two or three rounds to reach Recall@10 0.90 on GIST-1M,
+MSTuring-1M, and MSTuring-10M at 1% selectivity while exceeding the same-machine adaptive-search
+QPS. Full-query median results were:
+
+| Dataset | B0 recall / QPS | Two masks recall / QPS | Three masks recall / QPS | Adaptive recall / QPS |
+|-
+| GIST-1M | 0.83091 / 5,399 | 0.85061 / 2,694 | 0.85934 / 1,795 | 0.92545 / 2,016 |
+| MSTuring-1M | 0.72220 / 28,785 | 0.73272 / 14,328 | 0.73580 / 9,414 | 0.94560 / 5,506 |
+| MSTuring-10M | 0.69601 / 28,601 | 0.70795 / 14,206 | 0.71293 / 9,328 | 0.89432 / 5,560 |
+
+The gate fails. Independent masks provide small recall gains, but no multi-round point reaches
+0.90, and the third GIST round is slower than adaptive termination. Therefore phase 5 below must
+not proceed with a reset-plus-new-mask implementation. A future retry experiment needs a genuinely
+different traversal opportunity: retained frontier state, a larger budget applied only to a
+compacted hard-query subset, or an independently gated chained-reseeding design.
+
+Protocol, tracked summaries, implementation boundary, and the cross-check against the actual
+=/home/ubuntu/FAVOR= HNSW code are documented in
+=benchmarks/favor/multi_seed_b0/FAVOR_MULTI_SEED_B0_EXPERIMENT.org=.
+
+** Saved-state retry diagnostic (implemented 2026-08-02)
+
+The follow-up causal experiment compared fresh =B0= restarts seeded from accumulated passing
+outputs, the prior unexpanded terminal frontier, or both. A continuous traversal rerun at the same
+cumulative budgets served as the full-state oracle. The restart variants always received a fresh
+visited hash.
+
+| Dataset | Rounds x B0 | Independent | Passing | Frontier | Combined | Full-state oracle |
+|-
+| GIST-1M | 2 x 133 | 0.85067 | 0.84891 | 0.86338 | 0.86383 | 0.92247 |
+| MSTuring-1M | 4 x 517 | 0.73792 | 0.73311 | 0.74867 | 0.74833 | 0.93077 |
+| MSTuring-10M | 7 x 518 | 0.72170 | 0.70839 | 0.72464 | 0.72438 | 0.93026 |
+
+The oracle reaches Recall@10 0.90 everywhere, confirming that cumulative traversal depth is
+sufficient. No restart strategy reaches 0.90. Frontier preservation changes the traversal but
+captures only 12--35% of the oracle gain; passing-output reseeding is worse than independent
+starts. Therefore a reset-and-reseed accumulator is rejected. A state-saving retry must preserve
+the complete traversal state, including visited-hash history, or a compacted hard-query pass must
+receive a materially deeper independent budget.
+
+The protocol, per-query captures, tracked summary, and exact gate are documented in
+=benchmarks/favor/state_retry_diagnostic/FAVOR_STATE_RETRY_DIAGNOSTIC.org=. Diagnostic timings are
+invalid by design.
+
 ** Implementation and Testing Phases
 
 The implementation should be broken into phases so that each FAVOR component can be tested separately:
@@ -408,7 +460,10 @@ The implementation should be broken into phases so that each FAVOR component can
 2. Implement Δd computation and file loading. Compare the GPU result with a small CPU implementation.
 3. Implement exact bitset selectivity and block-based UDF sampling. Compare sampled estimates with exact selectivity, including query-dependent filters and batches larger than =max_queries=.
 4. Implement FAVOR =SINGLE_CTA= search. First test it with exact selectivity, then connect the sampling kernel. Verify that the penalty is applied to initial and child nodes and that returned nodes pass the filter.
-5. Implement bounded retries. Test result accumulation, duplicate removal, =max_retries = 0/1=, and queries with fewer than =top_k= passing nodes.
+5. Do not implement reset-and-reseed bounded retries: both independent starts and saved-prefix
+   variants failed their focused gates. If retries proceed, prototype either full traversal-state
+   continuation or a materially deeper pass over compacted hard queries; then test result
+   accumulation, duplicate removal, =max_retries = 0/1=, and underfilled queries.
 6. After =SINGLE_CTA= works, add FAVOR support to =MULTI_CTA= and test its result merging and recall against =SINGLE_CTA=.
 7. Run the existing CAGRA tests with FAVOR disabled, then run the JAG workloads described in the benchmarking section.
 

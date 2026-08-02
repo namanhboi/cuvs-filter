@@ -1,0 +1,5 @@
+*
+!.gitignore
+!report.md
+!gate.json
+!summary.csv

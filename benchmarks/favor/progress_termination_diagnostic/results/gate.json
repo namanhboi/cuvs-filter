@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "exact_state_safe": true,
+  "cross_validation_passed": false,
+  "selected_rule": null,
+  "development_gate_passed": false,
+  "disposition": "reject_shadow_rule",
+  "per_dataset_best": {
+    "sift": {
+      "rule": "evidence2_gapoff",
+      "recall": 0.9537200000000001,
+      "mean_work": 10255.8825,
+      "work_limit": 11997.939375000002
+    },
+    "gist": {
+      "rule": "evidence8_gapoff",
+      "recall": 0.9082400000000002,
+      "mean_work": 19027.0161,
+      "work_limit": 20715.49722
+    },
+    "bigann1m": {
+      "rule": "evidence2_gapoff",
+      "recall": 0.95336,
+      "mean_work": 9388.9564,
+      "work_limit": 10300.088875
+    },
+    "bigann10m": {
+      "rule": "evidence2_gapoff",
+      "recall": 0.9320800000000001,
+      "mean_work": 11049.2033,
+      "work_limit": 12780.843375
+    },
+    "msturing1m": {
+      "rule": "evidence16_gapoff",
+      "recall": 0.91232,
+      "mean_work": 38159.4651,
+      "work_limit": 39832.655280000006
+    },
+    "msturing10m": {
+      "rule": "evidence32_gapoff",
+      "recall": 0.9131,
+      "mean_work": 63178.6114,
+      "work_limit": 65021.862180000004
+    }
+  },
+  "folds": [
+    {
+      "heldout_family": "bigann",
+      "training_datasets": [
+        "sift",
+        "gist",
+        "msturing1m",
+        "msturing10m"
+      ],
+      "heldout_datasets": [
+        "bigann1m",
+        "bigann10m"
+      ],
+      "selected_rule": null,
+      "passed": false,
+      "heldout": []
+    },
+    {
+      "heldout_family": "gist",
+      "training_datasets": [
+        "sift",
+        "bigann1m",
+        "bigann10m",
+        "msturing1m",
+        "msturing10m"
+      ],
+      "heldout_datasets": [
+        "gist"
+      ],
+      "selected_rule": null,
+      "passed": false,
+      "heldout": []
+    },
+    {
+      "heldout_family": "msturing",
+      "training_datasets": [
+        "sift",
+        "gist",
+        "bigann1m",
+        "bigann10m"
+      ],
+      "heldout_datasets": [
+        "msturing1m",
+        "msturing10m"
+      ],
+      "selected_rule": null,
+      "passed": false,
+      "heldout": []
+    },
+    {
+      "heldout_family": "sift",
+      "training_datasets": [
+        "gist",
+        "bigann1m",
+        "bigann10m",
+        "msturing1m",
+        "msturing10m"
+      ],
+      "heldout_datasets": [
+        "sift"
+      ],
+      "selected_rule": null,
+      "passed": false,
+      "heldout": []
+    }
+  ]
+}
