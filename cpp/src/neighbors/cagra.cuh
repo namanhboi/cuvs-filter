@@ -27,6 +27,7 @@
 #include <rmm/cuda_stream_view.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 
 #include <thrust/execution_policy.h>
@@ -431,13 +432,18 @@ void search(raft::resources const& res,
         sample_filter_ref);
     search_params params_copy = params;
     if (params.filter_mode == filtering_mode::FAVOR) {
-      const auto num_set_bits = detail::count_favor_bitset_matches(res, idx, sample_filter);
-      if (num_set_bits == 0) {
-        detail::fill_empty_favor_results(res, neighbors, distances);
-        return;
+      if (params.filtering_rate < 0.0f) {
+        const auto num_set_bits = detail::count_favor_bitset_matches(res, idx, sample_filter);
+        if (num_set_bits == 0) {
+          detail::fill_empty_favor_results(res, neighbors, distances);
+          return;
+        }
+        const auto filtering_rate = static_cast<float>(idx.data().n_rows() - num_set_bits) /
+                                    static_cast<float>(idx.data().n_rows());
+        // Extremely sparse filters on indices larger than float's exact-integer range can round
+        // to 1.0 even though at least one row passes. Preserve the nearest valid rate in that case.
+        params_copy.filtering_rate = std::min(filtering_rate, std::nextafter(1.0f, 0.0f));
       }
-      params_copy.filtering_rate = static_cast<float>(idx.data().n_rows() - num_set_bits) /
-                                   static_cast<float>(idx.data().n_rows());
     } else if (params.filtering_rate < 0.0) {
       const auto num_set_bits = sample_filter.bitset_view_.count(res);
       auto filtering_rate     = (float)(idx.data().n_rows() - num_set_bits) / idx.data().n_rows();

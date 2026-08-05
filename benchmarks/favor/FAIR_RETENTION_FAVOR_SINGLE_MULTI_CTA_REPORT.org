@@ -1,0 +1,117 @@
+#+TITLE: Fair FAVOR Retention Results: SINGLE_CTA and MULTI_CTA
+#+DATE: 2026-08-05
+#+OPTIONS: toc:2 num:nil
+
+All figures are fair search-only measurements on NVIDIA L4. They compare Default CAGRA, fixed retention (lambda=1, rho=0.5), and automatic retention (lambda=1, rho=auto).
+
+* SINGLE_CTA
+
+** GIST-1M
+
+#+CAPTION: SINGLE_CTA, GIST-1M, 1% selectivity
+#+ATTR_ORG: :width 1100
+[[file:results_fair_retention_single_comparison/gist/plots/gist_selectivity_01.png]]
+
+#+CAPTION: SINGLE_CTA, GIST-1M, 10% selectivity
+#+ATTR_ORG: :width 1100
+[[file:results_fair_retention_single_comparison/gist/plots/gist_selectivity_10.png]]
+
+#+CAPTION: SINGLE_CTA, GIST-1M, 50% selectivity
+#+ATTR_ORG: :width 1100
+[[file:results_fair_retention_single_comparison/gist/plots/gist_selectivity_50.png]]
+
+#+CAPTION: SINGLE_CTA, GIST-1M, 90% selectivity
+#+ATTR_ORG: :width 1100
+[[file:results_fair_retention_single_comparison/gist/plots/gist_selectivity_90.png]]
+
+** BIGANN-1M
+
+#+CAPTION: SINGLE_CTA, BIGANN-1M, 1% selectivity
+#+ATTR_ORG: :width 1100
+[[file:results_fair_retention_single_comparison/bigann1m/plots/bigann1m_selectivity_01.png]]
+
+#+CAPTION: SINGLE_CTA, BIGANN-1M, 10% selectivity
+#+ATTR_ORG: :width 1100
+[[file:results_fair_retention_single_comparison/bigann1m/plots/bigann1m_selectivity_10.png]]
+
+#+CAPTION: SINGLE_CTA, BIGANN-1M, 50% selectivity
+#+ATTR_ORG: :width 1100
+[[file:results_fair_retention_single_comparison/bigann1m/plots/bigann1m_selectivity_50.png]]
+
+#+CAPTION: SINGLE_CTA, BIGANN-1M, 90% selectivity
+#+ATTR_ORG: :width 1100
+[[file:results_fair_retention_single_comparison/bigann1m/plots/bigann1m_selectivity_90.png]]
+
+** MSTuring-1M
+
+#+CAPTION: SINGLE_CTA, MSTuring-1M, 1% selectivity
+#+ATTR_ORG: :width 1100
+[[file:results_fair_retention_single_comparison/msturing1m/plots/msturing1m_selectivity_01.png]]
+
+#+CAPTION: SINGLE_CTA, MSTuring-1M, 10% selectivity
+#+ATTR_ORG: :width 1100
+[[file:results_fair_retention_single_comparison/msturing1m/plots/msturing1m_selectivity_10.png]]
+
+#+CAPTION: SINGLE_CTA, MSTuring-1M, 50% selectivity
+#+ATTR_ORG: :width 1100
+[[file:results_fair_retention_single_comparison/msturing1m/plots/msturing1m_selectivity_50.png]]
+
+#+CAPTION: SINGLE_CTA, MSTuring-1M, 90% selectivity
+#+ATTR_ORG: :width 1100
+[[file:results_fair_retention_single_comparison/msturing1m/plots/msturing1m_selectivity_90.png]]
+
+* MULTI_CTA
+
+** GIST-1M
+
+#+CAPTION: MULTI_CTA, GIST-1M, 1% selectivity
+#+ATTR_ORG: :width 1100
+[[file:results_fair_retention_multi_comparison/gist/plots/gist_selectivity_01.png]]
+
+#+CAPTION: MULTI_CTA, GIST-1M, 10% selectivity
+#+ATTR_ORG: :width 1100
+[[file:results_fair_retention_multi_comparison/gist/plots/gist_selectivity_10.png]]
+
+#+CAPTION: MULTI_CTA, GIST-1M, 50% selectivity
+#+ATTR_ORG: :width 1100
+[[file:results_fair_retention_multi_comparison/gist/plots/gist_selectivity_50.png]]
+
+#+CAPTION: MULTI_CTA, GIST-1M, 90% selectivity
+#+ATTR_ORG: :width 1100
+[[file:results_fair_retention_multi_comparison/gist/plots/gist_selectivity_90.png]]
+
+** BIGANN-1M
+
+#+CAPTION: MULTI_CTA, BIGANN-1M, 1% selectivity
+#+ATTR_ORG: :width 1100
+[[file:results_fair_retention_multi_comparison/bigann1m/plots/bigann1m_selectivity_01.png]]
+
+#+CAPTION: MULTI_CTA, BIGANN-1M, 10% selectivity
+#+ATTR_ORG: :width 1100
+[[file:results_fair_retention_multi_comparison/bigann1m/plots/bigann1m_selectivity_10.png]]
+
+#+CAPTION: MULTI_CTA, BIGANN-1M, 50% selectivity
+#+ATTR_ORG: :width 1100
+[[file:results_fair_retention_multi_comparison/bigann1m/plots/bigann1m_selectivity_50.png]]
+
+#+CAPTION: MULTI_CTA, BIGANN-1M, 90% selectivity
+#+ATTR_ORG: :width 1100
+[[file:results_fair_retention_multi_comparison/bigann1m/plots/bigann1m_selectivity_90.png]]
+
+** MSTuring-1M
+
+#+CAPTION: MULTI_CTA, MSTuring-1M, 1% selectivity
+#+ATTR_ORG: :width 1100
+[[file:results_fair_retention_multi_comparison/msturing1m/plots/msturing1m_selectivity_01.png]]
+
+#+CAPTION: MULTI_CTA, MSTuring-1M, 10% selectivity
+#+ATTR_ORG: :width 1100
+[[file:results_fair_retention_multi_comparison/msturing1m/plots/msturing1m_selectivity_10.png]]
+
+#+CAPTION: MULTI_CTA, MSTuring-1M, 50% selectivity
+#+ATTR_ORG: :width 1100
+[[file:results_fair_retention_multi_comparison/msturing1m/plots/msturing1m_selectivity_50.png]]
+
+#+CAPTION: MULTI_CTA, MSTuring-1M, 90% selectivity
+#+ATTR_ORG: :width 1100
+[[file:results_fair_retention_multi_comparison/msturing1m/plots/msturing1m_selectivity_90.png]]

@@ -270,21 +270,6 @@ __device__ void search_kernel_jit(
     __syncthreads();
     _CLK_REC(clk_topk);
 
-    if constexpr (FAVOR) {
-      if (threadIdx.x == 0) {
-        if (iter == 0 && (favor_penalty_mode_value == 1 || favor_penalty_mode_value == 2)) {
-          favor_penalty[0] =
-            device::favor_query_local_penalty(result_distances_buffer,
-                                              itopk_size,
-                                              static_cast<DISTANCE_T>(favor_penalty_distance),
-                                              static_cast<DISTANCE_T>(favor_local_gap_multiplier));
-        }
-        if (favor_penalty_mode_value == 2) {
-          favor_cutoff[0] = device::favor_retention_cutoff(result_distances_buffer, itopk_size);
-        }
-      }
-    }
-
     if (iter + 1 >= max_iteration) { break; }
 
     _CLK_START();
@@ -303,6 +288,28 @@ __device__ void search_kernel_jit(
     _CLK_REC(clk_pickup_parents);
 
     if ((parent_indices_buffer[0] == invalid_index) && (iter >= min_iteration)) { break; }
+
+    if constexpr (FAVOR) {
+      if (threadIdx.x == 0) {
+        uint32_t finite_count = 0;
+        if ((iter == 0 && (favor_penalty_mode_value == 1 || favor_penalty_mode_value == 2)) ||
+            favor_penalty_mode_value == 2) {
+          finite_count =
+            device::favor_sorted_finite_count<false>(result_distances_buffer, itopk_size);
+        }
+        if (iter == 0 && (favor_penalty_mode_value == 1 || favor_penalty_mode_value == 2)) {
+          favor_penalty[0] = device::favor_query_local_penalty<false>(
+            result_distances_buffer,
+            finite_count,
+            static_cast<DISTANCE_T>(favor_penalty_distance),
+            static_cast<DISTANCE_T>(favor_local_gap_multiplier));
+        }
+        if (favor_penalty_mode_value == 2) {
+          favor_cutoff[0] =
+            device::favor_retention_cutoff<false>(result_distances_buffer, finite_count);
+        }
+      }
+    }
 
     _CLK_START();
     for (unsigned i = threadIdx.x; i < result_buffer_size_32; i += blockDim.x) {

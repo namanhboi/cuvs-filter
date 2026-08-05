@@ -1,7 +1,7 @@
 #+TITLE: Automatic-Retention FAVOR for CAGRA
 #+SUBTITLE: SINGLE_CTA and MULTI_CTA Performance Evaluation
 #+AUTHOR: Nam Anh Dang
-#+DATE: 2026-08-02
+#+DATE: 2026-08-05
 #+OPTIONS: toc:2 num:t
 
 * Scope
@@ -17,9 +17,36 @@ make a deployment recommendation.
 
 ** Default filtered CAGRA
 
-Default CAGRA tests the bitset during traversal and invalidates a node that does not
-pass.  A rejected node therefore cannot remain in the candidate set as a route to
-other nodes.
+Default CAGRA keeps raw-distance candidate ordering.  In both CTA modes, when a selected
+parent does not pass the bitset, the kernel expands that parent first and invalidates it
+afterward so it cannot be returned.  The final output is filtered again.  A rejected node
+can therefore still provide one graph-expansion step; default is not a hard pre-filter
+that severs routes through rejected nodes.
+
+For =MULTI_CTA=, the existing CAGRA planner also inflates the physical internal top-k to
+compensate for filtering:
+
+#+begin_example
+B_physical = k/s + (B_configured - k)/sqrt(s)
+#+end_example
+
+rounded upward to a multiple of 32, where =s= is passing selectivity.  With =k=10= and
+configured =B=32= this gives 1,248, 192, 64, and 64 physical slots at 1%, 10%, 50%,
+and 90%, respectively.  FAVOR receives the same inflated traversal breadth, while its
+penalty and automatic-retention policy intentionally continue to use the configured =B=.
+Consequently, FAVOR is being tested as a candidate-ordering improvement over an already
+budget-compensated, route-preserving default traversal.
+
+** Filter distribution and candidate supply
+
+The evaluation masks are deterministic random subsets of dataset row IDs, generated from
+one random permutation with seed 20260724.  The masks do not depend on queries or vector
+coordinates, and the higher-selectivity masks are nested supersets.  Under this independent
+filter model, finding =k= passing results requires approximately =k/s= raw-distance
+candidates on average: about 1,000 at 1%, 100 at 10%, 20 at 50%, and 11 at 90% for =k=10=.
+Thus normal SINGLE_CTA capacities already provide adequate passing supply at 10% and 50%,
+while 1% stresses the finite frontier.  This explanation is specific to the random masks;
+attribute-correlated or graph-clustered filters may behave differently.
 
 ** Shared FAVOR penalty
 

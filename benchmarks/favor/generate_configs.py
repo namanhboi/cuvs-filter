@@ -7,7 +7,6 @@ import argparse
 import json
 from pathlib import Path
 
-
 DEFAULT_SELECTIVITIES = (1, 10, 50, 90)
 DEFAULT_ITOPK_VALUES = (32, 64, 128, 256, 512)
 DEFAULT_SEARCH_WIDTHS = (1, 2, 4)
@@ -133,32 +132,40 @@ def main() -> None:
     for selectivity in selectivities:
         for batch_size in batch_sizes:
             search_params = []
-            for mode in tuple(dict.fromkeys(args.modes)):
-                covered_cta_counts: dict[int, set[int]] = {}
-                lambdas = (
-                    args.penalty_lambdas
-                    if mode
-                    in (
-                        "favor_query_local",
-                        "favor_retention_safe",
+            modes = tuple(dict.fromkeys(args.modes))
+            covered_cta_counts: dict[int, set[int]] = {}
+            selected_cells = []
+            for itopk, width, max_iterations, thread_block_size in tuning_cells:
+                covered_cta_counts.setdefault(itopk, set())
+                effective_cta_count = max(width, (itopk + 31) // 32)
+                if (
+                    args.algo == "multi_cta"
+                    and args.deduplicate_multi_cta
+                    and effective_cta_count in covered_cta_counts[itopk]
+                ):
+                    continue
+                covered_cta_counts[itopk].add(effective_cta_count)
+                selected_cells.append(
+                    (itopk, width, max_iterations, thread_block_size)
+                )
+
+            filtering_rate = round(1.0 - selectivity / 100.0, 2)
+            for itopk, width, max_iterations, thread_block_size in selected_cells:
+                for mode in modes:
+                    lambdas = (
+                        args.penalty_lambdas
+                        if mode
+                        in (
+                            "favor_query_local",
+                            "favor_retention_safe",
+                        )
+                        else (1.0,)
                     )
-                    else (1.0,)
-                )
-                retention_fractions = (
-                    args.retention_fractions
-                    if mode == "favor_retention_safe"
-                    else (0.5,)
-                )
-                for itopk, width, max_iterations, thread_block_size in tuning_cells:
-                    covered_cta_counts.setdefault(itopk, set())
-                    effective_cta_count = max(width, (itopk + 31) // 32)
-                    if (
-                        args.algo == "multi_cta"
-                        and args.deduplicate_multi_cta
-                        and effective_cta_count in covered_cta_counts[itopk]
-                    ):
-                        continue
-                    covered_cta_counts[itopk].add(effective_cta_count)
+                    retention_fractions = (
+                        args.retention_fractions
+                        if mode == "favor_retention_safe"
+                        else (0.5,)
+                    )
                     for penalty_lambda in lambdas:
                         for retention_fraction in retention_fractions:
                             param = {
@@ -166,6 +173,7 @@ def main() -> None:
                                 "filter_mode": (
                                     "default" if mode == "default" else "favor"
                                 ),
+                                "filtering_rate": filtering_rate,
                                 "itopk": itopk,
                                 "search_width": width,
                             }

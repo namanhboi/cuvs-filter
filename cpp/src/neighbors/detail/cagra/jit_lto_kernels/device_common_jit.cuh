@@ -38,18 +38,46 @@ inline constexpr bool has_kpq_bits_v = has_kpq_bits<T>::value;
  * candidate lists fall back to the full finite span. A zero/degenerate span deliberately produces
  * zero penalty, which is the safe default-traversal behavior.
  */
-template <typename DistanceT>
+template <bool SWIZZLED, typename DistanceT>
+RAFT_DEVICE_INLINE_FUNCTION DistanceT
+favor_sorted_distance(const DistanceT* __restrict__ sorted_distances, const uint32_t logical_rank)
+{
+  const auto position = SWIZZLED ? device::swizzling(logical_rank) : logical_rank;
+  return sorted_distances[position];
+}
+
+/** Return the length of the finite prefix in a logically sorted result buffer. */
+template <bool SWIZZLED, typename DistanceT>
+RAFT_DEVICE_INLINE_FUNCTION uint32_t favor_sorted_finite_count(
+  const DistanceT* __restrict__ sorted_distances, const uint32_t retained_size)
+{
+  if (retained_size == 0) { return 0; }
+
+  const auto upper = utils::get_max_value<DistanceT>();
+  if (favor_sorted_distance<SWIZZLED>(sorted_distances, retained_size - 1) < upper) {
+    return retained_size;
+  }
+
+  uint32_t first = 0;
+  uint32_t last  = retained_size;
+  while (first < last) {
+    const auto middle = first + (last - first) / 2;
+    if (favor_sorted_distance<SWIZZLED>(sorted_distances, middle) < upper) {
+      first = middle + 1;
+    } else {
+      last = middle;
+    }
+  }
+  return first;
+}
+
+template <bool SWIZZLED, typename DistanceT>
 RAFT_DEVICE_INLINE_FUNCTION DistanceT
 favor_query_local_penalty(const DistanceT* __restrict__ sorted_distances,
-                          const uint32_t retained_size,
+                          const uint32_t finite_count,
                           const DistanceT reference_penalty,
                           const DistanceT local_gap_multiplier)
 {
-  uint32_t finite_count = 0;
-  const auto upper      = raft::upper_bound<DistanceT>();
-  while (finite_count < retained_size && sorted_distances[finite_count] < upper) {
-    ++finite_count;
-  }
   if (finite_count < 2 || reference_penalty <= DistanceT{0} ||
       local_gap_multiplier <= DistanceT{0}) {
     return DistanceT{0};
@@ -59,9 +87,12 @@ favor_query_local_penalty(const DistanceT* __restrict__ sorted_distances,
   const uint32_t q3 = (3 * (finite_count - 1)) / 4;
   DistanceT local_gap{};
   if (q3 > q1) {
-    local_gap = (sorted_distances[q3] - sorted_distances[q1]) / static_cast<DistanceT>(q3 - q1);
+    local_gap = (favor_sorted_distance<SWIZZLED>(sorted_distances, q3) -
+                 favor_sorted_distance<SWIZZLED>(sorted_distances, q1)) /
+                static_cast<DistanceT>(q3 - q1);
   } else {
-    local_gap = (sorted_distances[finite_count - 1] - sorted_distances[0]) /
+    local_gap = (favor_sorted_distance<SWIZZLED>(sorted_distances, finite_count - 1) -
+                 favor_sorted_distance<SWIZZLED>(sorted_distances, 0)) /
                 static_cast<DistanceT>(finite_count - 1);
   }
   if (!(local_gap > DistanceT{0})) { return DistanceT{0}; }
@@ -70,15 +101,12 @@ favor_query_local_penalty(const DistanceT* __restrict__ sorted_distances,
   return local_cap < reference_penalty ? local_cap : reference_penalty;
 }
 
-template <typename DistanceT>
+template <bool SWIZZLED, typename DistanceT>
 RAFT_DEVICE_INLINE_FUNCTION DistanceT
-favor_retention_cutoff(const DistanceT* __restrict__ sorted_distances, const uint32_t retained_size)
+favor_retention_cutoff(const DistanceT* __restrict__ sorted_distances, const uint32_t finite_count)
 {
-  const auto upper = raft::upper_bound<DistanceT>();
-  for (uint32_t i = retained_size; i > 0; --i) {
-    if (sorted_distances[i - 1] < upper) { return sorted_distances[i - 1]; }
-  }
-  return upper;
+  return finite_count == 0 ? utils::get_max_value<DistanceT>()
+                           : favor_sorted_distance<SWIZZLED>(sorted_distances, finite_count - 1);
 }
 
 template <typename DistanceT>

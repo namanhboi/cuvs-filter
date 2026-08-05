@@ -17,12 +17,11 @@
 #include <raft/util/integer_utils.hpp>  // For raft::round_up_safe
 #include <raft/util/pow2_utils.cuh>
 
-#include <cub/warp/warp_scan.cuh>
-
 #include <cuda/atomic>
 #include <cuda/std/atomic>
 
 #include <cassert>  // For assert()
+#include <limits>
 
 #ifdef _CLK_BREAKDOWN
 #include <cstdio>  // For printf() in debug mode
@@ -107,6 +106,7 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
     !FAVOR || ((favor_penalty_mode_value & favor_retire_rejected_parent_mask) != 0);
 
   cuvs::neighbors::detail::bitset_filter_data_t<SourceIndexT> favor_bitset{};
+  bool favor_packed_bitset = false;
   if constexpr (FAVOR) {
     if (favor_penalty_mode == 2 && filter_payload.filter_data != nullptr) {
       // The retention-safe path is bitset-only. Hoist its three metadata fields out of the
@@ -114,6 +114,9 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
       favor_bitset =
         *static_cast<const cuvs::neighbors::detail::bitset_filter_data_t<SourceIndexT>*>(
           filter_payload.filter_data);
+      favor_packed_bitset = favor_bitset.original_nbits == 0 ||
+                            favor_bitset.original_nbits == sizeof(std::uint32_t) * 8 ||
+                            favor_bitset.original_nbits == favor_bitset.bitset_len;
     }
   }
 
@@ -324,10 +327,8 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
       // Default filtering and sparse automatic FAVOR retirement may invalidate expanded parents
       // between top-k updates. Restore the sorted internal-top-k invariant before merging.
       if (retire_rejected_parents && *filter_flag != 0) {
-        for (unsigned i = 0; i < search_width; i++) {
-          move_invalid_to_end_of_list(
-            result_indices_buffer, result_distances_buffer, internal_topk);
-        }
+        compact_invalid_to_end_of_list<TOPK_BY_BITONIC_SORT>(
+          result_indices_buffer, result_distances_buffer, internal_topk);
         if (threadIdx.x == 0) { *terminate_flag = 0; }
       }
       topk_by_bitonic_sort_and_merge<BITONIC_SORT_AND_MERGE_MULTI_WARPS>(
@@ -393,17 +394,23 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
       __syncthreads();
     }
 
-    if constexpr (FAVOR) {
+    if constexpr (FAVOR && DIAGNOSTICS) {
       if (threadIdx.x == 0) {
+        uint32_t finite_count = 0;
+        if ((iter == 0 && favor_penalty_mode != 0) || favor_penalty_mode == 2) {
+          finite_count = device::favor_sorted_finite_count<TOPK_BY_BITONIC_SORT>(
+            result_distances_buffer, internal_topk);
+        }
         if (iter == 0 && favor_penalty_mode != 0) {
-          favor_penalty[0] =
-            device::favor_query_local_penalty(result_distances_buffer,
-                                              internal_topk,
-                                              static_cast<DistanceT>(favor_penalty_distance),
-                                              static_cast<DistanceT>(favor_local_gap_multiplier));
+          favor_penalty[0] = device::favor_query_local_penalty<TOPK_BY_BITONIC_SORT>(
+            result_distances_buffer,
+            finite_count,
+            static_cast<DistanceT>(favor_penalty_distance),
+            static_cast<DistanceT>(favor_local_gap_multiplier));
         }
         if (favor_penalty_mode == 2) {
-          favor_cutoff[0] = device::favor_retention_cutoff(result_distances_buffer, internal_topk);
+          favor_cutoff[0] = device::favor_retention_cutoff<TOPK_BY_BITONIC_SORT>(
+            result_distances_buffer, finite_count);
         }
       }
     }
@@ -624,7 +631,12 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
             const auto pos  = TOPK_BY_BITONIC_SORT ? device::swizzling(rank) : rank;
             const auto node = result_indices_buffer[pos] & ~index_msb_1_mask;
             valid           = node != (invalid_index & ~index_msb_1_mask);
-            if (valid) { passing = device::favor_bitset_test(favor_bitset, to_source_index(node)); }
+            if (valid) {
+              const auto source_id = to_source_index(node);
+              passing              = favor_packed_bitset
+                                       ? device::favor_packed_bitset_test(favor_bitset.bitset_ptr, source_id)
+                                       : device::favor_bitset_test(favor_bitset, source_id);
+            }
           }
           const auto valid_mask = __ballot_sync(0xffffffffu, valid);
           const auto pass_mask  = __ballot_sync(0xffffffffu, passing);
@@ -705,15 +717,33 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
       break;
     }
 
+    if constexpr (FAVOR && !DIAGNOSTICS) {
+      if (threadIdx.x == 0) {
+        uint32_t finite_count = 0;
+        if ((iter == 0 && favor_penalty_mode != 0) || favor_penalty_mode == 2) {
+          finite_count = device::favor_sorted_finite_count<TOPK_BY_BITONIC_SORT>(
+            result_distances_buffer, internal_topk);
+        }
+        if (iter == 0 && favor_penalty_mode != 0) {
+          favor_penalty[0] = device::favor_query_local_penalty<TOPK_BY_BITONIC_SORT>(
+            result_distances_buffer,
+            finite_count,
+            static_cast<DistanceT>(favor_penalty_distance),
+            static_cast<DistanceT>(favor_local_gap_multiplier));
+        }
+        if (favor_penalty_mode == 2) {
+          favor_cutoff[0] = device::favor_retention_cutoff<TOPK_BY_BITONIC_SORT>(
+            result_distances_buffer, finite_count);
+        }
+      }
+    }
+
     __syncthreads();
     // compute the norms between child nodes and query node using JIT version
     _CLK_START();
     if constexpr (FAVOR) {
       if (favor_penalty_mode == 2) {
-        const bool packed_bitset = favor_bitset.original_nbits == 0 ||
-                                   favor_bitset.original_nbits == sizeof(std::uint32_t) * 8 ||
-                                   favor_bitset.original_nbits == favor_bitset.bitset_len;
-        if (packed_bitset && source_indices_ptr == nullptr) {
+        if (favor_packed_bitset && source_indices_ptr == nullptr) {
           compute_favor_retention_safe_distance_to_child_nodes_jit<IndexT,
                                                                    DistanceT,
                                                                    DataT,
@@ -742,7 +772,7 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
             nullptr,
             0,
             reinterpret_cast<std::uint8_t*>(smem_work_ptr));
-        } else if (packed_bitset) {
+        } else if (favor_packed_bitset) {
           compute_favor_retention_safe_distance_to_child_nodes_jit<IndexT,
                                                                    DistanceT,
                                                                    DataT,
@@ -962,9 +992,23 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
       for (unsigned p = threadIdx.x; p < search_width; p += blockDim.x) {
         if (parent_list_buffer[p] != invalid_index) {
           const auto parent_id = result_indices_buffer[parent_list_buffer[p]] & ~index_msb_1_mask;
-          if (!sample_filter<SourceIndexT>(query_id + query_id_offset,
-                                           to_source_index(parent_id),
-                                           filter_payload.sample_filter_data())) {
+          const auto source_id = to_source_index(parent_id);
+          bool passes_filter   = true;
+          if constexpr (FAVOR) {
+            if (favor_penalty_mode == 2) {
+              passes_filter =
+                favor_packed_bitset
+                  ? device::favor_packed_bitset_test(favor_bitset.bitset_ptr, source_id)
+                  : device::favor_bitset_test(favor_bitset, source_id);
+            } else {
+              passes_filter = sample_filter<SourceIndexT>(
+                query_id + query_id_offset, source_id, filter_payload.sample_filter_data());
+            }
+          } else {
+            passes_filter = sample_filter<SourceIndexT>(
+              query_id + query_id_offset, source_id, filter_payload.sample_filter_data());
+          }
+          if (!passes_filter) {
             result_distances_buffer[parent_list_buffer[p]] = utils::get_max_value<DistanceT>();
             result_indices_buffer[parent_list_buffer[p]]   = invalid_index;
             *filter_flag                                   = 1;
@@ -1017,13 +1061,10 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
     if (node_id != (invalid_index & ~index_msb_1_mask)) {
       if constexpr (FAVOR) {
         if (favor_penalty_mode == 2) {
-          const auto source_id     = to_source_index(node_id);
-          const bool packed_bitset = favor_bitset.original_nbits == 0 ||
-                                     favor_bitset.original_nbits == sizeof(std::uint32_t) * 8 ||
-                                     favor_bitset.original_nbits == favor_bitset.bitset_len;
-          passes_filter = packed_bitset
-                            ? device::favor_packed_bitset_test(favor_bitset.bitset_ptr, source_id)
-                            : device::favor_bitset_test(favor_bitset, source_id);
+          const auto source_id = to_source_index(node_id);
+          passes_filter        = favor_packed_bitset
+                                   ? device::favor_packed_bitset_test(favor_bitset.bitset_ptr, source_id)
+                                   : device::favor_bitset_test(favor_bitset, source_id);
         } else {
           passes_filter = sample_filter<SourceIndexT>(query_id + query_id_offset,
                                                       to_source_index(node_id),
@@ -1042,49 +1083,16 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   }
 
   __syncthreads();
-  // Move invalid index items to the end of the buffer without sorting the entire buffer
-  using scan_op_t    = cub::WarpScan<unsigned>;
-  auto& temp_storage = *reinterpret_cast<typename scan_op_t::TempStorage*>(smem_work_ptr);
-
-  constexpr std::uint32_t warp_size = 32;
-  if (threadIdx.x < warp_size) {
-    std::uint32_t num_found_valid = 0;
-    for (std::uint32_t buffer_offset = 0; buffer_offset < internal_topk;
-         buffer_offset += warp_size) {
-      const auto src_position = buffer_offset + threadIdx.x;
-      const std::uint32_t is_valid_index =
-        (result_indices_buffer[src_position] & (~index_msb_1_mask)) ==
-            (invalid_index & (~index_msb_1_mask))
-          ? 0
-          : 1;
-      std::uint32_t new_position;
-      scan_op_t(temp_storage).InclusiveSum(is_valid_index, new_position);
-      if (is_valid_index) {
-        const auto dst_position               = num_found_valid + (new_position - 1);
-        result_indices_buffer[dst_position]   = result_indices_buffer[src_position];
-        result_distances_buffer[dst_position] = result_distances_buffer[src_position];
-      }
-
-      num_found_valid += new_position;
-      for (std::uint32_t offset = (warp_size >> 1); offset > 0; offset >>= 1) {
-        const auto v = raft::shfl_xor(num_found_valid, offset);
-        if ((threadIdx.x & offset) == 0) { num_found_valid = v; }
-      }
-
-      if (num_found_valid >= top_k) { break; }
-    }
-
-    if (num_found_valid < top_k) {
-      for (std::uint32_t i = num_found_valid + threadIdx.x; i < internal_topk; i += warp_size) {
-        result_indices_buffer[i]   = invalid_index;
-        result_distances_buffer[i] = utils::get_max_value<DistanceT>();
-      }
-    }
-  }
+  // Preserve logical distance order while compacting the physically swizzled bitonic buffer.
+  compact_invalid_to_end_of_list<TOPK_BY_BITONIC_SORT>(
+    result_indices_buffer, result_distances_buffer, internal_topk);
 
   // If the sufficient number of valid indexes are not in the internal topk, pick up from the
   // candidate list.
-  if (top_k > internal_topk || result_indices_buffer[top_k - 1] == invalid_index) {
+  const auto topk_boundary_position =
+    TOPK_BY_BITONIC_SORT ? device::swizzling(top_k - 1) : top_k - 1;
+  if (top_k > internal_topk || (result_indices_buffer[topk_boundary_position] &
+                                ~index_msb_1_mask) == (invalid_index & ~index_msb_1_mask)) {
     __syncthreads();
     topk_by_bitonic_sort_and_merge<BITONIC_SORT_AND_MERGE_MULTI_WARPS>(
       result_distances_buffer,
@@ -1142,10 +1150,27 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
     if constexpr (TOPK_BY_BITONIC_SORT) { ii = device::swizzling(i); }
     if (result_distances_ptr != nullptr) { result_distances_ptr[j] = result_distances_buffer[ii]; }
 
-    auto internal_index =
-      result_indices_buffer[ii] & ~index_msb_1_mask;  // clear most significant bit
-    auto source_index = to_source_index(internal_index);
-    write_indices(result_indices_ptr, j, source_index);
+    auto internal_index = result_indices_buffer[ii] & ~index_msb_1_mask;
+    if (internal_index == (invalid_index & ~index_msb_1_mask)) {
+      if (result_distances_ptr != nullptr) {
+        result_distances_ptr[j] = utils::get_max_value<DistanceT>();
+      }
+      if (index_element_tag == 3) {
+        reinterpret_cast<std::int64_t*>(result_indices_ptr)[j] =
+          std::numeric_limits<std::int64_t>::max();
+      } else if (index_element_tag == 2) {
+        reinterpret_cast<std::uint32_t*>(result_indices_ptr)[j] =
+          std::numeric_limits<std::uint32_t>::max();
+      } else if (index_element_tag == 1) {
+        reinterpret_cast<std::uint16_t*>(result_indices_ptr)[j] =
+          std::numeric_limits<std::uint16_t>::max();
+      } else {
+        reinterpret_cast<std::uint8_t*>(result_indices_ptr)[j] =
+          std::numeric_limits<std::uint8_t>::max();
+      }
+    } else {
+      write_indices(result_indices_ptr, j, to_source_index(internal_index));
+    }
   }
   if (threadIdx.x == 0) {
     if constexpr (DIAGNOSTICS) {

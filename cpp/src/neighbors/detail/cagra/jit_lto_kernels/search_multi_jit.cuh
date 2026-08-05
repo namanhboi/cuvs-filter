@@ -196,12 +196,13 @@ __device__ void apply_filter_kernel_jit(
   const auto j     = tid / result_buffer_size;
   const auto index = i + j * lds;
 
-  if (result_indices_ptr[index] != ~index_msb_1_mask) {
+  const auto internal_index = result_indices_ptr[index] & ~index_msb_1_mask;
+  const auto invalid_index  = utils::get_max_value<IndexT>() & ~index_msb_1_mask;
+  if (internal_index != invalid_index) {
     // Use extern sample_filter function with 3 params: query_id, node_id, filter_data.
     // The payload maps built-in bitset filters and UDF context pointers to the linked ABI.
-    SourceIndexT node_id = source_indices_ptr == nullptr
-                             ? static_cast<SourceIndexT>(result_indices_ptr[index])
-                             : source_indices_ptr[result_indices_ptr[index]];
+    SourceIndexT node_id = source_indices_ptr == nullptr ? static_cast<SourceIndexT>(internal_index)
+                                                         : source_indices_ptr[internal_index];
 
     if (!sample_filter<SourceIndexT>(
           query_id_offset + j, node_id, filter_payload.sample_filter_data())) {

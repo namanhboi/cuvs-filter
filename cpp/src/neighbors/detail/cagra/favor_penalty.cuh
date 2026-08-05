@@ -37,7 +37,7 @@ inline float favor_reference_penalty(float filtering_rate, size_t effective_itop
  *
  * Let E = selectivity * itopk and x = E / k. The shortfall pressure is zero when E >= k and
  * saturates when E <= k / 2, matching FAVOR's half-k stopping-condition threshold. Smoothstep
- * avoids a discontinuous change in traversal ordering. The result stays in [0.5, 0.9): 0.5 is
+ * avoids a discontinuous change in traversal ordering. The result stays in [0.5, 0.9]: 0.5 is
  * the established retention-safe midpoint and a value below one preserves strict retention
  * headroom for rejected bridge candidates.
  */

@@ -10,6 +10,9 @@
 #include "../../../src/neighbors/detail/cagra/favor_multi_seed_benchmark.cuh"
 #include "../../../src/neighbors/detail/cagra/favor_penalty.cuh"
 #include "../../../src/neighbors/detail/cagra/favor_search_diagnostics.hpp"
+#include "../../../src/neighbors/detail/cagra/jit_lto_kernels/cagra_filter_payload.cuh"
+#include "../../../src/neighbors/detail/cagra/jit_lto_kernels/device_common_jit.cuh"
+#include "../../../src/neighbors/detail/cagra/jit_lto_kernels/search_single_cta_device_helpers.cuh"
 
 #include <raft/core/copy.cuh>
 #include <raft/core/device_mdarray.hpp>
@@ -40,10 +43,42 @@ constexpr int64_t kDim     = 16;
 constexpr int64_t kQueries = 8;
 constexpr int64_t k        = 8;
 
-struct search_result {
-  std::vector<uint32_t> neighbors;
+template <typename IndexT>
+struct typed_search_result {
+  std::vector<IndexT> neighbors;
   std::vector<float> distances;
 };
+
+using search_result = typed_search_result<uint32_t>;
+
+struct favor_policy_result {
+  std::uint32_t finite_count;
+  float penalty;
+  float cutoff;
+};
+
+template <bool Swizzled>
+__global__ void evaluate_favor_policy_kernel(const float* distances,
+                                             std::uint32_t retained_size,
+                                             favor_policy_result* result)
+{
+  if (threadIdx.x != 0) { return; }
+  const auto finite_count =
+    detail::device::favor_sorted_finite_count<Swizzled>(distances, retained_size);
+  result->finite_count = finite_count;
+  result->penalty =
+    detail::device::favor_query_local_penalty<Swizzled>(distances, finite_count, 1000.0f, 1.0f);
+  result->cutoff = detail::device::favor_retention_cutoff<Swizzled>(distances, finite_count);
+}
+
+template <bool Swizzled>
+__global__ void compact_invalid_kernel(std::uint32_t* indices,
+                                       float* distances,
+                                       std::uint32_t retained_size)
+{
+  detail::single_cta_search::compact_invalid_to_end_of_list<Swizzled>(
+    indices, distances, retained_size);
+}
 
 class CagraFavorSearchTest : public ::testing::Test {
  protected:
@@ -82,23 +117,33 @@ class CagraFavorSearchTest : public ::testing::Test {
     return cuvs::neighbors::filtering::bitset_filter<uint32_t, int64_t>(bitsets.back().view());
   }
 
-  auto run(cagra::search_params params,
-           cuvs::neighbors::filtering::base_filter const& filter,
-           int64_t num_queries = kQueries) -> search_result
+  template <typename OutputIndexT = std::uint32_t>
+  auto run_typed(cagra::search_params params,
+                 cuvs::neighbors::filtering::base_filter const& filter,
+                 int64_t num_queries = kQueries,
+                 int64_t result_k    = k) -> typed_search_result<OutputIndexT>
   {
-    auto neighbors  = raft::make_device_matrix<uint32_t, int64_t>(res, num_queries, k);
-    auto distances  = raft::make_device_matrix<float, int64_t>(res, num_queries, k);
+    auto neighbors  = raft::make_device_matrix<OutputIndexT, int64_t>(res, num_queries, result_k);
+    auto distances  = raft::make_device_matrix<float, int64_t>(res, num_queries, result_k);
     auto query_view = raft::make_device_matrix_view<const float, int64_t>(
       queries->data_handle(), num_queries, kDim);
     cagra::search(res, params, *index, query_view, neighbors.view(), distances.view(), filter);
 
-    search_result result{std::vector<uint32_t>(neighbors.size()),
-                         std::vector<float>(distances.size())};
+    typed_search_result<OutputIndexT> result{std::vector<OutputIndexT>(neighbors.size()),
+                                             std::vector<float>(distances.size())};
     auto stream = raft::resource::get_cuda_stream(res);
     raft::copy(result.neighbors.data(), neighbors.data_handle(), neighbors.size(), stream);
     raft::copy(result.distances.data(), distances.data_handle(), distances.size(), stream);
     raft::resource::sync_stream(res);
     return result;
+  }
+
+  auto run(cagra::search_params params,
+           cuvs::neighbors::filtering::base_filter const& filter,
+           int64_t num_queries = kQueries,
+           int64_t result_k    = k) -> search_result
+  {
+    return run_typed<std::uint32_t>(params, filter, num_queries, result_k);
   }
 
   static auto params() -> cagra::search_params
@@ -221,6 +266,104 @@ class CagraFavorUint8SearchTest : public ::testing::Test {
   std::optional<cagra::index<uint8_t, uint32_t>> index;
   std::vector<cuvs::core::bitset<uint32_t, int64_t>> bitsets;
 };
+
+template <bool Swizzled>
+void check_favor_policy_layout(std::uint32_t retained_size, std::uint32_t finite_count)
+{
+  raft::resources res;
+  auto stream = raft::resource::get_cuda_stream(res);
+  std::vector<float> host_distances(retained_size, std::numeric_limits<float>::max());
+  for (std::uint32_t rank = 0; rank < finite_count; ++rank) {
+    const auto position      = Swizzled ? rank ^ (rank >> 5) : rank;
+    host_distances[position] = static_cast<float>(rank + 1);
+  }
+
+  rmm::device_uvector<float> distances(retained_size, stream);
+  rmm::device_uvector<favor_policy_result> result(1, stream);
+  raft::copy(distances.data(), host_distances.data(), retained_size, stream);
+  evaluate_favor_policy_kernel<Swizzled>
+    <<<1, 1, 0, stream>>>(distances.data(), retained_size, result.data());
+  RAFT_CUDA_TRY(cudaPeekAtLastError());
+
+  favor_policy_result host_result{};
+  raft::copy(&host_result, result.data(), 1, stream);
+  raft::resource::sync_stream(res);
+  EXPECT_EQ(host_result.finite_count, finite_count);
+  EXPECT_FLOAT_EQ(host_result.penalty, finite_count < 2 ? 0.0f : 1.0f);
+  EXPECT_EQ(
+    host_result.cutoff,
+    finite_count == 0 ? std::numeric_limits<float>::max() : static_cast<float>(finite_count));
+}
+
+TEST(CagraFavorPolicyTest, UsesLogicalRanksAcrossSwizzleBoundaries)
+{
+  for (auto retained_size : {64u, 128u, 256u, 512u}) {
+    for (auto finite_count : {0u, 1u, 31u, 32u, 33u, retained_size - 1, retained_size}) {
+      check_favor_policy_layout<false>(retained_size, finite_count);
+      check_favor_policy_layout<true>(retained_size, finite_count);
+    }
+  }
+}
+
+template <bool Swizzled>
+void check_logical_compaction(std::uint32_t retained_size)
+{
+  raft::resources res;
+  auto stream            = raft::resource::get_cuda_stream(res);
+  constexpr auto invalid = std::numeric_limits<std::uint32_t>::max();
+  constexpr auto msb     = std::uint32_t{1} << 31;
+  const std::vector<std::uint32_t> invalid_ranks{
+    0u, 31u, 32u, 33u, 63u, 64u, 127u, 255u, 256u, 511u};
+  std::vector<std::uint32_t> host_indices(retained_size, invalid);
+  std::vector<float> host_distances(retained_size, std::numeric_limits<float>::max());
+  std::vector<std::uint32_t> expected_indices;
+  std::vector<float> expected_distances;
+  for (std::uint32_t rank = 0; rank < retained_size; ++rank) {
+    const bool is_invalid =
+      std::find(invalid_ranks.begin(), invalid_ranks.end(), rank) != invalid_ranks.end();
+    auto index = is_invalid ? (rank % 2 == 0 ? invalid : invalid & ~msb) : rank + 100;
+    if (!is_invalid && rank % 3 == 0) { index |= msb; }
+    const auto distance =
+      is_invalid ? std::numeric_limits<float>::max() : static_cast<float>(rank) + 0.25f;
+    const auto position      = Swizzled ? rank ^ (rank >> 5) : rank;
+    host_indices[position]   = index;
+    host_distances[position] = distance;
+    if (!is_invalid) {
+      expected_indices.push_back(index);
+      expected_distances.push_back(distance);
+    }
+  }
+
+  rmm::device_uvector<std::uint32_t> indices(retained_size, stream);
+  rmm::device_uvector<float> distances(retained_size, stream);
+  raft::copy(indices.data(), host_indices.data(), retained_size, stream);
+  raft::copy(distances.data(), host_distances.data(), retained_size, stream);
+  compact_invalid_kernel<Swizzled>
+    <<<1, 32, 0, stream>>>(indices.data(), distances.data(), retained_size);
+  RAFT_CUDA_TRY(cudaPeekAtLastError());
+  raft::copy(host_indices.data(), indices.data(), retained_size, stream);
+  raft::copy(host_distances.data(), distances.data(), retained_size, stream);
+  raft::resource::sync_stream(res);
+
+  for (std::uint32_t rank = 0; rank < retained_size; ++rank) {
+    const auto position = Swizzled ? rank ^ (rank >> 5) : rank;
+    if (rank < expected_indices.size()) {
+      EXPECT_EQ(host_indices[position], expected_indices[rank]);
+      EXPECT_EQ(host_distances[position], expected_distances[rank]);
+    } else {
+      EXPECT_EQ(host_indices[position], invalid);
+      EXPECT_EQ(host_distances[position], std::numeric_limits<float>::max());
+    }
+  }
+}
+
+TEST(CagraFavorPolicyTest, StableCompactionPreservesLogicalOrder)
+{
+  for (auto retained_size : {64u, 128u, 256u, 512u}) {
+    check_logical_compaction<false>(retained_size);
+    check_logical_compaction<true>(retained_size);
+  }
+}
 
 TEST_F(CagraFavorSearchTest, ExplicitDefaultPreservesExistingResults)
 {
@@ -539,6 +682,111 @@ TEST_F(CagraFavorSearchTest, CompactsRejectedRowsFromFinalTopK)
   for (auto neighbor : result.neighbors) {
     ASSERT_NE(neighbor, std::numeric_limits<uint32_t>::max());
     EXPECT_GE(neighbor, static_cast<uint32_t>(kRows / 2));
+  }
+}
+
+TEST_F(CagraFavorSearchTest, LargeTopKPreservesLogicalDistanceOrder)
+{
+  constexpr std::int64_t result_k = 64;
+  auto filter                     = make_filter(kRows / 4);
+  auto default_params             = params();
+  default_params.itopk_size       = 128;
+  auto favor_params               = default_params;
+  favor_params.filter_mode        = cagra::filtering_mode::FAVOR;
+  favor_params.favor_delta_d      = 100.0f;
+  favor_params.favor_penalty      = cagra::favor_penalty_mode::CAGRA_RETENTION_SAFE;
+
+  std::vector<float> host_dataset(dataset->size());
+  std::vector<float> host_queries(queries->size());
+  auto stream = raft::resource::get_cuda_stream(res);
+  raft::copy(host_dataset.data(), dataset->data_handle(), dataset->size(), stream);
+  raft::copy(host_queries.data(), queries->data_handle(), queries->size(), stream);
+  raft::resource::sync_stream(res);
+
+  const auto check_result = [&](const search_result& result) {
+    for (std::int64_t query = 0; query < kQueries; ++query) {
+      std::vector<std::uint32_t> seen;
+      for (std::int64_t rank = 0; rank < result_k; ++rank) {
+        const auto offset   = query * result_k + rank;
+        const auto neighbor = result.neighbors[offset];
+        ASSERT_NE(neighbor, std::numeric_limits<std::uint32_t>::max());
+        ASSERT_GE(neighbor, static_cast<std::uint32_t>(kRows / 4));
+        ASSERT_LT(neighbor, static_cast<std::uint32_t>(kRows));
+        EXPECT_EQ(std::find(seen.begin(), seen.end(), neighbor), seen.end());
+        seen.push_back(neighbor);
+        if (rank != 0) { EXPECT_LE(result.distances[offset - 1], result.distances[offset]); }
+
+        float expected_distance = 0.0f;
+        for (std::int64_t dim = 0; dim < kDim; ++dim) {
+          const auto difference = host_queries[query * kDim + dim] -
+                                  host_dataset[static_cast<std::int64_t>(neighbor) * kDim + dim];
+          expected_distance += difference * difference;
+        }
+        EXPECT_NEAR(result.distances[offset], expected_distance, 2.0e-3f);
+      }
+    }
+  };
+
+  check_result(run(default_params, filter, kQueries, result_k));
+  check_result(run(favor_params, filter, kQueries, result_k));
+}
+
+template <typename IndexT>
+void expect_underfilled_source_results(const typed_search_result<IndexT>& result)
+{
+  constexpr auto invalid = std::numeric_limits<IndexT>::max();
+  bool saw_invalid       = false;
+  for (std::size_t i = 0; i < result.neighbors.size(); ++i) {
+    const auto neighbor = result.neighbors[i];
+    if (neighbor == invalid) {
+      saw_invalid = true;
+      EXPECT_EQ(result.distances[i], std::numeric_limits<float>::max());
+    } else {
+      EXPECT_GE(neighbor, static_cast<IndexT>(kRows - 3));
+      EXPECT_LT(neighbor, static_cast<IndexT>(kRows));
+      EXPECT_LT(result.distances[i], std::numeric_limits<float>::max());
+    }
+  }
+  EXPECT_TRUE(saw_invalid);
+}
+
+TEST_F(CagraFavorSearchTest, UnderfilledOutputsUseTypedSentinelsWithSourceMapping)
+{
+  std::vector<std::uint32_t> source_indices_host(kRows);
+  for (std::int64_t row = 0; row < kRows; ++row) {
+    source_indices_host[row] = static_cast<std::uint32_t>(kRows - 1 - row);
+  }
+  auto source_indices = raft::make_device_vector<std::uint32_t, std::int64_t>(res, kRows);
+  auto stream         = raft::resource::get_cuda_stream(res);
+  raft::copy(source_indices.data_handle(), source_indices_host.data(), kRows, stream);
+  index->update_source_indices(res, raft::make_const_mdspan(source_indices.view()));
+  raft::resource::sync_stream(res);
+
+  auto filter = make_filter(kRows - 3);
+  std::vector<cagra::search_params> search_configs;
+  auto single_params = params();
+  search_configs.push_back(single_params);
+  auto multi_cta = multi_cta_params();
+  search_configs.push_back(multi_cta);
+  auto multi_kernel         = params();
+  multi_kernel.algo         = cagra::search_algo::MULTI_KERNEL;
+  multi_kernel.max_queries  = 1;
+  multi_kernel.search_width = 1;
+  search_configs.push_back(multi_kernel);
+
+  for (const auto& search_config : search_configs) {
+    expect_underfilled_source_results(run_typed<std::uint32_t>(search_config, filter, 1));
+    expect_underfilled_source_results(run_typed<std::int64_t>(search_config, filter, 1));
+  }
+
+  for (auto favor_config : {single_params, multi_cta}) {
+    favor_config.filter_mode              = cagra::filtering_mode::FAVOR;
+    favor_config.filtering_rate           = static_cast<float>(kRows - 3) / kRows;
+    favor_config.favor_delta_d            = 100.0f;
+    favor_config.favor_penalty            = cagra::favor_penalty_mode::CAGRA_RETENTION_SAFE;
+    favor_config.favor_retention_fraction = 0.5f;
+    expect_underfilled_source_results(run_typed<std::uint32_t>(favor_config, filter, 1));
+    expect_underfilled_source_results(run_typed<std::int64_t>(favor_config, filter, 1));
   }
 }
 

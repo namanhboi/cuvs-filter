@@ -620,45 +620,50 @@ RAFT_DEVICE_INLINE_FUNCTION void topk_by_bitonic_sort_and_merge(
   }
 }
 
-// This function move the invalid index element to the end of the itopk list.
-// Require : array_length % 32 == 0 && The invalid entry is only one.
-template <class IdxT>
-RAFT_DEVICE_INLINE_FUNCTION void move_invalid_to_end_of_list(IdxT* const index_array,
-                                                             float* const distance_array,
-                                                             const std::uint32_t array_length)
+/**
+ * Stably compact every invalid entry to the logical end of an internal top-k list.
+ *
+ * The bitonic top-k buffer is physically swizzled. Reading and writing by logical rank preserves
+ * its sorted invariant; compacting physical positions would exchange values across rank pairs at
+ * every warp boundary. All source values in a warp are loaded before any destination is written,
+ * so the in-place compaction is safe.
+ */
+template <bool SWIZZLED, class IdxT, class DistanceT>
+RAFT_DEVICE_INLINE_FUNCTION void compact_invalid_to_end_of_list(IdxT* const index_array,
+                                                                DistanceT* const distance_array,
+                                                                const std::uint32_t array_length)
 {
-  constexpr std::uint32_t warp_size     = 32;
-  constexpr std::uint32_t invalid_index = utils::get_max_value<IdxT>();
-  const std::uint32_t lane_id           = threadIdx.x % warp_size;
+  constexpr std::uint32_t warp_size = 32;
+  constexpr IdxT invalid_index      = utils::get_max_value<IdxT>();
+  constexpr IdxT index_msb_1_mask   = utils::gen_index_msb_1_mask<IdxT>::value;
+  const auto lane_id                = static_cast<std::uint32_t>(threadIdx.x) % warp_size;
 
   if (threadIdx.x >= warp_size) { return; }
+  assert(array_length % warp_size == 0);
 
-  bool found_invalid = false;
-  if (array_length % warp_size == 0) {
-    for (std::uint32_t i = lane_id; i < array_length; i += warp_size) {
-      const auto index    = index_array[i];
-      const auto distance = distance_array[i];
-
-      if (found_invalid) {
-        index_array[i - 1]    = index;
-        distance_array[i - 1] = distance;
-      } else {
-        // Check if the index is invalid
-        const auto I_found_invalid = (index == invalid_index);
-        const auto who_has_invalid = raft::ballot(I_found_invalid);
-        // if a value that is loaded by a smaller lane id thread, shift the array
-        if (who_has_invalid << (warp_size - lane_id)) {
-          index_array[i - 1]    = index;
-          distance_array[i - 1] = distance;
-        }
-
-        found_invalid = who_has_invalid;
-      }
+  std::uint32_t num_valid = 0;
+  for (std::uint32_t base = 0; base < array_length; base += warp_size) {
+    const auto logical_rank = base + lane_id;
+    const auto src_position = SWIZZLED ? device::swizzling(logical_rank) : logical_rank;
+    const auto index        = index_array[src_position];
+    const auto distance     = distance_array[src_position];
+    const bool valid        = (index & ~index_msb_1_mask) != (invalid_index & ~index_msb_1_mask);
+    const auto valid_mask   = __ballot_sync(0xffffffffu, valid);
+    if (valid) {
+      const auto prior_mask = lane_id == 0 ? 0u : valid_mask & ((std::uint32_t{1} << lane_id) - 1);
+      const auto dst_rank   = num_valid + static_cast<std::uint32_t>(__popc(prior_mask));
+      const auto dst_position      = SWIZZLED ? device::swizzling(dst_rank) : dst_rank;
+      index_array[dst_position]    = index;
+      distance_array[dst_position] = distance;
     }
+    num_valid += static_cast<std::uint32_t>(__popc(valid_mask));
   }
-  if (lane_id == 0) {
-    index_array[array_length - 1]    = invalid_index;
-    distance_array[array_length - 1] = utils::get_max_value<float>();
+
+  for (std::uint32_t logical_rank = num_valid + lane_id; logical_rank < array_length;
+       logical_rank += warp_size) {
+    const auto position      = SWIZZLED ? device::swizzling(logical_rank) : logical_rank;
+    index_array[position]    = invalid_index;
+    distance_array[position] = utils::get_max_value<DistanceT>();
   }
 }
 

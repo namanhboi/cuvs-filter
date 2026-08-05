@@ -129,6 +129,7 @@ for selectivity_value in ${selectivities}; do
       --benchmark_repetitions="${benchmark_repetitions}" \
       --benchmark_min_time="${benchmark_min_time}" \
       --benchmark_min_warmup_time="${benchmark_warmup_time}" \
+      --benchmark_enable_random_interleaving=true \
       --benchmark_report_aggregates_only=false \
       --benchmark_out_format=json \
       --benchmark_out="${result_file}" \

@@ -85,10 +85,10 @@ RAFT_KERNEL favor_fill_empty_results_kernel(IndexT* neighbors,
 }
 
 template <typename IndexT>
-inline void fill_empty_favor_results(const raft::resources& res,
-                                     IndexT* neighbors,
-                                     float* distances,
-                                     std::size_t n_elements)
+inline void fill_empty_filter_results(const raft::resources& res,
+                                      IndexT* neighbors,
+                                      float* distances,
+                                      std::size_t n_elements)
 {
   constexpr unsigned int block_size = 128;
   auto const grid_size =
@@ -235,6 +235,7 @@ class cuvs_cagra : public algo<T>, public algo_gpu {
 
   std::shared_ptr<rmm::device_uvector<uint32_t>> filter_bitset_;
   std::shared_ptr<cuvs::neighbors::filtering::base_filter> filter_;
+  bool filter_empty_{false};
   std::shared_ptr<detail::favor_diagnostic_session> favor_diagnostic_session_;
   std::shared_ptr<detail::favor_retry_diagnostic_session> favor_retry_diagnostic_session_;
   std::vector<std::uint64_t> favor_seed_masks_;
@@ -348,6 +349,18 @@ void cuvs_cagra<T, IdxT>::set_search_param(const search_param_base& param,
   search_params_                          = sp.p;
   refine_ratio_                           = sp.refine_ratio;
   favor_seed_masks_                       = sp.favor_seed_masks;
+  filter_empty_                           = false;
+  if (filter_bitset_ != nullptr && search_params_.filtering_rate < 0.0f) {
+    const auto num_set_bits =
+      cuvs::neighbors::cagra::detail::benchmark_count_favor_bitset_matches<T>(
+        handle_, *index_, *filter_);
+    filter_empty_ = num_set_bits == 0;
+    if (!filter_empty_) {
+      const auto filtering_rate = static_cast<float>(index_->data().n_rows() - num_set_bits) /
+                                  static_cast<float>(index_->data().n_rows());
+      search_params_.filtering_rate = std::min(filtering_rate, std::nextafter(1.0f, 0.0f));
+    }
+  }
   if (!favor_seed_masks_.empty()) {
     RAFT_EXPECTS(favor_seed_masks_.size() <= 3,
                  "favor_seed_masks supports between one and three benchmark rounds");
@@ -627,17 +640,14 @@ void cuvs_cagra<T, IdxT>::search_base(
     raft::make_device_matrix_view<algo_base::index_type, int64_t>(neighbors, batch_size, k);
   auto distances_view = raft::make_device_matrix_view<float, int64_t>(distances, batch_size, k);
 
+  if (filter_empty_) {
+    detail::fill_empty_filter_results(
+      handle_, neighbors, distances, static_cast<std::size_t>(batch_size) * k);
+    return;
+  }
+
   if (favor_retry_diagnostic_session_) {
-    auto const num_set_bits =
-      cuvs::neighbors::cagra::detail::benchmark_count_favor_bitset_matches<T>(
-        handle_, *index_, *filter_);
-    if (num_set_bits == 0) {
-      detail::fill_empty_favor_results(
-        handle_, neighbors, distances, static_cast<std::size_t>(batch_size) * k);
-      return;
-    }
-    const auto filtering_rate = static_cast<float>(index_->data().n_rows() - num_set_bits) /
-                                static_cast<float>(index_->data().n_rows());
+    const auto filtering_rate = search_params_.filtering_rate;
     auto run_retry_round =
       [&](std::uint32_t max_iterations,
           std::uint64_t rand_xor_mask,
@@ -684,16 +694,6 @@ void cuvs_cagra<T, IdxT>::search_base(
 
   if (!favor_seed_masks_.empty()) {
     auto params_copy = search_params_;
-    auto const num_set_bits =
-      cuvs::neighbors::cagra::detail::benchmark_count_favor_bitset_matches<T>(
-        handle_, *index_, *filter_);
-    if (num_set_bits == 0) {
-      detail::fill_empty_favor_results(
-        handle_, neighbors, distances, static_cast<std::size_t>(batch_size) * k);
-      return;
-    }
-    params_copy.filtering_rate = static_cast<float>(index_->data().n_rows() - num_set_bits) /
-                                 static_cast<float>(index_->data().n_rows());
 
     if (favor_seed_masks_.size() == 1) {
       params_copy.rand_xor_mask = favor_seed_masks_.front();

@@ -1,0 +1,179 @@
+{
+  "dataset": {
+    "name": "bigann-1M-s90",
+    "base_file": "bigann-1M/base.10M.u8bin",
+    "query_file": "bigann-1M/query.public.10K.u8bin",
+    "groundtruth_neighbors_file": "bigann-1M/favor/groundtruth_s90.ibin",
+    "filter_bitset_file": "bigann-1M/favor/filter_s90.bin",
+    "distance": "euclidean",
+    "dtype": "uint8",
+    "subset_size": 1000000
+  },
+  "search_basic_param": {
+    "batch_size": 10000,
+    "k": 10
+  },
+  "index": [
+    {
+      "name": "cagra-g32-ig64",
+      "algo": "cuvs_cagra",
+      "file": "bigann-1M/cagra_g32_ig64.index",
+      "build_param": {
+        "graph_build_algo": "NN_DESCENT",
+        "graph_degree": 32,
+        "intermediate_graph_degree": 64
+      },
+      "search_params": [
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "filtering_rate": 0.1,
+          "itopk": 32,
+          "search_width": 4
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "filtering_rate": 0.1,
+          "itopk": 32,
+          "search_width": 4,
+          "favor_delta_d_file": "/home/ubuntu/cuvs-filter/datasets/bigann-1M/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2,
+          "favor_penalty_mode": "cagra_retention_safe",
+          "favor_penalty_lambda": 1.0,
+          "favor_retention_fraction": 0.5
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "filtering_rate": 0.1,
+          "itopk": 32,
+          "search_width": 4,
+          "favor_delta_d_file": "/home/ubuntu/cuvs-filter/datasets/bigann-1M/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2,
+          "favor_penalty_mode": "cagra_retention_safe",
+          "favor_penalty_lambda": 1.0,
+          "favor_retention_fraction": 0.0
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "filtering_rate": 0.1,
+          "itopk": 32,
+          "search_width": 4,
+          "max_iterations": 9
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "filtering_rate": 0.1,
+          "itopk": 32,
+          "search_width": 4,
+          "max_iterations": 9,
+          "favor_delta_d_file": "/home/ubuntu/cuvs-filter/datasets/bigann-1M/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2,
+          "favor_penalty_mode": "cagra_retention_safe",
+          "favor_penalty_lambda": 1.0,
+          "favor_retention_fraction": 0.5
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "filtering_rate": 0.1,
+          "itopk": 32,
+          "search_width": 4,
+          "max_iterations": 9,
+          "favor_delta_d_file": "/home/ubuntu/cuvs-filter/datasets/bigann-1M/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2,
+          "favor_penalty_mode": "cagra_retention_safe",
+          "favor_penalty_lambda": 1.0,
+          "favor_retention_fraction": 0.0
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "filtering_rate": 0.1,
+          "itopk": 32,
+          "search_width": 4,
+          "max_iterations": 10
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "filtering_rate": 0.1,
+          "itopk": 32,
+          "search_width": 4,
+          "max_iterations": 10,
+          "favor_delta_d_file": "/home/ubuntu/cuvs-filter/datasets/bigann-1M/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2,
+          "favor_penalty_mode": "cagra_retention_safe",
+          "favor_penalty_lambda": 1.0,
+          "favor_retention_fraction": 0.5
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "filtering_rate": 0.1,
+          "itopk": 32,
+          "search_width": 4,
+          "max_iterations": 10,
+          "favor_delta_d_file": "/home/ubuntu/cuvs-filter/datasets/bigann-1M/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2,
+          "favor_penalty_mode": "cagra_retention_safe",
+          "favor_penalty_lambda": 1.0,
+          "favor_retention_fraction": 0.0
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "filtering_rate": 0.1,
+          "itopk": 32,
+          "search_width": 4,
+          "max_iterations": 12
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "filtering_rate": 0.1,
+          "itopk": 32,
+          "search_width": 4,
+          "max_iterations": 12,
+          "favor_delta_d_file": "/home/ubuntu/cuvs-filter/datasets/bigann-1M/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2,
+          "favor_penalty_mode": "cagra_retention_safe",
+          "favor_penalty_lambda": 1.0,
+          "favor_retention_fraction": 0.5
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "favor",
+          "filtering_rate": 0.1,
+          "itopk": 32,
+          "search_width": 4,
+          "max_iterations": 12,
+          "favor_delta_d_file": "/home/ubuntu/cuvs-filter/datasets/bigann-1M/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2,
+          "favor_penalty_mode": "cagra_retention_safe",
+          "favor_penalty_lambda": 1.0,
+          "favor_retention_fraction": 0.0
+        }
+      ]
+    }
+  ]
+}

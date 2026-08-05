@@ -36,6 +36,7 @@
 #include <algorithm>
 #include <cassert>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <numeric>
 #include <vector>
@@ -277,7 +278,9 @@ struct search
         res,
         raft::make_device_matrix_view<OutputIndexT, int64_t>(topk_indices_ptr, num_queries, topk),
         [source_indices_ptr] __device__(IndexT x) {
-          return static_cast<OutputIndexT>(source_indices_ptr[x]);
+          return x == utils::get_max_value<IndexT>()
+                   ? std::numeric_limits<OutputIndexT>::max()
+                   : static_cast<OutputIndexT>(source_indices_ptr[x]);
         },
         raft::make_device_matrix_view<const IndexT, int64_t>(
           output_indices_ptr, num_queries, topk));
@@ -285,7 +288,10 @@ struct search
       raft::linalg::map(
         res,
         raft::make_device_matrix_view<OutputIndexT, int64_t>(topk_indices_ptr, num_queries, topk),
-        raft::cast_op<OutputIndexT>{},
+        [] __device__(IndexT x) {
+          return x == utils::get_max_value<IndexT>() ? std::numeric_limits<OutputIndexT>::max()
+                                                     : static_cast<OutputIndexT>(x);
+        },
         raft::make_device_matrix_view<const IndexT, int64_t>(
           output_indices_ptr, num_queries, topk));
     }

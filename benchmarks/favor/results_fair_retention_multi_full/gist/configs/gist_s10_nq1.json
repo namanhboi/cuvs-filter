@@ -1,0 +1,309 @@
+{
+  "dataset": {
+    "name": "gist-960-euclidean-s10",
+    "base_file": "gist-960-euclidean/base.fbin",
+    "query_file": "gist-960-euclidean/query_10000.fbin",
+    "groundtruth_neighbors_file": "gist-960-euclidean/favor/groundtruth_s10.ibin",
+    "filter_bitset_file": "gist-960-euclidean/favor/filter_s10.bin",
+    "distance": "euclidean",
+    "dtype": "float"
+  },
+  "search_basic_param": {
+    "batch_size": 1,
+    "k": 10
+  },
+  "index": [
+    {
+      "name": "cagra-g32-ig64",
+      "algo": "cuvs_cagra",
+      "file": "gist-960-euclidean/cagra_g32_ig64.index",
+      "build_param": {
+        "graph_build_algo": "NN_DESCENT",
+        "graph_degree": 32,
+        "intermediate_graph_degree": 64
+      },
+      "search_params": [
+        {
+          "algo": "multi_cta",
+          "filter_mode": "default",
+          "filtering_rate": 0.9,
+          "itopk": 32,
+          "search_width": 1
+        },
+        {
+          "algo": "multi_cta",
+          "filter_mode": "favor",
+          "filtering_rate": 0.9,
+          "itopk": 32,
+          "search_width": 1,
+          "favor_delta_d_file": "/home/ubuntu/cuvs-filter/datasets/gist-960-euclidean/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2,
+          "favor_penalty_mode": "cagra_retention_safe",
+          "favor_penalty_lambda": 1.0,
+          "favor_retention_fraction": 0.5
+        },
+        {
+          "algo": "multi_cta",
+          "filter_mode": "favor",
+          "filtering_rate": 0.9,
+          "itopk": 32,
+          "search_width": 1,
+          "favor_delta_d_file": "/home/ubuntu/cuvs-filter/datasets/gist-960-euclidean/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2,
+          "favor_penalty_mode": "cagra_retention_safe",
+          "favor_penalty_lambda": 1.0,
+          "favor_retention_fraction": 0.0
+        },
+        {
+          "algo": "multi_cta",
+          "filter_mode": "default",
+          "filtering_rate": 0.9,
+          "itopk": 64,
+          "search_width": 1
+        },
+        {
+          "algo": "multi_cta",
+          "filter_mode": "favor",
+          "filtering_rate": 0.9,
+          "itopk": 64,
+          "search_width": 1,
+          "favor_delta_d_file": "/home/ubuntu/cuvs-filter/datasets/gist-960-euclidean/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2,
+          "favor_penalty_mode": "cagra_retention_safe",
+          "favor_penalty_lambda": 1.0,
+          "favor_retention_fraction": 0.5
+        },
+        {
+          "algo": "multi_cta",
+          "filter_mode": "favor",
+          "filtering_rate": 0.9,
+          "itopk": 64,
+          "search_width": 1,
+          "favor_delta_d_file": "/home/ubuntu/cuvs-filter/datasets/gist-960-euclidean/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2,
+          "favor_penalty_mode": "cagra_retention_safe",
+          "favor_penalty_lambda": 1.0,
+          "favor_retention_fraction": 0.0
+        },
+        {
+          "algo": "multi_cta",
+          "filter_mode": "default",
+          "filtering_rate": 0.9,
+          "itopk": 128,
+          "search_width": 1
+        },
+        {
+          "algo": "multi_cta",
+          "filter_mode": "favor",
+          "filtering_rate": 0.9,
+          "itopk": 128,
+          "search_width": 1,
+          "favor_delta_d_file": "/home/ubuntu/cuvs-filter/datasets/gist-960-euclidean/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2,
+          "favor_penalty_mode": "cagra_retention_safe",
+          "favor_penalty_lambda": 1.0,
+          "favor_retention_fraction": 0.5
+        },
+        {
+          "algo": "multi_cta",
+          "filter_mode": "favor",
+          "filtering_rate": 0.9,
+          "itopk": 128,
+          "search_width": 1,
+          "favor_delta_d_file": "/home/ubuntu/cuvs-filter/datasets/gist-960-euclidean/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2,
+          "favor_penalty_mode": "cagra_retention_safe",
+          "favor_penalty_lambda": 1.0,
+          "favor_retention_fraction": 0.0
+        },
+        {
+          "algo": "multi_cta",
+          "filter_mode": "default",
+          "filtering_rate": 0.9,
+          "itopk": 256,
+          "search_width": 1
+        },
+        {
+          "algo": "multi_cta",
+          "filter_mode": "favor",
+          "filtering_rate": 0.9,
+          "itopk": 256,
+          "search_width": 1,
+          "favor_delta_d_file": "/home/ubuntu/cuvs-filter/datasets/gist-960-euclidean/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2,
+          "favor_penalty_mode": "cagra_retention_safe",
+          "favor_penalty_lambda": 1.0,
+          "favor_retention_fraction": 0.5
+        },
+        {
+          "algo": "multi_cta",
+          "filter_mode": "favor",
+          "filtering_rate": 0.9,
+          "itopk": 256,
+          "search_width": 1,
+          "favor_delta_d_file": "/home/ubuntu/cuvs-filter/datasets/gist-960-euclidean/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2,
+          "favor_penalty_mode": "cagra_retention_safe",
+          "favor_penalty_lambda": 1.0,
+          "favor_retention_fraction": 0.0
+        },
+        {
+          "algo": "multi_cta",
+          "filter_mode": "default",
+          "filtering_rate": 0.9,
+          "itopk": 512,
+          "search_width": 1
+        },
+        {
+          "algo": "multi_cta",
+          "filter_mode": "favor",
+          "filtering_rate": 0.9,
+          "itopk": 512,
+          "search_width": 1,
+          "favor_delta_d_file": "/home/ubuntu/cuvs-filter/datasets/gist-960-euclidean/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2,
+          "favor_penalty_mode": "cagra_retention_safe",
+          "favor_penalty_lambda": 1.0,
+          "favor_retention_fraction": 0.5
+        },
+        {
+          "algo": "multi_cta",
+          "filter_mode": "favor",
+          "filtering_rate": 0.9,
+          "itopk": 512,
+          "search_width": 1,
+          "favor_delta_d_file": "/home/ubuntu/cuvs-filter/datasets/gist-960-euclidean/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2,
+          "favor_penalty_mode": "cagra_retention_safe",
+          "favor_penalty_lambda": 1.0,
+          "favor_retention_fraction": 0.0
+        },
+        {
+          "algo": "multi_cta",
+          "filter_mode": "default",
+          "filtering_rate": 0.9,
+          "itopk": 640,
+          "search_width": 1
+        },
+        {
+          "algo": "multi_cta",
+          "filter_mode": "favor",
+          "filtering_rate": 0.9,
+          "itopk": 640,
+          "search_width": 1,
+          "favor_delta_d_file": "/home/ubuntu/cuvs-filter/datasets/gist-960-euclidean/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2,
+          "favor_penalty_mode": "cagra_retention_safe",
+          "favor_penalty_lambda": 1.0,
+          "favor_retention_fraction": 0.5
+        },
+        {
+          "algo": "multi_cta",
+          "filter_mode": "favor",
+          "filtering_rate": 0.9,
+          "itopk": 640,
+          "search_width": 1,
+          "favor_delta_d_file": "/home/ubuntu/cuvs-filter/datasets/gist-960-euclidean/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2,
+          "favor_penalty_mode": "cagra_retention_safe",
+          "favor_penalty_lambda": 1.0,
+          "favor_retention_fraction": 0.0
+        },
+        {
+          "algo": "multi_cta",
+          "filter_mode": "default",
+          "filtering_rate": 0.9,
+          "itopk": 768,
+          "search_width": 1
+        },
+        {
+          "algo": "multi_cta",
+          "filter_mode": "favor",
+          "filtering_rate": 0.9,
+          "itopk": 768,
+          "search_width": 1,
+          "favor_delta_d_file": "/home/ubuntu/cuvs-filter/datasets/gist-960-euclidean/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2,
+          "favor_penalty_mode": "cagra_retention_safe",
+          "favor_penalty_lambda": 1.0,
+          "favor_retention_fraction": 0.5
+        },
+        {
+          "algo": "multi_cta",
+          "filter_mode": "favor",
+          "filtering_rate": 0.9,
+          "itopk": 768,
+          "search_width": 1,
+          "favor_delta_d_file": "/home/ubuntu/cuvs-filter/datasets/gist-960-euclidean/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2,
+          "favor_penalty_mode": "cagra_retention_safe",
+          "favor_penalty_lambda": 1.0,
+          "favor_retention_fraction": 0.0
+        },
+        {
+          "algo": "multi_cta",
+          "filter_mode": "default",
+          "filtering_rate": 0.9,
+          "itopk": 1024,
+          "search_width": 1
+        },
+        {
+          "algo": "multi_cta",
+          "filter_mode": "favor",
+          "filtering_rate": 0.9,
+          "itopk": 1024,
+          "search_width": 1,
+          "favor_delta_d_file": "/home/ubuntu/cuvs-filter/datasets/gist-960-euclidean/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2,
+          "favor_penalty_mode": "cagra_retention_safe",
+          "favor_penalty_lambda": 1.0,
+          "favor_retention_fraction": 0.5
+        },
+        {
+          "algo": "multi_cta",
+          "filter_mode": "favor",
+          "filtering_rate": 0.9,
+          "itopk": 1024,
+          "search_width": 1,
+          "favor_delta_d_file": "/home/ubuntu/cuvs-filter/datasets/gist-960-euclidean/cagra_g32_ig64.index.delta_d",
+          "favor_delta_d_alpha": 10,
+          "favor_delta_d_beta": 64,
+          "favor_delta_d_bfs_depth": 2,
+          "favor_penalty_mode": "cagra_retention_safe",
+          "favor_penalty_lambda": 1.0,
+          "favor_retention_fraction": 0.0
+        }
+      ]
+    }
+  ]
+}

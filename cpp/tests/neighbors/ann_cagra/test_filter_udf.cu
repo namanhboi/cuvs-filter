@@ -277,11 +277,8 @@ TEST_P(CagraUdfFilterTest, RejectAllReturnsNoValidNeighbors)
   cuvs::neighbors::filtering::udf_filter udf_filter(reject_all_udf_source(), nullptr, 0.999f);
   auto result = search(udf_filter);
 
-  // CAGRA algorithms do not all normalize empty-result sentinels the same way. Single-CTA
-  // clears the internal high-bit marker before writing output, so 0xffffffff can become
-  // 0x7fffffff; other paths may leave 0xffffffff. Both are invalid row ids for this index.
   for (auto source_id : result.neighbors) {
-    EXPECT_GE(source_id, static_cast<uint32_t>(n_rows));
+    EXPECT_EQ(source_id, std::numeric_limits<std::uint32_t>::max());
   }
 }
 

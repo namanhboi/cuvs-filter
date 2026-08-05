@@ -37,6 +37,7 @@
 #include <algorithm>
 #include <cassert>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <numeric>
 #include <vector>
@@ -662,11 +663,16 @@ struct search
         res,
         raft::make_device_matrix_view<OutputIndexT, int64_t>(topk_indices_ptr, num_queries, topk),
         [source_indices_ptr, buf_result_indices, topk] __device__(auto offset) {
-          auto i = offset / topk;
-          auto j = offset % topk;
-          return static_cast<OutputIndexT>(source_indices_ptr[buf_result_indices(i, j)]);
+          auto i                          = offset / topk;
+          auto j                          = offset % topk;
+          constexpr auto invalid_index    = utils::get_max_value<INDEX_T>();
+          constexpr auto index_msb_1_mask = utils::gen_index_msb_1_mask<INDEX_T>::value;
+          const auto internal_index       = buf_result_indices(i, j) & ~index_msb_1_mask;
+          return internal_index == (invalid_index & ~index_msb_1_mask)
+                   ? std::numeric_limits<OutputIndexT>::max()
+                   : static_cast<OutputIndexT>(source_indices_ptr[internal_index]);
         });
-    } else {
+    } else if constexpr (std::is_same_v<OutputIndexT, INDEX_T>) {
       batched_memcpy(topk_indices_ptr,
                      topk,
                      result_indices_ptr,
@@ -674,6 +680,22 @@ struct search
                      topk,
                      num_queries,
                      stream);
+    } else {
+      auto buf_result_indices = raft::make_device_matrix_view<const INDEX_T, int64_t>(
+        result_indices_ptr, num_queries, result_buffer_allocation_size);
+      raft::linalg::map_offset(
+        res,
+        raft::make_device_matrix_view<OutputIndexT, int64_t>(topk_indices_ptr, num_queries, topk),
+        [buf_result_indices, topk] __device__(auto offset) {
+          auto i                          = offset / topk;
+          auto j                          = offset % topk;
+          constexpr auto invalid_index    = utils::get_max_value<INDEX_T>();
+          constexpr auto index_msb_1_mask = utils::gen_index_msb_1_mask<INDEX_T>::value;
+          const auto internal_index       = buf_result_indices(i, j) & ~index_msb_1_mask;
+          return internal_index == (invalid_index & ~index_msb_1_mask)
+                   ? std::numeric_limits<OutputIndexT>::max()
+                   : static_cast<OutputIndexT>(internal_index);
+        });
     }
     if (topk_distances_ptr) {
       batched_memcpy(topk_distances_ptr,

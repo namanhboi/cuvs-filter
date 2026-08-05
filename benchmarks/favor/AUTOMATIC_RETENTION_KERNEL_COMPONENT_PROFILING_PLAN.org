@@ -1,0 +1,319 @@
+#+TITLE: Automatic-Retention Kernel Component Profiling Plan
+#+DATE: 2026-08-05
+
+* Status
+
+This document is planning only.  Do not build an instrumented kernel, run a profiler, or
+implement a penalty optimization until the plan is explicitly approved.  SINGLE_CTA and
+MULTI_CTA are independent first-class targets; a result from one mode must not be generalized
+to the other.
+
+* Objective
+
+Determine why automatic-retention FAVOR costs more or less than default filtered CAGRA,
+separating:
+
+1. extra cost per unit of traversal work; and
+2. different traversal work caused by penalty-dependent candidate ordering.
+
+The first candidate optimization is the retention-penalty calculation in both SINGLE_CTA and
+MULTI_CTA, but it should be implemented only if measurement shows enough end-to-end headroom.
+All proposed profiling changes remain profiling-only: no new public search fields or permanent
+production kernel variant is required.  The first pass instruments the real traversal kernels;
+it does not create or enter a separate diagnostic traversal kernel.
+
+* Comparisons
+
+Every result must be reported in both of these views:
+
+- *same budget*: identical =itopk=, search width, and iteration cap;
+- *same quality*: interpolated/measured QPS or latency at the target recall.
+
+The same-budget view exposes implementation and work-volume differences.  The same-quality
+view answers the deployment question.  A faster row at materially lower recall is not a
+performance win.
+
+The primary comparisons are default, fixed retention (=rho=0.5=), and automatic retention.
+Fixed and automatic control-region cells where both resolve to =rho=0.5= verify that labels
+and host policy selection do not alter kernel work.
+
+* Phase 1: time the existing real kernels in both CTA modes
+
+Do not use a separate diagnostic search kernel in the first pass.  Both production JIT paths
+already contain compile-time =_CLK_BREAKDOWN= / =clock64()= scaffolding:
+
+- =search_single_cta_jit.cuh= records initialization, first-distance, top-k, hash, parent-pickup,
+  and child-distance regions in the actual persistent SINGLE_CTA traversal;
+- =search_multi_cta_jit.cuh= records the corresponding regions in the actual MULTI_CTA traversal.
+
+Extend those timers around the existing natural stage boundaries and compile a profiling-only
+variant of the same kernels.  Do not instantiate =DIAGNOSTICS=true=, change termination, capture
+candidate traces, or duplicate search logic.  The existing end-of-kernel =printf= is sufficient
+for a very small smoke sample because the accumulated clocks are captured before printing.  For
+the measurement matrix, replace it with fixed-size per-query/per-CTA timing records so device
+printing does not perturb resource use or benchmark execution.  The buffer is instrumentation
+output, not a different traversal path.
+
+Use host-side CUDA events or Nsight Systems for whole-kernel elapsed time.  In MULTI_CTA, report
+hash initialization, the traversal kernel, the separate cross-CTA top-k merge, and source-index
+mapping independently.  In-kernel =clock64()= is still necessary for fused regions such as policy
+update, distance evaluation, filter lookup, and penalty/store: host timing can see only the fused
+kernel as a whole.
+
+Place timer boundaries adjacent to synchronization points that already exist in the kernel; do
+not add barriers merely to make the timing cleaner.  Report representative-thread timings and
+the CTA distribution rather than summing cycles across concurrent CTAs, because summed CTA cycles
+are not GPU wall time.  Record block-level cycles for:
+
+| Stage | Contents |
+|-------+----------|
+| initialization | shared-memory layout and local hash initialization |
+| initial distance | seed selection and initial vector distances |
+| top-k | candidate sort/merge |
+| parent/hash | parent pickup, visited reset, and traversed maintenance |
+| policy update | finite-count check, query penalty, and retention cutoff |
+| child preparation | graph loads and visited/traversed duplicate checks |
+| vector distance | distance accumulation and team reduction |
+| filter lookup | source-ID mapping and packed-bitset load/test |
+| penalty/store | retention score calculation and result write |
+| final output | final filter, compaction, and output write |
+
+Add mode-specific stages rather than forcing unlike work into one bucket:
+
+| CTA mode | Additional stages |
+|----------+-------------------|
+| SINGLE_CTA | persistent-job acquisition/completion, multi-parent pickup, stable invalid compaction, and search-width child expansion |
+| MULTI_CTA | per-CTA seed partitioning, one-parent expansion, per-query CTA coordination, and final cross-CTA merge |
+
+Initially record only the counters already available at negligible cost (executed iterations,
+underfilled queries, and missing slots).  If those show that default and FAVOR execute materially
+different work, add the following compile-time counters to the same real-kernel profiling variant;
+do not switch to a diagnostic kernel:
+
+- executed iterations;
+- child edges considered;
+- unique children admitted by the visited hash;
+- children rejected by the traversed hash;
+- vector distances evaluated;
+- packed-bitset lookups;
+- rejected children eligible for a penalty;
+- full-query-penalty versus retention-capped children;
+- underfilled final queries and missing result slots.
+
+For SINGLE_CTA also record parents selected per iteration and active search width.  For
+MULTI_CTA record CTAs/query, work distribution across CTAs, candidates entering the global
+merge, and merge output occupancy.
+
+Report cycles per query, per iteration, and, when the optional counters are enabled, per evaluated
+child.  The instrumented default and FAVOR kernels must carry identical timer/counter scaffolding
+so instrumentation overhead can be differenced rather than mistaken for policy cost.  Always
+retain an uninstrumented run for the authoritative QPS/latency result; instrumented timing is for
+attribution only.
+
+* Phase 2: optional penalty isolation after real-kernel timing
+
+Do not start with a replay kernel.  First use the Phase 1 real-kernel timings plus Nsight Compute
+source/SASS attribution to determine whether filter/penalty work is a material fraction of the
+traversal kernel.  A =clock64()= pair around each individual child penalty is too intrusive: the
+timer overhead can exceed the few arithmetic instructions being measured.
+
+Only if the broad penalty/store region is material and the profiler cannot separate bitset loads
+from arithmetic should a replay microbenchmark be considered.  Real traversal cannot isolate
+arithmetic by simply bypassing the penalty because changing a score changes later parents.  In
+that case, capture representative tuples of
+
+#+begin_example
+(raw_distance, query_penalty, cutoff, rho, source_id, pass_bit)
+#+end_example
+
+from both instrumented SINGLE_CTA and MULTI_CTA searches, retain the mode and dataset provenance,
+then replay them in a standalone GPU kernel.  Benchmark matched
+loads/stores with three compile-time variants:
+
+1. score passthrough;
+2. packed-bitset lookup with no score change;
+3. packed-bitset lookup plus the full retention-safe score.
+
+Use enough replay elements and repetitions to amortize launch overhead.  Consume every output
+in a checksum so the compiler cannot remove the work.  This separates bitset-memory cost from
+penalty arithmetic and establishes the maximum possible end-to-end saving.
+
+* Phase 3: uninstrumented profiler validation
+
+Run Nsight Compute on the uninstrumented default and automatic kernels for the same cells in
+each CTA mode.
+Collect achieved occupancy, registers/thread, shared memory/CTA, issue stalls, instruction
+mix, L1/L2 hit rates, global-load sectors, and eligible/active warps.  Use executed-iteration
+and distance-evaluation counts from Phase 1 to normalize the profiler results.
+
+This phase checks whether the instrumented timers changed the bottleneck and whether a proposed
+arithmetic reduction is hidden by memory latency, top-k synchronization, or occupancy.
+
+* Representative cells
+
+Start with this paired matrix before profiling more datasets.  Compare modes only to understand
+their different bottlenecks; do not compare their absolute QPS as if they were interchangeable:
+
+| Dataset | Selectivity | CTA mode | Cells | Purpose |
+|---------+-------------+----------+-------+---------|
+| SIFT-1M | 1% | SINGLE_CTA and MULTI_CTA | target-bracketing =itopk= values | sparse automatic-policy behavior |
+| GIST-1M | 1% | SINGLE_CTA | =itopk=256,512= and widths 1,4 | high-dimensional, multi-parent traversal |
+| GIST-1M | 1% | MULTI_CTA | =itopk=256,512= | high-dimensional, one-parent-per-CTA traversal |
+| MSTuring-10M | 1% | SINGLE_CTA and MULTI_CTA | target-bracketing values | large-graph traversal behavior |
+| SIFT-1M | 90% | SINGLE_CTA | =itopk=32, width=4= | known low-batch latency gain and =rho=0.5= control |
+| SIFT-1M | 90% | MULTI_CTA | smallest target-reaching value | =rho=0.5= equivalence control |
+
+Select final target-bracketing values from the fair full benchmark rather than guessing
+them in advance.
+
+* Phase 4: correlated UDF and NaviX-style local-selectivity feasibility
+
+This is a separate, approval-gated experiment.  The current random, dataset-wide bitsets are
+appropriate for measuring the existing kernels, but they cannot establish whether a local
+filter-aware policy helps correlated predicates.  Do not begin this implementation as part of
+the component-profiling phases above.
+
+The design reference is NaviX's =adaptive-local= search:
+
+- paper: https://arxiv.org/html/2506.23397v1
+- implementation: https://github.com/gaurav8297/kuzu/blob/gaurav8297/hnsw_index/src/function/gds/vector_search.cpp
+
+NaviX computes the selected fraction of the currently expanded candidate's first-hop neighbors
+and uses it to switch expansion heuristics.  It does not replace global selectivity with a local
+value in a continuous distance-penalty formula.  Preserve that distinction in the experiment.
+
+** UDF-filter support
+
+- Reuse cuVS's existing UDF-filter JIT ABI and query/source-ID plumbing; introduce no second
+  public filter interface.
+- Extend only experimental FAVOR paths that currently require the packed-bitset specialization.
+  Preserve the existing packed-bitset fast path and default CAGRA behavior.
+- Support query-aware UDF context, query-ID offsets, graph-to-source mapping, and both direct and
+  remapped source IDs in =SINGLE_CTA= and =MULTI_CTA=.
+- Establish three-way correctness equivalence for every predicate: CPU predicate reference,
+  UDF-filter search, and the same predicate materialized as a bitset.  Check result IDs,
+  Recall@10, missing slots, and underfilled queries.
+- Treat UDF evaluation as a first-class cost.  Report search-only kernel time and end-to-end time
+  including predicate/materialization work; never compare an inline UDF number to an excluded
+  bitset-preparation number without labeling the difference.
+
+** Correlated workloads
+
+Start with Arxiv embeddings plus real metadata predicates such as subject category, publication
+time, and authorship groups.  Add another real metadata-bearing dataset (or NaviX's Wiki workload)
+only after the Arxiv pipeline is reproducible.  Do not infer correlation from predicate names.
+Measure it for each query/predicate pair using NaviX's ratio:
+
+#+begin_example
+sigma_global = passing_rows / dataset_rows
+sigma_query  = passing rows among the query's exact unfiltered top-R / R
+correlation_effect = sigma_query / sigma_global
+#+end_example
+
+Use a fixed =R= declared before evaluation, retain the exact ratio in the raw manifest, and form
+matched workload strata:
+
+- uncorrelated: correlation effect near 1;
+- positively correlated: materially greater than 1; and
+- negatively correlated: materially less than 1.
+
+Cover global passing selectivities near 1%, 5%, 10%, and 50% where metadata cardinalities permit.
+Match selectivity across correlation strata rather than attributing a selectivity difference to
+correlation.  Split predicate/query groups into calibration and held-out evaluation sets before
+tuning thresholds.  Generate exact filtered ground truth from the same CPU predicate used for
+the UDF-equivalence check.
+
+Where one predicate is shared by a query group, create twin configurations: the real UDF and a
+single materialized bitset.  Query-specific predicates remain UDF-only unless the benchmark gains
+an explicitly validated query-major bit-matrix filter; the existing one-dimensional bitset must
+not be described as query-specific.
+
+** Direct traversal-time local selectivity
+
+For each expanded parent =p=, compute the unsmoothed NaviX statistic from the already loaded CAGRA
+neighbor IDs:
+
+#+begin_example
+sigma_local(p) = passing_neighbors(p) / valid_neighbors(p)
+#+end_example
+
+Use one packed/UDF pass mask per parent and reuse it for child admission.  =MULTI_CTA= computes one
+mask for its one parent per CTA/iteration.  =SINGLE_CTA= computes an independent mask for every
+selected parent in =search_width=; it must not average unlike parent neighborhoods before making a
+policy decision.  Profiling records must include local passing count, valid degree, parent pass
+bit, selected expansion policy, child distances skipped/evaluated, and passing children admitted.
+
+First test whether the statistic separates the three measured correlation strata and predicts
+passing-child yield.  Then evaluate the smallest CAGRA policy mapping that can save distance work:
+
+- high local selectivity: passing-only first-hop admission with rejected distances skipped;
+- medium local selectivity: existing retention-safe, distance-directed expansion; and
+- low local selectivity: preserve rejected routing in the first experiment, while recording the
+  potential selected yield of a NaviX-style two-hop bridge.
+
+Do not label the low-selectivity proxy as a NaviX implementation.  A faithful blind/directed
+two-hop CAGRA mode is a separate design and is justified only if the recorded two-hop oracle shows
+enough additional passing yield to repay graph, UDF, synchronization, and queue costs.  Likewise,
+test passing-node bootstrap seeds separately for negatively correlated workloads rather than
+folding them invisibly into the local-policy result.
+
+** Correlated-workload decision gates
+
+- Apply correctness, recall, and performance gates independently to =SINGLE_CTA= and =MULTI_CTA=.
+- Require the local statistic to change policy choices materially on positive and negative strata
+  while collapsing to the global/random behavior on the uncorrelated control.
+- Require fewer vector-distance evaluations at matched recall; a policy-label change without work
+  reduction is not an algorithmic win.
+- Require at least 5% uninstrumented search-time improvement at matched recall on one held-out
+  correlated stratum, no systematic regression above 2% on the uncorrelated control, and no
+  missing-result/underfill regression.
+- Report UDF and materialized-bitset outcomes separately.  If the bitset control wins but UDF cost
+  erases it, optimize or materialize the predicate path before changing traversal further.
+- Do not tune NaviX's CPU/HNSW constants (=0.4= and its two-hop cost factors) directly on the held-out
+  CAGRA data; derive CAGRA thresholds from the calibration split and freeze them first.
+
+* Penalty-specific optimization to test in each mode
+
+The current rejected-candidate score is
+
+#+begin_example
+score = d + min(query_penalty, rho * (cutoff - d))
+#+end_example
+
+for =d < cutoff=.  Precompute =one_minus_rho= and =rho_cutoff=rho*cutoff= once per iteration,
+then test the algebraically equivalent form
+
+#+begin_example
+score = min(d + query_penalty, fma(one_minus_rho, d, rho_cutoff))
+#+end_example
+
+This can remove per-candidate slack construction and expose an FMA.  Validate its floating-point
+rounding effect against the current formula before performance testing.  Measure and decide on
+it independently for SINGLE_CTA and MULTI_CTA: different queue layout, top-k work, search width,
+and occupancy can hide or expose the same arithmetic cost.  The packed-bitset direct-source
+specialization and the =d < cutoff= guard already avoid more expensive general filter work and
+should remain in place.
+
+* Decision gates
+
+- Apply every threshold separately to SINGLE_CTA and MULTI_CTA.  One mode may keep an
+  optimization that the other drops.
+- If penalty arithmetic is below 3% of child-stage cycles and replay predicts less than 2%
+  end-to-end headroom, stop optimizing the formula for that mode.
+- If it is 3--10%, implement the algebraic form only if uninstrumented end-to-end latency or
+  QPS improves by at least 3% at matched recall with no systematic recall loss.
+- If it exceeds 10%, also test bitset-word prefetch/source mapping and cutoff-policy fusion.
+- If automatic/default cost per evaluated child is similar but automatic executes more work,
+  move the effort to candidate selection, traversed-parent retirement, or queue/state design.
+- Do not claim a win from batch-size-1 sampling noise.  Confirm finalists with full-query runs
+  or repeated matched query IDs.
+
+* Deliverables
+
+- raw per-query/CTA component timing records and any work counters enabled after the first pass;
+- replay inputs, replay benchmark JSON, and checksum validation only if Phase 1/3 triggers the
+  optional penalty-isolation gate;
+- Nsight Compute command lines and selected metric exports;
+- a component-share table for default, fixed, and automatic retention;
+- an explicit keep/drop decision for the penalty-formula optimization;
+- if kept, a separate implementation commit and an uninstrumented A/B benchmark report.

@@ -247,12 +247,15 @@ def validate_evaluation_sources(
     batch_size: int,
     config_batch_size: int,
     expected_gpu: str | None,
+    datasets: tuple[Dataset, ...] | None = None,
 ) -> tuple[list[dict[str, str]], str]:
     """Preflight result provenance and matched parameter cells before writing outputs."""
+    if datasets is None:
+        datasets = DATASETS
     parameter_rows: list[dict[str, str]] = []
     observed_gpus: set[str] = set()
     result_batch_sizes = tuple(dict.fromkeys((batch_size, config_batch_size)))
-    for dataset in DATASETS:
+    for dataset in datasets:
         for selectivity in SELECTIVITIES:
             reference_cells: set[tuple[int, int, int, int]] | None = None
             for result_batch_size in result_batch_sizes:
