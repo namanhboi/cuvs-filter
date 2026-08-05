@@ -1,0 +1,32 @@
+{
+  "verdict": "NO_MATERIAL_PERFORMANCE_REGRESSION",
+  "baseline": "old_79ca",
+  "candidate": "current_f080",
+  "baseline_commit": "79ca9e6cae7bfc0ae1e8e09dfb0f787103f0c474",
+  "candidate_commit": "f08044acf6f427d10e57ae7b20f46979fff6ce1e",
+  "gpu": "NVIDIA L4",
+  "iterations": 1000,
+  "repetitions": 5,
+  "cells": 10,
+  "normalized_fixed_ratio_geomean": 1.0008409956653277,
+  "normalized_fixed_ratio_ci95": [
+    0.9994305060376784,
+    1.0021194051499442
+  ],
+  "default_time_ratio_geomean": 1.0037464148570192,
+  "fixed_time_ratio_geomean": 1.004590561241002,
+  "baseline_fixed_over_default_geomean": 0.9791609037955347,
+  "candidate_fixed_over_default_geomean": 0.979984373871285,
+  "dataset_normalized_geomeans": {
+    "sift50": 0.9994035233915884,
+    "gist01": 1.001029550853824,
+    "bigann10m50": 1.0015474393820867,
+    "msturing10m01": 1.0011407104679861
+  },
+  "datasets_at_or_above_1_03": 0,
+  "max_absolute_recall_delta": 0.0011999999999999789,
+  "strict_recall_gate_ok": false,
+  "holm_significant_recall_cells": 0,
+  "minimum_unadjusted_recall_permutation_p": 0.047619047619047616,
+  "semantic_ok": true
+}

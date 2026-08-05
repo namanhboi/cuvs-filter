@@ -1,0 +1,45 @@
+{
+  "experiment": "multi_cta_fixed_retention_regression",
+  "date": "2026-08-05",
+  "gpu": "NVIDIA L4",
+  "iterations": 1000,
+  "repetitions": 5,
+  "builds": {
+    "old_79ca": "79ca9e6cae7bfc0ae1e8e09dfb0f787103f0c474",
+    "current_f080": "f08044acf6f427d10e57ae7b20f46979fff6ce1e"
+  },
+  "artifacts": {
+    "old_79ca": {
+      "benchmark": {
+        "path": "/home/ubuntu/cuvs-filter-regression-worktrees/old_79ca/cpp/build/bench/ann/CUVS_CAGRA_ANN_BENCH",
+        "size_bytes": 4571432,
+        "sha256": "53b37933440cf729dd00f6424c85679d956d69bc9f9923cc01b6561a2481d486"
+      },
+      "library": {
+        "path": "/home/ubuntu/cuvs-filter-regression-worktrees/old_79ca/cpp/build/libcuvs.so",
+        "size_bytes": 100535424,
+        "sha256": "116630495637ca315e24eada2d43daddc4d7a594c2897f1e2546f56ea0572320"
+      }
+    },
+    "current_f080": {
+      "benchmark": {
+        "path": "/home/ubuntu/cuvs-filter/cpp/build/bench/ann/CUVS_CAGRA_ANN_BENCH",
+        "size_bytes": 5005192,
+        "sha256": "6f7fc8317d978e112cb655ec75b545be873fde6ac110669637236c5092c81d7b"
+      },
+      "library": {
+        "path": "/home/ubuntu/cuvs-filter/cpp/build/libcuvs.so",
+        "size_bytes": 101554568,
+        "sha256": "f4624e56d19693cb8e37864b288d5d2bb1a1d8a513bba0e80b7c2712307875b0"
+      }
+    }
+  },
+  "dataset_keys": [
+    "sift50",
+    "gist01",
+    "bigann10m50",
+    "msturing10m01"
+  ],
+  "primary_metric": "GPU time at matched itopk",
+  "normalized_ratio": "(candidate_fixed / baseline_fixed) / (candidate_default / baseline_default)"
+}

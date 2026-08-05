@@ -1,0 +1,72 @@
+#+TITLE: MULTI_CTA Fixed-Retention Regression Diagnostic
+#+AUTHOR: Nam Anh Dang
+#+DATE: 2026-08-05
+#+OPTIONS: toc:2 num:t
+
+* Result
+
+No material fixed-retention performance regression was detected.
+
+The normalized fixed-path GPU-time ratio is =1.0008= with a cell-bootstrap 95% interval of =[0.9994, 1.0021]=.  A value above one means the candidate fixed-retention path slowed relative to the unchanged default control.
+
+Fixed retention is =2.08%= faster than default in the historical checkout and =2.00%= faster in the current checkout.  Their normalized difference is only =+0.084%=.
+
+* Interpretation
+
+The historical code and current code exhibit essentially the same fixed-retention advantage over default on the L4.  The implementation change is therefore not the cause of the apparent old-versus-new frontier difference in the reports.  That cross-report comparison mixed the historical A30 run with the current L4 run and also mixed one time-limited recorded run with this fixed-work, five-repetition diagnostic.
+
+This conclusion covers the ten representative matched cells below.  It is a direct regression test of fixed retention at identical =itopk=, not a rerun of every cell in either full frontier report.
+
+* Method
+
+The baseline is =79ca9e6cae7bfc0ae1e8e09dfb0f787103f0c474= and the candidate is =f08044acf6f427d10e57ae7b20f46979fff6ce1e=.  Both binaries were built for SM89 and run on one NVIDIA L4.  Every benchmark family executes exactly 1000 batch-size-1 queries for 5 repetitions.  The identical old-compatible JSON omits =favor_retention_fraction=, selecting the hardcoded midpoint in the baseline and the public midpoint default in the candidate.  The manifest records the SHA-256 identity of every executable and loaded shared library.
+
+The primary statistic is
+
+#+begin_example
+D = (candidate_fixed / baseline_fixed) / (candidate_default / baseline_default)
+#+end_example
+
+using median GPU time at matched dataset, selectivity, and =itopk=.  This removes target-recall interpolation and uses default CAGRA as a build/platform control.
+
+The predeclared performance-regression gate requires all of:
+
+- geometric-mean =D >= 1.03=;
+- the 95% interval lower bound above =1.0=; and
+- at least three of four dataset aggregates at or above =1.03=.
+
+The observed result satisfies none of these conditions: =D=1.0008=, interval lower bound =0.9994=, and =0/4= datasets at the threshold.  The intermediate-commit isolation and profiling stage was therefore not triggered.
+
+* Matched-cell results
+
+| Dataset | Sel. | itopk | Base default us | Cand. default us | Base fixed us | Cand. fixed us | D | Fixed recall delta |
+|---------+------+-------+-----------------+------------------+---------------+----------------+---+--------------------|
+| SIFT-1M | 50% | 64 | 258.788 | 259.717 | 253.277 | 253.246 | 0.9963 | +0.000000 |
+| SIFT-1M | 50% | 128 | 271.814 | 272.865 | 264.556 | 266.246 | 1.0025 | +0.000100 |
+| GIST-1M | 1% | 128 | 839.112 | 847.770 | 804.785 | 814.464 | 1.0017 | -0.001200 |
+| GIST-1M | 1% | 256 | 1292.617 | 1295.594 | 1260.361 | 1265.301 | 1.0016 | +0.000000 |
+| GIST-1M | 1% | 512 | 2166.081 | 2169.858 | 2177.108 | 2180.440 | 0.9998 | -0.000200 |
+| BIGANN-10M | 50% | 64 | 258.802 | 259.334 | 254.171 | 255.678 | 1.0039 | -0.000100 |
+| BIGANN-10M | 50% | 128 | 270.556 | 271.324 | 264.802 | 265.351 | 0.9992 | +0.000400 |
+| MSTuring-10M | 1% | 1024 | 615.014 | 617.862 | 593.979 | 598.461 | 1.0029 | -0.000300 |
+| MSTuring-10M | 1% | 1536 | 848.669 | 850.838 | 835.942 | 839.573 | 1.0018 | -0.000200 |
+| MSTuring-10M | 1% | 2048 | 1101.041 | 1104.993 | 1089.451 | 1091.988 | 0.9987 | -0.000400 |
+
+* Dataset aggregates
+
+| Dataset | Geometric-mean D |
+|---------+------------------|
+| SIFT-1M | 0.9994 |
+| GIST-1M | 1.0010 |
+| BIGANN-10M | 1.0015 |
+| MSTuring-10M | 1.0011 |
+
+* Validation
+
+The maximum absolute matched recall delta is =0.001200=.  The strict =0.0002= point-estimate gate therefore does not pass. CAGRA results vary slightly across identical repetitions; an exact permutation test across all default and fixed cells finds =0= recall shifts after Holm correction. This supports a timing conclusion but does not claim bit-for-bit search equivalence.  Current binaries expose underfill counters, and all current measurements report zero underfilled queries and zero missing result slots; the historical binary predates those counters.  Each benchmark process has a known teardown-only exit 139 after it closes a complete JSON file.  The runner retains a result only after strict validation, so the teardown does not truncate any measurement.  Raw repetition measurements and the machine-readable comparison are stored below this result directory.
+
+* Reproduction
+
+#+begin_src sh
+benchmarks/favor/run_multi_cta_retention_regression.sh /tmp/cuvs-multi-cta-retention-regression
+#+end_src

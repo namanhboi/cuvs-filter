@@ -1,0 +1,2 @@
+name, compute_cap, temperature.gpu, utilization.gpu [%], clocks.current.sm [MHz], clocks.current.memory [MHz], power.draw [W]
+NVIDIA L4, 8.9, 49, 0 %, 210 MHz, 405 MHz, 16.60 W
