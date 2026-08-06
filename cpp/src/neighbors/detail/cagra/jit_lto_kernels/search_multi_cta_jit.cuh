@@ -434,6 +434,7 @@ __device__ void search_kernel_jit(
           favor_penalty[0],
           favor_cutoff[0],
           false,
+          static_cast<DISTANCE_T>(0.5),
           local_traversed_hashmap_ptr,
           traversed_hash_bitlen,
           result_position,

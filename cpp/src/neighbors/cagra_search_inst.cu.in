@@ -73,4 +73,61 @@ CUVS_EXPORT void benchmark_search_favor_with_known_filtering_rate<data_t>(
     res, params, index, queries, neighbors, distances, bitset_filter_copy);
 }
 
+template <>
+CUVS_EXPORT void benchmark_estimate_favor_udf_filtering_rates<data_t>(
+  raft::resources const& res,
+  cagra::index<data_t, std::uint32_t> const& index,
+  std::uint32_t num_queries,
+  cuvs::neighbors::filtering::base_filter const& sample_filter,
+  float* filtering_rates,
+  std::uint32_t* passing_counts,
+  std::uint32_t sample_offset)
+{
+  auto const* udf_filter =
+    dynamic_cast<cuvs::neighbors::filtering::udf_filter const*>(&sample_filter);
+  RAFT_EXPECTS(udf_filter != nullptr,
+               "benchmark_estimate_favor_udf_filtering_rates requires a UDF filter");
+  estimate_favor_udf_filtering_rates_into(res,
+                                          index,
+                                          num_queries,
+                                          *udf_filter,
+                                          filtering_rates,
+                                          passing_counts,
+                                          sample_offset);
+}
+
+template <>
+CUVS_EXPORT void benchmark_search_favor_udf_with_sampled_rates<data_t>(
+  raft::resources const& res,
+  cagra::search_params const& params,
+  cagra::index<data_t, std::uint32_t> const& index,
+  raft::device_matrix_view<const data_t, std::int64_t, raft::row_major> queries,
+  raft::device_matrix_view<std::int64_t, std::int64_t, raft::row_major> neighbors,
+  raft::device_matrix_view<float, std::int64_t, raft::row_major> distances,
+  cuvs::neighbors::filtering::base_filter const& sample_filter,
+  const float* filtering_rates,
+  bool passing_accumulator)
+{
+  auto const* udf_filter =
+    dynamic_cast<cuvs::neighbors::filtering::udf_filter const*>(&sample_filter);
+  RAFT_EXPECTS(udf_filter != nullptr,
+               "benchmark_search_favor_udf_with_sampled_rates requires a UDF filter");
+  RAFT_EXPECTS(filtering_rates != nullptr,
+               "benchmark_search_favor_udf_with_sampled_rates requires sampled rates");
+  RAFT_EXPECTS(params.filter_mode == filtering_mode::FAVOR &&
+                 (params.algo == search_algo::AUTO || params.algo == search_algo::SINGLE_CTA) &&
+                 !params.persistent &&
+                 params.favor_penalty == favor_penalty_mode::CAGRA_RETENTION_SAFE &&
+                 params.favor_retention_fraction == 0.0f,
+               "benchmark_search_favor_udf_with_sampled_rates requires automatic SINGLE_CTA "
+               "retention-safe FAVOR");
+  auto params_copy           = params;
+  params_copy.algo            = search_algo::SINGLE_CTA;
+  params_copy.filtering_rate  = 0.0f;
+  auto runtime_filter =
+    CagraSampleFilterWithRuntimeState{*udf_filter, filtering_rates, passing_accumulator};
+  search_with_filtering<data_t, std::uint32_t, decltype(runtime_filter), std::int64_t>(
+    res, params_copy, index, queries, neighbors, distances, runtime_filter);
+}
+
 }  // namespace cuvs::neighbors::cagra::detail

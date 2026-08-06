@@ -1,0 +1,10 @@
+*
+!.gitignore
+!correctness_summary.csv
+!throughput_summary.csv
+!diagnostic_summary.csv
+!arity_decile_summary.csv
+!arity_decile_diagnostic_summary.csv
+!sampling_query_summary.csv
+!plots/
+!plots/*.png

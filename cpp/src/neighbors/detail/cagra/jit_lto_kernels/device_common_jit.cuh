@@ -18,6 +18,27 @@
 
 namespace cuvs::neighbors::cagra::detail::device {
 
+RAFT_DEVICE_INLINE_FUNCTION float favor_penalty_coefficient_device(float filtering_rate,
+                                                                   std::uint32_t effective_itopk)
+{
+  if (!(filtering_rate > 0.0f) || effective_itopk == 0) { return 0.0f; }
+  const auto selectivity = 1.0f - filtering_rate;
+  const auto ef          = static_cast<float>(effective_itopk);
+  return filtering_rate * (ef - selectivity) / (2.0f * selectivity * ef);
+}
+
+RAFT_DEVICE_INLINE_FUNCTION float favor_automatic_retention_fraction_device(
+  float filtering_rate, std::uint32_t effective_itopk, std::uint32_t topk)
+{
+  if (topk == 0) { return 0.5f; }
+  const auto selectivity     = 1.0f - filtering_rate;
+  const auto expected_passes = selectivity * static_cast<float>(effective_itopk);
+  auto pressure              = 2.0f * (1.0f - expected_passes / static_cast<float>(topk));
+  pressure                   = fmaxf(0.0f, fminf(1.0f, pressure));
+  const auto smooth_pressure = pressure * pressure * (3.0f - 2.0f * pressure);
+  return 0.5f + 0.4f * smooth_pressure;
+}
+
 // Helper to check if DescriptorT has kPqBits (VPQ descriptor)
 template <typename T>
 struct has_kpq_bits {
@@ -542,7 +563,8 @@ template <typename IndexT,
           typename DistanceT,
           typename DataT,
           typename SourceIndexT,
-          int STATIC_RESULT_POSITION = 1>
+          int STATIC_RESULT_POSITION = 1,
+          bool RECORD_HASH_OUTCOME   = false>
 RAFT_DEVICE_INLINE_FUNCTION void compute_favor_distance_to_child_nodes_jit(
   IndexT* __restrict__ result_child_indices_ptr,
   DistanceT* __restrict__ result_child_distances_ptr,
@@ -560,36 +582,45 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_favor_distance_to_child_nodes_jit(
   const DistanceT favor_penalty,
   const DistanceT favor_retention_cutoff     = raft::upper_bound<DistanceT>(),
   const bool favor_retention_safe            = false,
+  const DistanceT favor_retention_fraction   = static_cast<DistanceT>(0.5),
   IndexT* __restrict__ traversed_hashmap_ptr = nullptr,
   const uint32_t traversed_hash_bitlen       = 0,
   int* __restrict__ result_position          = nullptr,
-  const int max_result_position              = 0)
+  const int max_result_position              = 0,
+  std::uint8_t* diagnostic_hash_outcomes     = nullptr)
 {
   compute_distance_to_child_nodes_jit_impl<true,
                                            IndexT,
                                            DistanceT,
                                            DataT,
                                            SourceIndexT,
-                                           STATIC_RESULT_POSITION>(result_child_indices_ptr,
-                                                                   result_child_distances_ptr,
-                                                                   smem_desc,
-                                                                   knn_graph,
-                                                                   knn_k,
-                                                                   visited_hashmap_ptr,
-                                                                   visited_hash_bitlen,
-                                                                   traversed_hashmap_ptr,
-                                                                   traversed_hash_bitlen,
-                                                                   parent_indices,
-                                                                   internal_topk_list,
-                                                                   search_width,
-                                                                   result_position,
-                                                                   max_result_position,
-                                                                   source_indices_ptr,
-                                                                   query_id,
-                                                                   filter_payload,
-                                                                   favor_penalty,
-                                                                   favor_retention_cutoff,
-                                                                   favor_retention_safe);
+                                           STATIC_RESULT_POSITION,
+                                           false,
+                                           false,
+                                           false,
+                                           RECORD_HASH_OUTCOME>(result_child_indices_ptr,
+                                                                result_child_distances_ptr,
+                                                                smem_desc,
+                                                                knn_graph,
+                                                                knn_k,
+                                                                visited_hashmap_ptr,
+                                                                visited_hash_bitlen,
+                                                                traversed_hashmap_ptr,
+                                                                traversed_hash_bitlen,
+                                                                parent_indices,
+                                                                internal_topk_list,
+                                                                search_width,
+                                                                result_position,
+                                                                max_result_position,
+                                                                source_indices_ptr,
+                                                                query_id,
+                                                                filter_payload,
+                                                                favor_penalty,
+                                                                favor_retention_cutoff,
+                                                                favor_retention_safe,
+                                                                favor_retention_fraction,
+                                                                {},
+                                                                diagnostic_hash_outcomes);
 }
 
 template <typename IndexT,

@@ -21,6 +21,18 @@ namespace cuvs::neighbors::cagra::detail::favor_search_diagnostics {
 CUVS_EXPORT auto get_active_context() noexcept -> context*;
 CUVS_EXPORT void set_active_context(context* value) noexcept;
 
+/** Host-side launch resource data captured for the active diagnostic kernel. */
+struct launch_metrics {
+  std::uint32_t block_size{};
+  std::uint32_t dynamic_smem_bytes{};
+  std::uint32_t active_blocks_per_sm{};
+  std::uint32_t max_threads_per_sm{};
+};
+
+CUVS_EXPORT auto get_launch_metrics() noexcept -> launch_metrics;
+CUVS_EXPORT void set_launch_metrics(launch_metrics value) noexcept;
+CUVS_EXPORT void reset_launch_metrics() noexcept;
+
 /** Benchmark-only explicit per-query initialization seeds for staged retry diagnostics. */
 CUVS_EXPORT auto get_active_seed_ptr() noexcept -> const std::uint32_t*;
 CUVS_EXPORT auto get_active_seed_count() noexcept -> std::uint32_t;
@@ -30,6 +42,7 @@ class scoped_context {
  public:
   explicit scoped_context(context* value) : previous_{get_active_context()}
   {
+    reset_launch_metrics();
     set_active_context(value);
   }
   scoped_context(const scoped_context&)                    = delete;

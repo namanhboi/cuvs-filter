@@ -1,0 +1,6 @@
+variant,recall,qps,latency_seconds,filter_violations,invalid_sentinel_errors
+default_cagra,0.59926,44690.54334957369,0.223766331,0.0,0.0
+automatic_legacy,0.59512,31913.936435620602,0.313349308,0.0,0.0
+automatic_accumulator,0.71791,29574.47590357049,0.338145674,0.0,0.0
+automatic_accumulator_end_to_end,0.71791,28135.141750813367,0.355435365,0.0,0.0
+automatic_accumulator_shifted,0.71792,29480.94147450196,0.339209781,0.0,0.0

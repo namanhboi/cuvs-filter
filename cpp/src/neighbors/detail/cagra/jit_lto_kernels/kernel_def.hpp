@@ -222,6 +222,17 @@ using apply_filter_kernel_func_t = void(const SourceIndexT* const,
                                         const std::uint32_t,
                                         cagra_sample_filter<SourceIndexT>);
 
+template <typename SourceIndexT>
+using estimate_filter_rate_kernel_func_t = void(const SourceIndexT* const,
+                                                const std::uint32_t,
+                                                const std::uint32_t,
+                                                const std::uint32_t,
+                                                const std::uint32_t,
+                                                const std::uint32_t,
+                                                cagra_sample_filter<SourceIndexT>,
+                                                float* const,
+                                                std::uint32_t* const);
+
 }  // namespace multi_kernel_search
 
 }  // namespace cuvs::neighbors::cagra::detail

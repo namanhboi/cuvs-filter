@@ -186,6 +186,7 @@ class favor_diagnostic_session {
       search();
     }
     RAFT_CUDA_TRY(cudaStreamSynchronize(stream));
+    const auto launch_metrics = favor_diag::get_launch_metrics();
 
     std::vector<favor_diag::query_summary> summaries_host(num_queries);
     std::vector<favor_diag::iteration_record> iterations_host(iteration_count);
@@ -266,6 +267,7 @@ class favor_diagnostic_session {
                   filtering_rate,
                   max_trace_iterations,
                   candidates_per_iteration,
+                  launch_metrics,
                   termination_checkpoints_host,
                   termination_checkpoint_counts_host,
                   termination_checkpoint_stride);
@@ -332,6 +334,7 @@ class favor_diagnostic_session {
     float filtering_rate,
     std::uint32_t max_trace_iterations,
     std::uint32_t candidates_per_iteration,
+    favor_diag::launch_metrics launch_metrics,
     const std::vector<favor_diag::termination_checkpoint_record>& termination_checkpoints,
     const std::vector<std::uint32_t>& termination_checkpoint_counts,
     std::uint32_t termination_checkpoint_stride) const
@@ -398,6 +401,16 @@ class favor_diagnostic_session {
              << "  \"trace_slots\": " << selected.size() << ",\n"
              << "  \"max_trace_iterations\": " << max_trace_iterations << ",\n"
              << "  \"candidates_per_iteration\": " << candidates_per_iteration << ",\n"
+             << "  \"block_size\": " << launch_metrics.block_size << ",\n"
+             << "  \"dynamic_smem_bytes\": " << launch_metrics.dynamic_smem_bytes << ",\n"
+             << "  \"active_blocks_per_sm\": " << launch_metrics.active_blocks_per_sm << ",\n"
+             << "  \"max_threads_per_sm\": " << launch_metrics.max_threads_per_sm << ",\n"
+             << "  \"occupancy\": "
+             << (launch_metrics.max_threads_per_sm == 0
+                   ? 0.0
+                   : static_cast<double>(launch_metrics.block_size) *
+                       launch_metrics.active_blocks_per_sm / launch_metrics.max_threads_per_sm)
+             << ",\n"
              << "  \"iteration_record_size\": " << sizeof(favor_diag::iteration_record) << ",\n"
              << "  \"candidate_record_size\": " << sizeof(favor_diag::candidate_record) << ",\n"
              << "  \"termination_record_start_iteration\": "

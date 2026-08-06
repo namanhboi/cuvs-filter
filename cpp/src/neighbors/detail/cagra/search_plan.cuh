@@ -52,6 +52,10 @@ template <typename InnerFilterT>
 struct is_cagra_bitset_sample_filter<CagraSampleFilterWithQueryIdOffset<InnerFilterT>>
   : is_cagra_bitset_sample_filter<InnerFilterT> {};
 
+template <typename InnerFilterT>
+struct is_cagra_bitset_sample_filter<CagraSampleFilterWithRuntimeState<InnerFilterT>>
+  : is_cagra_bitset_sample_filter<InnerFilterT> {};
+
 /**
  * A lightweight version of rmm::device_uvector.
  * This version avoids calling cudaSetDevice / cudaGetDevice, and therefore it is required that

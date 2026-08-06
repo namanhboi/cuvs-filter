@@ -1065,6 +1065,20 @@ if(NOT BUILD_CPU_ONLY)
   )
   generate_jit_lto_kernels(
     jit_lto_files
+    NAME_FORMAT "cagra_estimate_filter_rate"
+    MATRIX_JSON_FILE
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/neighbors/detail/cagra/jit_lto_kernels/estimate_filter_rate_matrix.json"
+    KERNEL_INPUT_FILE
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/neighbors/detail/cagra/jit_lto_kernels/estimate_filter_rate_kernel.cu.in"
+    FRAGMENT_TAG_FORMAT
+      "${cagra_ns}::fragment_tag_estimate_filter_rate_kernel<${neighbors_ns}::tag_index_@source_index_abbrev@>"
+    FRAGMENT_TAG_HEADER_FILES "<cuvs/detail/jit_lto/cagra/cagra_fragments.hpp>"
+                              "<cuvs/detail/jit_lto/common_fragments.hpp>"
+    OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated_kernels/cagra/estimate_filter_rate"
+    KERNEL_LINK_LIBRARIES jit_lto_kernel_usage_requirements
+  )
+  generate_jit_lto_kernels(
+    jit_lto_files
     NAME_FORMAT "sample_filter_@filter_name@_index_@source_index_abbrev@"
     MATRIX_JSON_FILE
       "${CMAKE_CURRENT_SOURCE_DIR}/src/neighbors/detail/cagra/jit_lto_kernels/sample_filter_matrix.json"

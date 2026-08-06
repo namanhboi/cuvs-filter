@@ -7,6 +7,7 @@
 
 #include "cuda_stub.hpp"  // cudaStream_t
 
+#include <cstddef>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
@@ -143,6 +144,20 @@ class algo : public algo_base {
                       algo_base::index_type* neighbors,
                       float* distances) const = 0;
 
+  /**
+   * Benchmark-only query-offset entry point for query-dependent filters.  Algorithms that do not
+   * need global query identity retain their existing behavior through this default implementation.
+   */
+  virtual void search_with_query_offset(const T* queries,
+                                        int batch_size,
+                                        int k,
+                                        algo_base::index_type* neighbors,
+                                        float* distances,
+                                        std::size_t /*query_offset*/) const
+  {
+    search(queries, batch_size, k, neighbors, distances);
+  }
+
   virtual void save(const std::string& file) const = 0;
   virtual void load(const std::string& file)       = 0;
 
@@ -158,6 +173,14 @@ class algo : public algo_base {
   // The client code should call set_search_dataset() before searching,
   // and should not release dataset before searching is finished.
   virtual void set_search_dataset(const T* /*dataset*/, size_t /*nrow*/) {};
+
+  /** Optional CPU oracle used after timing to validate query-dependent filtered results. */
+  [[nodiscard]] virtual auto supports_filter_validation() const -> bool { return false; }
+  [[nodiscard]] virtual auto is_filter_valid(std::size_t /*query_id*/,
+                                             algo_base::index_type /*candidate_id*/) const -> bool
+  {
+    return true;
+  }
 
   /**
    * Make a shallow copy of the algo wrapper that shares the resources and ensures thread-safe
