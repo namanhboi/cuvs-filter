@@ -1,0 +1,121 @@
+#+title: Extensible SINGLE_CTA UDF Filtered-Dataset Support
+
+* First commit
+
+1. Create =favor-udf-single-cta= from =favor-filtered-search=.
+2. Save this plan as =SINGLE_CTA_UDF_FILTER_IMPLEMENTATION_PLAN.org=.
+3. Commit only the plan as =docs: add extensible single-cta UDF filtering plan=.
+4. Push and verify the remote commit before implementation.
+
+* Generic filtered-dataset layer
+
+** Benchmark configuration
+
+Extend only the internal cuVS-bench dataset configuration with a filter descriptor:
+
+#+begin_src json
+{
+  "filter": {
+    "kind": "udf",
+    "adapter": "spmat_contains_all",
+    "base_metadata_file": "base.metadata.10M.spmat",
+    "query_metadata_file": "query.metadata.public.100K.spmat"
+  }
+}
+#+end_src
+
+Keep algorithm policy separate through =filter_mode=default= or =filter_mode=favor=.  Do not add
+YFCC-named parameters, a selectivity file, or a per-query rate array.  Existing no-filter and
+bitset configurations remain valid.
+
+** Filter adapter contract
+
+Introduce a benchmark-internal adapter responsible for:
+
+- parsing and validating metadata;
+- confirming base/query row counts;
+- owning host and device metadata;
+- supplying UDF source, function name, and device context;
+- evaluating the same predicate on the CPU for validation;
+- compacting query metadata when generating a query subset; and
+- describing predicate arity for reporting.
+
+CAGRA receives only the resulting =udf_filter=.  The first adapter is
+=spmat_contains_all=: candidate image tags pass query =q= iff every tag in the query metadata row
+occurs in the candidate metadata row.  This covers YFCC and the BigANN random-filter dataset.
+Future adapters may implement sparse any/all/exclusion predicates, dense categorical columns,
+numeric ranges, conjunctions, expression bytecode, or custom UDF contexts.
+
+** Query-offset support
+
+Add a benchmark-internal =search_with_query_offset= virtual entry point.  Its default implementation
+calls the existing =search= method, so unrelated algorithms remain unchanged.  cuVS-bench supplies
+the current dataset query offset on every batch; the CAGRA wrapper exposes that offset to the UDF
+context so local kernel query =i= maps to metadata row =query_offset + i=.  This is benchmark-only
+plumbing and does not change the public cuVS API.
+
+** Ground truth
+
+Require UDF-filtered datasets to provide predicate-specific ground truth.  When it is unavailable,
+allow QPS and filter-validity measurement but do not report recall.  Never attempt to derive
+arbitrarily filtered ground truth from a bounded unfiltered top-k file.
+
+* Search implementation
+
+** Generic sampled selectivity
+
+For FAVOR UDF search with no explicit scalar rate, run a dataset-independent JIT sampler using the
+same predicate, payload, query IDs, and source mapping as traversal.  Follow released FAVOR's
+systematic schedule, reaching approximately 10,000 sampled rows for large datasets, and normalize
+by the number actually evaluated.  For a zero-hit sample use
+=effective_selectivity = 1 / sampled_row_count= and mark it underresolved.  Keep the generated
+per-query rates private to the search invocation.
+
+YFCC must omit every explicit or precomputed rate.  CPU exact counts may only be used after search
+for estimator-error analysis.
+
+** SINGLE_CTA FAVOR
+
+Initially support only nonpersistent =SINGLE_CTA=, retention-safe FAVOR scoring, automatic
+retention, and arbitrary UDF predicates.  Each CTA derives its policy from its sampled query rate.
+No UDF path may enter bitset-specific code.  Default CAGRA and FAVOR receive the same adapter UDF.
+
+** Passing accumulator
+
+Port the behavior of =/home/ubuntu/FAVOR/include/cagra_queue_diagnostic.h=: capacity exactly =k=,
+passing candidates only, deduplicate IDs, rank by =(raw distance, id)=, observe after exact distance
+and predicate evaluation, and retain the closest =k=.  Implement a CTA-local shared-memory merge
+using existing CAGRA selection primitives.  It must be passive and satisfy the traversal-invariance
+contract in =/home/ubuntu/FAVOR/app/cagra_queue_diagnostic_test.cpp=.
+
+* YFCC adapter and artifacts
+
+Symlink the large source files, CAGRA index, and delta-d sidecar.  Generate only small aligned
+query-subset vectors, query metadata, filtered ground truth, and original-query-ID manifests; store
+no selectivity values.  Upload only sparse row offsets and column IDs, omitting unit values.  Do not
+assume metadata columns are sorted.
+
+Prepare the existing 1,000-query stratified correctness workload, ten-query latency workloads, a
+10,000-query throughput workload, and per-arity/selectivity-decile diagnostic subsets.
+
+* Validation and reporting
+
+Compare default CAGRA UDF, sampled automatic retention with legacy output, sampled automatic
+retention with the passing accumulator, and a shifted systematic-sample repeat at B0 and deeper
+checkpoints.
+
+Validate adapter parsing, row-count failures, cycling query offsets, CPU/GPU predicate equivalence,
+zero filter violations, underfilled sentinels, accumulator ordering/deduplication/invariance, and
+existing no-filter, bitset, default-UDF, and FAVOR-bitset tests.
+
+Report recall, GT-seen rate, passing discoveries, sample-hit distribution, post-hoc estimator
+error, underfill, filter violations, distance work, frontier exhaustion, sampling time,
+traversal-only QPS, end-to-end QPS, shared-memory use, and occupancy.  Exclude JIT compilation,
+metadata upload, and index loading from timed search; include sampling in end-to-end QPS.
+
+* Boundaries
+
+Phase one implements only =spmat_contains_all= and YFCC through the generic adapter interface.
+Exclude =MULTI_CTA=, persistent search, brute-force fallback, dual traversal queues, retries, and
+local-selectivity adaptation.  Original FAVOR routes estimates at or below 1% to brute force; this
+graph-only experiment must report the resulting zero-hit estimator limitation.
