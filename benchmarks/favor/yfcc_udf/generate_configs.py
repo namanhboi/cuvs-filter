@@ -9,6 +9,15 @@ from pathlib import Path
 
 SWEEP_CELLS = [(l, w) for l in (64, 128, 256, 512) for w in (1, 2, 4)]
 DEEP_ITERATIONS = (522, 1044, 2088, 4176, 7569)
+MAX_ITERATIONS = (0, 522, 1044, 2088, 4176, 7569)
+SAMPLING_ESTIMATE_CELLS = (
+    (64, 1, 0),
+    (64, 2, 0),
+    (128, 4, 0),
+    (256, 2, 0),
+    (512, 2, 0),
+    (512, 2, 522),
+)
 DATA_ROOT = Path(".")
 
 
@@ -30,12 +39,13 @@ def dataset(workload: str) -> dict:
     }
 
 
-def default_search(itopk: int, width: int) -> dict:
+def default_search(itopk: int, width: int, *, max_iterations: int = 0) -> dict:
     return {
         "algo": "single_cta",
         "filter_mode": "default",
         "itopk": itopk,
         "search_width": width,
+        "max_iterations": max_iterations,
     }
 
 
@@ -135,23 +145,90 @@ def main() -> None:
         ),
     )
 
-    correctness = [default_search(l, w) for l, w in SWEEP_CELLS]
-    correctness += [favor_search(l, w) for l, w in SWEEP_CELLS]
-    correctness += [
-        favor_search(512, 2, accumulator=False),
-        favor_search(512, 2, sample_offset=499),
-    ]
-    correctness += [favor_search(512, 2, max_iterations=i) for i in DEEP_ITERATIONS]
+    correctness = []
+    for l, w in SWEEP_CELLS:
+        for max_iterations in MAX_ITERATIONS:
+            correctness.append(default_search(l, w, max_iterations=max_iterations))
+            correctness.append(
+                favor_search(
+                    l,
+                    w,
+                    accumulator=False,
+                    max_iterations=max_iterations,
+                )
+            )
+            correctness.append(
+                favor_search(
+                    l,
+                    w,
+                    accumulator=True,
+                    max_iterations=max_iterations,
+                )
+            )
     write(args.output / "correctness.json", config("correctness_1000", 1000, correctness))
 
-    throughput = [
-        default_search(512, 4),
-        favor_search(512, 2, accumulator=False),
-        favor_search(512, 2),
-        favor_search(512, 2, include_sampling=True),
-        favor_search(512, 2, sample_offset=499),
-    ]
+    throughput = []
+    for l, w in SWEEP_CELLS:
+        for max_iterations in MAX_ITERATIONS:
+            throughput.append(default_search(l, w, max_iterations=max_iterations))
+            throughput.append(
+                favor_search(
+                    l,
+                    w,
+                    accumulator=False,
+                    include_sampling=True,
+                    max_iterations=max_iterations,
+                )
+            )
+            throughput.append(
+                favor_search(
+                    l,
+                    w,
+                    accumulator=True,
+                    include_sampling=True,
+                    max_iterations=max_iterations,
+                )
+            )
     write(args.output / "throughput.json", config("throughput_10000", 10000, throughput))
+
+    sampling = []
+    for l, w, i in SAMPLING_ESTIMATE_CELLS:
+        sampling.extend(
+            [
+                favor_search(
+                    l,
+                    w,
+                    accumulator=False,
+                    include_sampling=False,
+                    max_iterations=i,
+                ),
+                favor_search(
+                    l,
+                    w,
+                    accumulator=False,
+                    include_sampling=True,
+                    max_iterations=i,
+                ),
+                favor_search(
+                    l,
+                    w,
+                    accumulator=True,
+                    include_sampling=False,
+                    max_iterations=i,
+                ),
+                favor_search(
+                    l,
+                    w,
+                    accumulator=True,
+                    include_sampling=True,
+                    max_iterations=i,
+                ),
+            ]
+        )
+    write(
+        args.output / "throughput_sampling.json",
+        config("throughput_10000", 10000, sampling),
+    )
 
     for arity in (1, 2):
         for decile in range(1, 11):

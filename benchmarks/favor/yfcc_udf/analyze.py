@@ -43,6 +43,10 @@ def variant(search: dict) -> str:
     return f"automatic_{suffix}"
 
 
+def canonical_variant(variant_name: str) -> str:
+    return variant_name[:-11] if variant_name.endswith("_end_to_end") else variant_name
+
+
 def write_csv(path: Path, rows: list[dict]) -> None:
     if not rows:
         return
@@ -51,6 +55,50 @@ def write_csv(path: Path, rows: list[dict]) -> None:
         writer = csv.DictWriter(stream, fieldnames=list(rows[0]), lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _safe_float(row: dict, name: str, default: float = 0.0) -> float:
+    value = row.get(name)
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_int(row: dict, name: str, default: int = 0) -> int:
+    value = row.get(name)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _query_batch_size(result_root: Path, benchmark_name: str) -> int:
+    path = result_root / "raw" / f"{benchmark_name}.json"
+    if not path.exists():
+        return 0
+    try:
+        data = json.loads(path.read_text())
+    except json.JSONDecodeError:
+        return 0
+    try:
+        return int(data.get("context", {}).get("max_n_queries", 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _pretty_batch_size(batch_size: int) -> str:
+    if batch_size <= 0:
+        return "unknown batch size"
+    if batch_size % 1_000_000 == 0:
+        return f"{batch_size // 1_000_000}M"
+    if batch_size % 1_000 == 0:
+        return f"{batch_size // 1_000}k"
+    return f"{batch_size}"
 
 
 class Spmat:
@@ -175,6 +223,91 @@ def summarize_group_diagnostics(result_root: Path) -> list[dict]:
     return output
 
 
+def summarize_sampling_overhead(
+    sampling_rows: list[dict],
+    throughput_batch: int,
+) -> tuple[list[dict], list[dict]]:
+    by_key: dict[tuple[str, int, int, int], dict[str, dict]] = {}
+    for row in sampling_rows:
+        search = row["search"]
+        if search.get("filter_mode") != "favor":
+            continue
+        include_sampling = bool(search.get("favor_udf_include_sampling", False))
+        method = (
+            "automatic_legacy"
+            if not search.get("favor_udf_passing_accumulator", True)
+            else "automatic_accumulator"
+        )
+        sample_key = _safe_float(row, "items_per_second", _safe_float(row, "qps", 0.0))
+        sample_recall = _safe_float(row, "Recall", _safe_float(row, "recall", 0.0))
+        key = (
+            method,
+            _safe_int(search, "itopk", 0),
+            _safe_int(search, "search_width", 0),
+            _safe_int(search, "max_iterations", 0),
+        )
+        bucket = by_key.setdefault(key, {})
+        bucket["end_to_end" if include_sampling else "traversal"] = {
+            "qps": sample_key,
+            "recall": sample_recall,
+        }
+
+    per_point = []
+    aggregates = []
+    for (method, itopk, width, iterations), values in sorted(by_key.items()):
+        traversal = values.get("traversal")
+        end_to_end = values.get("end_to_end")
+        if not traversal or not end_to_end:
+            continue
+        traversal_qps = traversal["qps"]
+        end_to_end_qps = end_to_end["qps"]
+        if traversal_qps <= 0.0 or end_to_end_qps <= 0.0:
+            continue
+        throughput_drop = (traversal_qps - end_to_end_qps) / traversal_qps * 100.0
+        delta_ms_per_query = max(0.0, (1.0 / end_to_end_qps - 1.0 / traversal_qps) * 1000.0)
+        delta_ms_batch = delta_ms_per_query * throughput_batch
+        per_point.append(
+            {
+                "method": method,
+                "itopk": itopk,
+                "search_width": width,
+                "max_iterations": iterations,
+                "recall_traversal": traversal["recall"],
+                "recall_end_to_end": end_to_end["recall"],
+                "qps_traversal": traversal_qps,
+                "qps_end_to_end": end_to_end_qps,
+                "delta_qps": traversal_qps - end_to_end_qps,
+                "delta_pct": throughput_drop,
+                "delta_ms_per_query": delta_ms_per_query,
+                "delta_ms_per_batch": delta_ms_batch,
+            }
+        )
+        aggregates.append((method, throughput_drop, delta_ms_per_query, delta_ms_batch))
+
+    aggregate_rows: list[dict] = []
+    if aggregates:
+        by_method: dict[str, list[tuple[float, float, float]]] = {}
+        for method, drop_pct, delta_ms_query, delta_ms_batch in aggregates:
+            by_method.setdefault(method, []).append(
+                (drop_pct, delta_ms_query, delta_ms_batch)
+            )
+        for method, values in sorted(by_method.items()):
+            drops = [v[0] for v in values]
+            per_q = [v[1] for v in values]
+            per_b = [v[2] for v in values]
+            aggregate_rows.append(
+                {
+                    "method": method,
+                    "samples": len(values),
+                    "mean_drop_pct": statistics.fmean(drops),
+                    "median_drop_pct": statistics.median(drops),
+                    "mean_ms_per_query": statistics.fmean(per_q),
+                    "mean_ms_per_10k": statistics.fmean(per_b),
+                }
+            )
+    return per_point, aggregate_rows
+
+
 def pareto_frontier(points: list[dict], maximize_y: bool = True) -> list[dict]:
     if not points:
         return []
@@ -201,6 +334,8 @@ def plot_results(
     correctness: list[dict],
     latency: list[dict],
     group_diagnostics: list[dict],
+    throughput: list[dict],
+    throughput_batch: int,
 ) -> None:
     try:
         import matplotlib.pyplot as plt
@@ -209,9 +344,46 @@ def plot_results(
     plot_dir = result_root / "plots"
     plot_dir.mkdir(parents=True, exist_ok=True)
 
+    plot_rows = throughput or correctness
+    rows_by_method: dict[str, list[dict]] = {}
+    for row in plot_rows:
+        if row.get("qps") is None:
+            continue
+        rows_by_method.setdefault(canonical_variant(row["variant"]), []).append(row)
+
     fig, ax = plt.subplots(figsize=(7, 4.2))
-    for method in sorted({r["variant"] for r in correctness if r["max_iterations"] == 0}):
-        rows = [r for r in correctness if r["variant"] == method and r["max_iterations"] == 0]
+    for method in sorted(rows_by_method):
+        rows = rows_by_method[method]
+        b0_rows = [r for r in rows if int(r.get("max_iterations", 0)) == 0]
+        frontier = pareto_frontier(b0_rows if b0_rows else rows, maximize_y=True)
+        if frontier:
+            ax.plot(
+                [r["recall"] for r in frontier],
+                [r["qps"] for r in frontier],
+                marker="o",
+                label=method,
+            )
+    ax.set(
+        xlabel="Recall@10",
+        ylabel="QPS",
+        title=f"YFCC B0 Pareto frontier ({_pretty_batch_size(throughput_batch)}-query batch)",
+    )
+    ax.set_xlim(0.0, 1.0)
+    all_qps = [float(r["qps"]) for rows in rows_by_method.values() for r in rows]
+    if all_qps:
+        qps_max = max(all_qps)
+        ax.set_ylim(bottom=0.0, top=qps_max * 1.05)
+    else:
+        ax.set_ylim(bottom=0.0)
+    ax.grid(alpha=0.25)
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(plot_dir / "b0_recall_qps.png", dpi=180)
+    plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(7, 4.2))
+    for method in sorted(rows_by_method):
+        rows = rows_by_method[method]
         frontier = pareto_frontier(rows, maximize_y=True)
         if frontier:
             ax.plot(
@@ -220,12 +392,22 @@ def plot_results(
                 marker="o",
                 label=method,
             )
-    ax.set(xlabel="Recall@10", ylabel="QPS (1,000-query batch)", title="YFCC B0 Pareto frontier")
+    ax.set(
+        xlabel="Recall@10",
+        ylabel="QPS",
+        title=f"YFCC Recall-vs-QPS Pareto sweep ({_pretty_batch_size(throughput_batch)}-query batch)",
+    )
     ax.set_xlim(0.0, 1.0)
+    all_qps = [float(r["qps"]) for rows in rows_by_method.values() for r in rows]
+    if all_qps:
+        qps_max = max(all_qps)
+        ax.set_ylim(bottom=0.0, top=qps_max * 1.05)
+    else:
+        ax.set_ylim(bottom=0.0)
     ax.grid(alpha=0.25)
     ax.legend()
     fig.tight_layout()
-    fig.savefig(plot_dir / "b0_recall_qps.png", dpi=180)
+    fig.savefig(plot_dir / "qps_recall_sweep.png", dpi=180)
     plt.close(fig)
 
     fig, axes = plt.subplots(1, 2, figsize=(11, 4), sharey=True)
@@ -283,15 +465,15 @@ def main() -> None:
         correctness.append(
             {
                 "variant": variant(search),
-                "itopk": int(search.get("itopk", 0)),
-                "search_width": int(search.get("search_width", 0)),
-                "max_iterations": int(search.get("max_iterations", 0)),
-                "recall": float(row["Recall"]),
-                "qps": float(row["items_per_second"]),
-                "underfilled_queries": float(row.get("UnderfilledQueries", 0)),
-                "missing_result_slots": float(row.get("MissingResultSlots", 0)),
-                "filter_violations": float(row.get("FilterViolations", 0)),
-                "invalid_sentinel_errors": float(row.get("InvalidSentinelErrors", 0)),
+                "itopk": _safe_int(search, "itopk", 0),
+                "search_width": _safe_int(search, "search_width", 0),
+                "max_iterations": _safe_int(search, "max_iterations", 0),
+                "recall": _safe_float(row, "Recall"),
+                "qps": _safe_float(row, "items_per_second"),
+                "underfilled_queries": _safe_float(row, "UnderfilledQueries", 0.0),
+                "missing_result_slots": _safe_float(row, "MissingResultSlots", 0.0),
+                "filter_violations": _safe_float(row, "FilterViolations", 0.0),
+                "invalid_sentinel_errors": _safe_float(row, "InvalidSentinelErrors", 0.0),
             }
         )
     write_csv(args.result_root / "correctness_summary.csv", correctness)
@@ -302,14 +484,57 @@ def main() -> None:
         throughput.append(
             {
                 "variant": variant(search),
-                "recall": float(row["Recall"]),
-                "qps": float(row["items_per_second"]),
-                "latency_seconds": float(row["Latency"]),
-                "filter_violations": float(row.get("FilterViolations", 0)),
-                "invalid_sentinel_errors": float(row.get("InvalidSentinelErrors", 0)),
+                "recall": _safe_float(row, "Recall"),
+                "qps": _safe_float(row, "items_per_second"),
+                "itopk": _safe_int(search, "itopk", 0),
+                "search_width": _safe_int(search, "search_width", 0),
+                "max_iterations": _safe_int(search, "max_iterations", 0),
+                "latency_seconds": _safe_float(row, "Latency", 0.0),
+                "filter_violations": _safe_float(row, "FilterViolations", 0.0),
+                "invalid_sentinel_errors": _safe_float(row, "InvalidSentinelErrors", 0.0),
             }
         )
     write_csv(args.result_root / "throughput_summary.csv", throughput)
+
+    throughput_batch = _query_batch_size(args.result_root, "throughput")
+    sampling_batch = _query_batch_size(args.result_root, "throughput_sampling")
+    sampling_points: list[dict] = []
+    if (args.result_root / "raw" / "throughput_sampling.json").exists():
+        sampling_rows = []
+        for row in benchmark_rows(args.result_root, "throughput_sampling"):
+            search = row["search"]
+            sampling_rows.append(
+                {
+                    "method": "automatic_legacy"
+                    if search.get("favor_udf_passing_accumulator", True) is False
+                    else "automatic_accumulator",
+                    "variant": variant(search),
+                    "recall": _safe_float(row, "Recall"),
+                    "items_per_second": _safe_float(row, "items_per_second"),
+                    "itopk": _safe_int(search, "itopk", 0),
+                    "search_width": _safe_int(search, "search_width", 0),
+                    "max_iterations": _safe_int(search, "max_iterations", 0),
+                    "include_sampling": bool(search.get("favor_udf_include_sampling", False)),
+                    "latency_seconds": _safe_float(row, "Latency", 0.0),
+                    "filter_violations": _safe_float(row, "FilterViolations", 0.0),
+                    "invalid_sentinel_errors": _safe_float(row, "InvalidSentinelErrors", 0.0),
+                    "search": search,
+                }
+            )
+        sampling_points, sampling_summary = summarize_sampling_overhead(
+            sampling_rows, sampling_batch or throughput_batch
+        )
+        write_csv(
+            args.result_root / "throughput_sampling_summary.csv",
+            sampling_points,
+        )
+        write_csv(
+            args.result_root / "sampling_overhead_summary.csv",
+            sampling_summary,
+        )
+    else:
+        sampling_points = []
+        sampling_summary = []
 
     latency = []
     for arity in (1, 2):
@@ -317,38 +542,59 @@ def main() -> None:
             for row in benchmark_rows(args.result_root, f"latency_a{arity}_d{decile}"):
                 search = row["search"]
                 method = variant(search)
-                if int(search.get("max_iterations", 0)):
+                if _safe_int(search, "max_iterations", 0):
                     method = "automatic_accumulator_deep"
                 latency.append(
                     {
                         "arity": arity,
                         "decile": decile,
                         "variant": method,
-                        "recall": float(row["Recall"]),
-                        "latency_seconds": float(row["Latency"]),
-                        "underfilled_queries": float(row.get("UnderfilledQueries", 0)),
-                        "filter_violations": float(row.get("FilterViolations", 0)),
-                        "invalid_sentinel_errors": float(row.get("InvalidSentinelErrors", 0)),
+                        "recall": _safe_float(row, "Recall"),
+                        "latency_seconds": _safe_float(row, "Latency", 0.0),
+                        "underfilled_queries": _safe_float(row, "UnderfilledQueries", 0.0),
+                        "filter_violations": _safe_float(row, "FilterViolations", 0.0),
+                        "invalid_sentinel_errors": _safe_float(row, "InvalidSentinelErrors", 0.0),
                     }
                 )
     write_csv(args.result_root / "arity_decile_summary.csv", latency)
 
+    if sampling_batch <= 0:
+        sampling_batch = throughput_batch
     samples = sampler_analysis(args.data_root, args.selection_json, args.result_root)
     diagnostics = summarize_diagnostics(args.result_root)
     group_diagnostics = summarize_group_diagnostics(args.result_root)
-    plot_results(args.result_root, correctness, latency, group_diagnostics)
+    plot_results(
+        args.result_root,
+        correctness,
+        latency,
+        group_diagnostics,
+        throughput,
+        throughput_batch,
+    )
 
-    best_default = max((r for r in correctness if r["variant"] == "default_cagra"), key=lambda r: r["recall"])
-    best_auto = max(
-        (
-            r
-            for r in correctness
-            if r["variant"] == "automatic_accumulator" and r["max_iterations"] == 0
-        ),
+    correctness_by_variant: dict[str, list[dict]] = {}
+    for row in correctness:
+        correctness_by_variant.setdefault(canonical_variant(row["variant"]), []).append(row)
+    throughput_by_variant: dict[str, list[dict]] = {}
+    for row in throughput:
+        throughput_by_variant.setdefault(canonical_variant(row["variant"]), []).append(row)
+
+    def _best(rowset: list[dict], *, key) -> dict:
+        if not rowset:
+            raise RuntimeError("missing required variant group in benchmark results")
+        return max(rowset, key=key)
+
+    best_default = _best(correctness_by_variant.get("default_cagra", []), key=lambda r: r["recall"])
+    best_legacy = _best(
+        correctness_by_variant.get("automatic_legacy", []),
         key=lambda r: r["recall"],
     )
-    deepest_auto = max(
-        (r for r in correctness if r["variant"] == "automatic_accumulator"),
+    best_accumulator = _best(
+        correctness_by_variant.get("automatic_accumulator", []),
+        key=lambda r: r["recall"],
+    )
+    deepest_auto = _best(
+        correctness_by_variant.get("automatic_accumulator", []),
         key=lambda r: r["max_iterations"],
     )
     verdict = (
@@ -370,9 +616,50 @@ def main() -> None:
         abs(r["estimated_selectivity"] - shifted_by_query[r["query_id"]]["estimated_selectivity"])
         for r in primary_samples
     )
-    traversal = next(r for r in throughput if r["variant"] == "automatic_accumulator")
-    end_to_end = next(r for r in throughput if r["variant"] == "automatic_accumulator_end_to_end")
-    sampling_ms = max(0.0, (1 / end_to_end["qps"] - 1 / traversal["qps"]) * 10_000 * 1000)
+    sample_overhead_rows = [
+        f"| {row['method']} | {row['itopk']} | {row['search_width']} | {row['max_iterations']} | "
+        f"{row['recall_traversal']:.4f} | {row['recall_end_to_end']:.4f} | "
+        f"{row['qps_traversal']:.1f} | {row['qps_end_to_end']:.1f} | "
+        f"{row['delta_pct']:.2f} | {row['delta_ms_per_query']:.3f} | {row['delta_ms_per_batch']:.1f} |"
+        for row in sampling_points
+    ]
+    sample_summary_text = "\n".join(
+        f"| {row['method']} | {row['samples']} | {row['mean_drop_pct']:.2f} | "
+        f"{row['median_drop_pct']:.2f} | {row['mean_ms_per_query']:.3f} | {row['mean_ms_per_10k']:.1f} |"
+        for row in sampling_summary
+    ) or "| unavailable | 0 | 0.00 | 0.00 | 0.000 | 0.0 |"
+    if sampling_points:
+        sample_timing_text = (
+            "Focused paired sampling-overhead sweep in `throughput_sampling.json` reports direct traversal "
+            "vs end-to-end comparisons at matching (L, W, i) settings. "
+            f"Batch size was {sampling_batch}."
+        )
+    else:
+        sample_timing_text = "No traversal/e2e paired FAVOR run was found for sampling-overhead estimation."
+
+    sampling_overhead_table = (
+        """| Method | L | W | I | Recall (traversal) | Recall (end-to-end) | QPS (traversal) | QPS (end-to-end) | Sampling ΔQPS % | Δms/query | Δms/10000 queries |
+|-
+""" + "\n".join(sample_overhead_rows)
+        if sample_overhead_rows
+        else ""
+    )
+    sampling_summary_table = (
+        "| Method | Samples | Mean ΔQPS % | Median ΔQPS % | Mean Δms/query | Mean Δms/10000 queries |\n"
+        "|-\n"
+        + sample_summary_text
+    )
+
+    sample_hit_text = (
+        "The systematic sample evaluates 10,000 base rows per query. "
+        f"Offset-zero samples had a {zero_rate:.1%} zero-hit/underresolved rate. "
+        "Exact counts are used only here, after search, to measure estimator error; they are never loaded by cuVS."
+    )
+    throughput_timing_text = (
+        "For the throughput sweep, all rows for FAVOR variants include end-to-end sampling."
+        if any(v["variant"].endswith("_end_to_end") for v in throughput)
+        else "For the throughput sweep, FAVOR variants are traversal-only (no end-to-end sampling)."
+    )
 
     diagnostic_text = "\n".join(
         f"| {r['variant']} | {r['recall']:.4f} | {r['gt_seen']:.4f} | "
@@ -380,18 +667,20 @@ def main() -> None:
         f"{r['underfilled']:.3f} | {r['frontier_exhaustion']:.3f} |"
         for r in diagnostics
     ) or "| unavailable | | | | | | |"
+    best_rows = [best_default, best_legacy, best_accumulator]
     correctness_text = "\n".join(
-        f"| {r['variant']} | {r['itopk']} | {r['search_width']} | {r['max_iterations']} | "
+        f"| {canonical_variant(r['variant'])} | {r['itopk']} | {r['search_width']} | {r['max_iterations']} | "
         f"{r['recall']:.4f} | {r['qps']:.1f} | {r['underfilled_queries']:.3f} |"
-        for r in correctness
-        if (r["variant"] == "default_cagra" and r is best_default)
-        or (r["variant"] == "automatic_accumulator" and r["itopk"] == 512 and r["search_width"] == 2)
-        or (r["variant"] == "automatic_legacy" and r["itopk"] == 512 and r["search_width"] == 2)
+        for r in best_rows
     )
+    best_throughput_rows = [
+        _best(throughput_by_variant[method], key=lambda r: r["qps"])
+        for method in sorted(throughput_by_variant)
+    ]
     throughput_text = "\n".join(
-        f"| {r['variant']} | {r['recall']:.4f} | {r['qps']:.1f} | "
+        f"| {canonical_variant(r['variant'])} | {r['recall']:.4f} | {r['qps']:.1f} | "
         f"{1000 * r['latency_seconds']:.3f} |"
-        for r in throughput
+        for r in best_throughput_rows
     )
     diag_by_variant = {r["variant"]: r for r in diagnostics}
     legacy_diag = diag_by_variant.get("legacy_b0")
@@ -425,12 +714,12 @@ This report contains only the GPU results produced by =benchmarks/favor/yfcc_udf
 is exact contains-all semantics: every query tag must occur in the candidate image's tag row.
 Search never receives precomputed or exact selectivity; FAVOR samples the predicate on GPU.
 
-* Correctness and B0 result
+* Correctness and sweep results
 
-- Verdict: ={verdict}=.  B0 is insufficient, while preserved SINGLE_CTA traversal reaches
-  recall {deepest_auto['recall']:.4f} at {deepest_auto['max_iterations']} iterations.
-- Best default CAGRA B0: recall {best_default['recall']:.4f} at L={best_default['itopk']}, W={best_default['search_width']}.
-- Best sampled automatic-retention B0: recall {best_auto['recall']:.4f} at L={best_auto['itopk']}, W={best_auto['search_width']}.
+- Verdict: ={verdict}=.
+- Best default CAGRA (any max_iterations): recall {best_default['recall']:.4f} at L={best_default['itopk']}, W={best_default['search_width']}, i={best_default['max_iterations']}.
+- Best automatic legacy: recall {best_legacy['recall']:.4f} at L={best_legacy['itopk']}, W={best_legacy['search_width']}, i={best_legacy['max_iterations']}.
+- Best automatic accumulator: recall {best_accumulator['recall']:.4f} at L={best_accumulator['itopk']}, W={best_accumulator['search_width']}, i={best_accumulator['max_iterations']}.
 - All reported runs have zero filter violations and zero invalid-sentinel errors (the analyzer fails otherwise).
 
 | Method | L | W | Max iterations | Recall@10 | QPS | Underfilled queries |
@@ -438,13 +727,12 @@ Search never receives precomputed or exact selectivity; FAVOR samples the predic
 {correctness_text}
 
 [[file:benchmarks/favor/yfcc_udf/results/plots/b0_recall_qps.png]]
+[[file:benchmarks/favor/yfcc_udf/results/plots/qps_recall_sweep.png]]
 
 * Sampling
 
-The systematic sample evaluates 10,000 base rows per query.  Offset-zero samples had a
-{zero_rate:.1%} zero-hit/underresolved rate.  Exact counts are used only here, after search, to
-measure estimator error; they are never loaded by cuVS.  The measured end-to-end minus
-traversal-only cost is approximately {sampling_ms:.3f} ms per 10,000-query batch.
+{sample_hit_text}
+{sample_timing_text}
 
 The sample-hit distribution is min/median/p95/max = {min(sample_hits)}/
 {statistics.median(sample_hits):.0f}/{np.quantile(sample_hits, 0.95):.0f}/{max(sample_hits)}.
@@ -452,6 +740,15 @@ Post-hoc mean absolute selectivity error is
 {sample_mae:.6g}, p95 absolute error is {sample_p95_error:.6g}, and the median estimate/exact ratio
 is {sample_median_ratio:.3f}.  Shifting the systematic schedule by 499 rows changes estimated
 selectivity by {shifted_mean_delta:.6g} on average.
+
+* Sampling overhead (traversal vs end-to-end)
+
+Paired FAVOR runs from =throughput_sampling.json= compare the same (L, W, i) point with and without
+selectivity sampling. Δ values report the end-to-end penalty relative to pure traversal.
+
+{sampling_overhead_table if sampling_overhead_table else "| unavailable |  |  |  |  |  |  |  |  |  |  |"}
+
+{sampling_summary_table if sampling_summary_table else "| unavailable | 0 | 0.00 | 0.00 | 0.000 | 0.0 |"}
 
 * Diagnostics
 
@@ -477,9 +774,7 @@ exhaustion, and exact distance work for every arity/decile cell in
 
 * Throughput
 
-Traversal-only QPS for sampled automatic retention is {traversal['qps']:.1f}; sampling-inclusive
-QPS is {end_to_end['qps']:.1f}.  See =throughput_summary.csv= for default, legacy-output, shifted-
-sample, and accumulator rows.
+{throughput_timing_text}
 
 | Method | Recall@10 | QPS | Batch latency (ms) |
 |-

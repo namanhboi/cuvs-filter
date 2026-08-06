@@ -6,33 +6,27 @@ This report contains only the GPU results produced by =benchmarks/favor/yfcc_udf
 is exact contains-all semantics: every query tag must occur in the candidate image's tag row.
 Search never receives precomputed or exact selectivity; FAVOR samples the predicate on GPU.
 
-* Correctness and B0 result
+* Correctness and sweep results
 
-- Verdict: =budget_opportunity=.  B0 is insufficient, while preserved SINGLE_CTA traversal reaches
-  recall 0.9286 at 7569 iterations.
-- Best default CAGRA B0: recall 0.5415 at L=512, W=4.
-- Best sampled automatic-retention B0: recall 0.6663 at L=512, W=4.
+- Verdict: =target_not_reached=.
+- Best default CAGRA (any max_iterations): recall 0.6449 at L=512, W=2, i=7569.
+- Best automatic legacy: recall 0.6386 at L=512, W=2, i=7569.
+- Best automatic accumulator: recall 0.9304 at L=64, W=2, i=7569.
 - All reported runs have zero filter violations and zero invalid-sentinel errors (the analyzer fails otherwise).
 
 | Method | L | W | Max iterations | Recall@10 | QPS | Underfilled queries |
 |-
-| default_cagra | 512 | 4 | 0 | 0.5415 | 35479.5 | 0.550 |
-| automatic_accumulator | 512 | 2 | 0 | 0.6645 | 18202.2 | 0.363 |
-| automatic_legacy | 512 | 2 | 0 | 0.5384 | 20177.9 | 0.564 |
-| automatic_accumulator | 512 | 2 | 522 | 0.7264 | 10659.3 | 0.309 |
-| automatic_accumulator | 512 | 2 | 1044 | 0.7904 | 6099.3 | 0.232 |
-| automatic_accumulator | 512 | 2 | 2088 | 0.8496 | 3551.1 | 0.175 |
-| automatic_accumulator | 512 | 2 | 4176 | 0.8953 | 1983.8 | 0.114 |
-| automatic_accumulator | 512 | 2 | 7569 | 0.9286 | 1200.4 | 0.077 |
+| default_cagra | 512 | 2 | 7569 | 0.6449 | 1581.2 | 0.321 |
+| automatic_legacy | 512 | 2 | 7569 | 0.6386 | 1292.9 | 0.334 |
+| automatic_accumulator | 64 | 2 | 7569 | 0.9304 | 1417.9 | 0.072 |
 
 [[file:benchmarks/favor/yfcc_udf/results/plots/b0_recall_qps.png]]
+[[file:benchmarks/favor/yfcc_udf/results/plots/qps_recall_sweep.png]]
 
 * Sampling
 
-The systematic sample evaluates 10,000 base rows per query.  Offset-zero samples had a
-23.3% zero-hit/underresolved rate.  Exact counts are used only here, after search, to
-measure estimator error; they are never loaded by cuVS.  The measured end-to-end minus
-traversal-only cost is approximately 17.298 ms per 10,000-query batch.
+The systematic sample evaluates 10,000 base rows per query. Offset-zero samples had a 23.3% zero-hit/underresolved rate. Exact counts are used only here, after search, to measure estimator error; they are never loaded by cuVS.
+Focused paired sampling-overhead sweep in `throughput_sampling.json` reports direct traversal vs end-to-end comparisons at matching (L, W, i) settings. Batch size was 10000.
 
 The sample-hit distribution is min/median/p95/max = 0/
 6/953/1878.
@@ -40,6 +34,31 @@ Post-hoc mean absolute selectivity error is
 0.000569909, p95 absolute error is 0.0027312, and the median estimate/exact ratio
 is 1.068.  Shifting the systematic schedule by 499 rows changes estimated
 selectivity by 0.0008141 on average.
+
+* Sampling overhead (traversal vs end-to-end)
+
+Paired FAVOR runs from =throughput_sampling.json= compare the same (L, W, i) point with and without
+selectivity sampling. Δ values report the end-to-end penalty relative to pure traversal.
+
+| Method | L | W | I | Recall (traversal) | Recall (end-to-end) | QPS (traversal) | QPS (end-to-end) | Sampling ΔQPS % | Δms/query | Δms/10000 queries |
+|-
+| automatic_accumulator | 64 | 1 | 0 | 0.4862 | 0.4862 | 179798.7 | 138170.5 | 23.15 | 0.002 | 16.8 |
+| automatic_accumulator | 64 | 2 | 0 | 0.4938 | 0.4938 | 177463.5 | 136932.8 | 22.84 | 0.002 | 16.7 |
+| automatic_accumulator | 128 | 4 | 0 | 0.5845 | 0.5845 | 92898.3 | 80224.7 | 13.64 | 0.002 | 17.0 |
+| automatic_accumulator | 256 | 2 | 0 | 0.6537 | 0.6537 | 56515.9 | 51920.1 | 8.13 | 0.002 | 15.7 |
+| automatic_accumulator | 512 | 2 | 0 | 0.7179 | 0.7179 | 29533.2 | 28333.2 | 4.06 | 0.001 | 14.3 |
+| automatic_accumulator | 512 | 2 | 522 | 0.7732 | 0.7732 | 17397.8 | 16872.2 | 3.02 | 0.002 | 17.9 |
+| automatic_legacy | 64 | 1 | 0 | 0.3496 | 0.3496 | 197053.1 | 147869.8 | 24.96 | 0.002 | 16.9 |
+| automatic_legacy | 64 | 2 | 0 | 0.3548 | 0.3548 | 193621.4 | 145349.1 | 24.93 | 0.002 | 17.2 |
+| automatic_legacy | 128 | 4 | 0 | 0.4436 | 0.4436 | 103124.3 | 87333.4 | 15.31 | 0.002 | 17.5 |
+| automatic_legacy | 256 | 2 | 0 | 0.5226 | 0.5226 | 60980.5 | 54990.8 | 9.82 | 0.002 | 17.9 |
+| automatic_legacy | 512 | 2 | 0 | 0.5951 | 0.5951 | 32081.3 | 30393.9 | 5.26 | 0.002 | 17.3 |
+| automatic_legacy | 512 | 2 | 522 | 0.6210 | 0.6210 | 18699.4 | 18181.7 | 2.77 | 0.002 | 15.2 |
+
+| Method | Samples | Mean ΔQPS % | Median ΔQPS % | Mean Δms/query | Mean Δms/10000 queries |
+|-
+| automatic_accumulator | 6 | 12.48 | 10.89 | 0.002 | 16.4 |
+| automatic_legacy | 6 | 13.84 | 12.57 | 0.002 | 17.0 |
 
 * Diagnostics
 
@@ -50,9 +69,9 @@ selectivity by 0.0008141 on average.
 | accumulator_i2088 | 0.8496 | 0.8496 | 439.0 | 51119 | 0.175 | 0.213 |
 | accumulator_i4176 | 0.8953 | 0.8953 | 593.1 | 97325 | 0.115 | 0.218 |
 | accumulator_i522 | 0.7264 | 0.7264 | 259.1 | 14002 | 0.309 | 0.204 |
-| accumulator_i7569 | 0.9287 | 0.9287 | 775.3 | 167023 | 0.077 | 0.231 |
+| accumulator_i7569 | 0.9285 | 0.9285 | 775.1 | 167009 | 0.077 | 0.231 |
 | legacy_b0 | 0.5384 | 0.6645 | 219.3 | 8404 | 0.564 | 0.197 |
-| legacy_i7569 | 0.6385 | 0.9287 | 775.0 | 167008 | 0.334 | 0.231 |
+| legacy_i7569 | 0.6385 | 0.9287 | 775.0 | 167007 | 0.335 | 0.231 |
 
 The B0 accumulator-minus-legacy mean distance-work delta is 0.000 and the GT-seen delta is 0.000000; output recall can differ because passing neighbors are no longer evicted by the mixed traversal queue.
 
@@ -72,17 +91,13 @@ exhaustion, and exact distance work for every arity/decile cell in
 
 * Throughput
 
-Traversal-only QPS for sampled automatic retention is 29574.5; sampling-inclusive
-QPS is 28135.1.  See =throughput_summary.csv= for default, legacy-output, shifted-
-sample, and accumulator rows.
+For the throughput sweep, all rows for FAVOR variants include end-to-end sampling.
 
 | Method | Recall@10 | QPS | Batch latency (ms) |
 |-
-| default_cagra | 0.5993 | 44690.5 | 223.766 |
-| automatic_legacy | 0.5951 | 31913.9 | 313.349 |
-| automatic_accumulator | 0.7179 | 29574.5 | 338.146 |
-| automatic_accumulator_end_to_end | 0.7179 | 28135.1 | 355.435 |
-| automatic_accumulator_shifted | 0.7179 | 29480.9 | 339.210 |
+| automatic_accumulator | 0.4862 | 135374.5 | 73.871 |
+| automatic_legacy | 0.3496 | 145496.6 | 68.732 |
+| default_cagra | 0.3554 | 331626.1 | 30.155 |
 
 * Reproduction
 

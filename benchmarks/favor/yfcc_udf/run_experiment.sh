@@ -35,6 +35,7 @@ case "${stage}" in
   smoke) run_one smoke latency 0.01s ;;
   correctness) run_one correctness throughput 0.01s ;;
   throughput) run_one throughput throughput 0.2s ;;
+  throughput_sampling) run_one throughput_sampling throughput 0.2s ;;
   latency)
     for arity in 1 2; do
       for decile in $(seq 1 10); do
@@ -54,6 +55,7 @@ case "${stage}" in
     run_one smoke latency 0.01s
     run_one correctness throughput 0.01s
     run_one throughput throughput 0.2s
+    run_one throughput_sampling throughput 0.2s
     for arity in 1 2; do
       for decile in $(seq 1 10); do
         run_one "latency_a${arity}_d${decile}" latency 0.05s
@@ -66,5 +68,5 @@ case "${stage}" in
       done
     done
     ;;
-  *) echo "usage: $0 {smoke|correctness|throughput|latency|diagnostic|diagnostic_groups|all}" >&2; exit 2 ;;
+  *) echo "usage: $0 {smoke|correctness|throughput|throughput_sampling|latency|diagnostic|diagnostic_groups|all}" >&2; exit 2 ;;
 esac
