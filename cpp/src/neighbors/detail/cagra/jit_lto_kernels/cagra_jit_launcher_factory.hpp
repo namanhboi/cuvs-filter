@@ -207,8 +207,8 @@ template <typename DataTag,
           typename IndexT,
           typename DistanceT,
           typename SourceIndexT>
-std::shared_ptr<AlgorithmLauncher> build_apply_filter_only_launcher(
-  std::unique_ptr<UDFFatbinFragment> sample_filter_udf_fragment)
+std::shared_ptr<AlgorithmLauncher> build_sample_filter_only_launcher(
+  const char* kernel_name, std::unique_ptr<UDFFatbinFragment> sample_filter_udf_fragment)
 {
   multi_kernel_search::CagraMultiKernelSearchPlanner<DataTag,
                                                      IndexTag,
@@ -217,9 +217,9 @@ std::shared_ptr<AlgorithmLauncher> build_apply_filter_only_launcher(
                                                      QueryTag,
                                                      CodebookTag,
                                                      SampleFilterJitTag>
-    planner("apply_filter_kernel");
+    planner(kernel_name);
   planner.add_sample_filter_device_function(std::move(sample_filter_udf_fragment));
-  planner.add_linked_kernel("apply_filter_kernel");
+  planner.add_linked_kernel(kernel_name);
   return planner.get_launcher();
 }
 
@@ -467,49 +467,79 @@ std::shared_ptr<AlgorithmLauncher> make_cagra_apply_filter_jit_launcher(
   if (dataset_desc.is_vpq) {
     using QueryTag    = query_type_tag_vpq_t<DataTag>;
     using CodebookTag = codebook_tag_vpq_t;
-    return cagra_jit_launcher_factory_detail::build_apply_filter_only_launcher<DataTag,
-                                                                               IndexTag,
-                                                                               DistTag,
-                                                                               SourceTag,
-                                                                               QueryTag,
-                                                                               CodebookTag,
-                                                                               SampleFilterJitTag,
-                                                                               DataT,
-                                                                               IndexT,
-                                                                               DistanceT,
-                                                                               SourceIndexT>(
-      std::move(sample_filter_udf_fragment));
+    return cagra_jit_launcher_factory_detail::build_sample_filter_only_launcher<DataTag,
+                                                                                IndexTag,
+                                                                                DistTag,
+                                                                                SourceTag,
+                                                                                QueryTag,
+                                                                                CodebookTag,
+                                                                                SampleFilterJitTag,
+                                                                                DataT,
+                                                                                IndexT,
+                                                                                DistanceT,
+                                                                                SourceIndexT>(
+      "apply_filter_kernel", std::move(sample_filter_udf_fragment));
   }
   using CodebookTag = codebook_tag_standard_t;
   if (dataset_desc.metric == cuvs::distance::DistanceType::BitwiseHamming) {
     using QueryTag =
       query_type_tag_standard_t<DataTag, cuvs::distance::DistanceType::BitwiseHamming>;
-    return cagra_jit_launcher_factory_detail::build_apply_filter_only_launcher<DataTag,
-                                                                               IndexTag,
-                                                                               DistTag,
-                                                                               SourceTag,
-                                                                               QueryTag,
-                                                                               CodebookTag,
-                                                                               SampleFilterJitTag,
-                                                                               DataT,
-                                                                               IndexT,
-                                                                               DistanceT,
-                                                                               SourceIndexT>(
-      std::move(sample_filter_udf_fragment));
+    return cagra_jit_launcher_factory_detail::build_sample_filter_only_launcher<DataTag,
+                                                                                IndexTag,
+                                                                                DistTag,
+                                                                                SourceTag,
+                                                                                QueryTag,
+                                                                                CodebookTag,
+                                                                                SampleFilterJitTag,
+                                                                                DataT,
+                                                                                IndexT,
+                                                                                DistanceT,
+                                                                                SourceIndexT>(
+      "apply_filter_kernel", std::move(sample_filter_udf_fragment));
   }
   using QueryTag = query_type_tag_standard_t<DataTag, cuvs::distance::DistanceType::L2Expanded>;
-  return cagra_jit_launcher_factory_detail::build_apply_filter_only_launcher<DataTag,
-                                                                             IndexTag,
-                                                                             DistTag,
-                                                                             SourceTag,
-                                                                             QueryTag,
-                                                                             CodebookTag,
-                                                                             SampleFilterJitTag,
-                                                                             DataT,
-                                                                             IndexT,
-                                                                             DistanceT,
-                                                                             SourceIndexT>(
-    std::move(sample_filter_udf_fragment));
+  return cagra_jit_launcher_factory_detail::build_sample_filter_only_launcher<DataTag,
+                                                                              IndexTag,
+                                                                              DistTag,
+                                                                              SourceTag,
+                                                                              QueryTag,
+                                                                              CodebookTag,
+                                                                              SampleFilterJitTag,
+                                                                              DataT,
+                                                                              IndexT,
+                                                                              DistanceT,
+                                                                              SourceIndexT>(
+    "apply_filter_kernel", std::move(sample_filter_udf_fragment));
+}
+
+/** JIT launcher for the query-local filtering-rate sampler. */
+template <typename DataT,
+          typename IndexT,
+          typename DistanceT,
+          typename SourceIndexT,
+          typename SampleFilterJitTag>
+std::shared_ptr<AlgorithmLauncher> make_cagra_filter_rate_estimator_jit_launcher(
+  std::unique_ptr<UDFFatbinFragment> sample_filter_udf_fragment = nullptr)
+{
+  using DataTag     = decltype(get_data_type_tag<DataT>());
+  using IndexTag    = decltype(get_index_type_tag<IndexT>());
+  using DistTag     = decltype(get_distance_type_tag<DistanceT>());
+  using SourceTag   = decltype(get_source_index_type_tag<SourceIndexT>());
+  using QueryTag    = query_type_tag_standard_t<DataTag, cuvs::distance::DistanceType::L2Expanded>;
+  using CodebookTag = codebook_tag_standard_t;
+
+  return cagra_jit_launcher_factory_detail::build_sample_filter_only_launcher<DataTag,
+                                                                              IndexTag,
+                                                                              DistTag,
+                                                                              SourceTag,
+                                                                              QueryTag,
+                                                                              CodebookTag,
+                                                                              SampleFilterJitTag,
+                                                                              DataT,
+                                                                              IndexT,
+                                                                              DistanceT,
+                                                                              SourceIndexT>(
+    "estimate_filter_rate", std::move(sample_filter_udf_fragment));
 }
 
 }  // namespace cuvs::neighbors::cagra::detail

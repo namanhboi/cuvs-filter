@@ -5,9 +5,9 @@
 * Read this first
 
 This is the authoritative handoff for the GPU implementation in
-=/home/ubuntu/cuvs-filter=.  The code is on branch =favor-filtered-search= and is published at
-[[https://github.com/namanhboi/cuvs-filter/tree/favor-filtered-search][namanhboi/cuvs-filter: favor-filtered-search]].  The implementation baseline audited for this
-handoff is =1bba08d8eac06ce760009df76f6f0957be4d5e97=.
+=/home/ubuntu/cuvs-filter=.  The bitset baseline is on =favor-filtered-search=; the phase-one UDF
+implementation is on branch =favor-udf-single-cta=.  Its plan-only base commit is
+=6a6acd011666041fc7e287e759e7f0c718043a2d=.
 
 The companion CPU algorithmic oracle is =/home/ubuntu/FAVOR= on branch
 =yfcc-default-cagra-cpu=.  Start with
@@ -23,9 +23,12 @@ The current result is narrower than the original research plan:
 - On independent random bitsets, automatic retention helps the difficult sparse SINGLE_CTA cases,
   but at 10% and higher the methods are usually close.  It has no general MULTI_CTA advantage over
   default CAGRA on the current L4 measurements.
-- On correlated YFCC predicates, the CPU oracle finds a real selection/output-retention
-  opportunity.  GPU UDF FAVOR, per-query selectivity, and a passing-only accumulator are /not yet
-  implemented/.
+- Correlated YFCC contains-all predicates are supported through cuVS-bench's generic sparse-matrix
+  adapter.  Public FAVOR UDF search estimates query-local selectivity on GPU and SINGLE_CTA keeps a
+  bounded passing-only result accumulator.  No exact/precomputed rate array is exposed or loaded.
+- The YFCC verdict is =budget_opportunity=: sampled automatic retention reaches 0.6645 at L=512,
+  W=2 and 0.9286 through deeper preserved traversal.  See
+  [[file:../../YFCC_SINGLE_CTA_UDF_REPORT.org][YFCC_SINGLE_CTA_UDF_REPORT.org]].
 
 Do not treat the many diagnostic kernels and experimental runners as supported public behavior.
 Do not bulk-add or clean ignored benchmark artifacts; several directories contain expensive local
@@ -43,7 +46,7 @@ results and external dataset links.
 | FAVOR =AUTO= algorithm selection | Supported when it resolves to a supported CTA mode |
 | FAVOR =MULTI_KERNEL= | Unsupported |
 | FAVOR persistent kernel | Unsupported |
-| FAVOR arbitrary =udf_filter= | Unsupported; rejected during dispatch |
+| FAVOR arbitrary =udf_filter= | SINGLE_CTA, nonpersistent, retention-safe automatic mode |
 | Reference penalty | Supported |
 | Query-local penalty | Supported |
 | Retention-safe penalty | Supported |
@@ -61,6 +64,11 @@ The public additions are in =cpp/include/cuvs/neighbors/cagra.hpp=:
   =load_favor_delta_d=.
 
 No Python, C, Java, or Rust FAVOR API was added.
+
+UDF support adds no public selectivity array or search-parameter field.  An existing public
+=udf_filter= is accepted by FAVOR only in the phase-one matrix above.  The search samples the same
+predicate over approximately 10,000 systematic base rows per query, ignores scalar rate hints,
+and keeps the resulting device rates private to that invocation.
 
 ** Terminology and rate convention
 
@@ -300,6 +308,23 @@ Change =favor_retention_fraction= to =0.5= for fixed retention.  For the matched
 =filter_mode:"default"= at the same =itopk=, width, batch size, filter, and explicit rate.  Use
 =algo:"multi_cta"= and batch size one for the current MULTI_CTA latency protocol.
 
+For query-dependent sparse metadata, replace the bitset fields with a generic descriptor.  Do not
+add =filtering_rate= or a selectivity file:
+
+#+begin_src json
+"filter": {
+  "kind": "udf",
+  "adapter": "spmat_contains_all",
+  "base_metadata_file": "yfcc-10M/base.metadata.10M.spmat",
+  "query_metadata_file": "yfcc-10M/workloads/correctness_1000/query.metadata.spmat"
+}
+#+end_src
+
+Both =filter_mode:"default"= and =filter_mode:"favor"= receive this same exact UDF.  FAVOR UDF
+requires =algo:"single_cta"=, retention-safe scoring, and automatic retention.  Benchmark-only
+=favor_udf_include_sampling=false= precomputes sampled rates during parameter setup for
+traversal-only timing; normal/public FAVOR UDF search always samples on each invocation.
+
 Build and search directly with the local benchmark binary:
 
 #+begin_src sh
@@ -346,11 +371,9 @@ LD_PRELOAD=$PWD/cpp/build/libcuvs.so \
 
 The FAVOR suite covers default isolation, float/uint8 paths, both CTA modes, automatic and fixed
 retention, invalid configurations, underfilled sentinels, direct rate handling, stable compaction,
-and benchmark-private diagnostics.  The UDF suite is a regression guard for existing default
-CAGRA UDF behavior; it does not imply FAVOR UDF support.
-
-At this handoff, the local-library runs pass 13/13 delta-d tests, 35/35 FAVOR search tests, and
-24/24 default-CAGRA UDF tests.  The fair-report/config helper unit tests pass 4/4.
+and benchmark-private diagnostics.  The UDF suite additionally covers sampling-only FAVOR
+dispatch, query-id tiling, reject-all sentinels, passing-only output, deduplication, and deterministic
+raw-distance/id ordering.
 
 * Datasets and reproducibility
 
@@ -459,6 +482,8 @@ Use these documents in this order:
   =progress_termination_diagnostic/results/report.md= — rejected hash/progress directions.
 - =AUTOMATIC_RETENTION_KERNEL_COMPONENT_PROFILING_PLAN.org= — unimplemented timing plan for
   comparing default and FAVOR component cost.
+- [[file:../../YFCC_SINGLE_CTA_UDF_REPORT.org][YFCC_SINGLE_CTA_UDF_REPORT.org]] — GPU YFCC UDF recall, work, sampling, throughput, and
+  occupancy evidence.
 
 Primary production-facing code:
 
@@ -470,30 +495,34 @@ Primary production-facing code:
 - =cpp/bench/ann/src/cuvs/cuvs_cagra_wrapper.h= — cuVS-bench integration; and
 - =cpp/tests/neighbors/ann_cagra/test_favor_search.cu= — behavioral contract.
 
-* Planned next step: SINGLE_CTA UDF FAVOR
+* Implemented SINGLE_CTA UDF FAVOR
 
-Nothing in this section is implemented.  The proposed work should start on a new branch from
-=favor-filtered-search= and preserve all current default and bitset behavior.
+The phase-one path deliberately does /not/ extend =udf_filter= with exact per-query rates.  FAVOR
+always samples the supplied predicate on GPU, even when its scalar hint is populated.  A zero-hit
+sample uses the conservative =1/sample_count= floor and remains underresolved; on the stratified
+YFCC workload this occurs for 23.3% of queries.
 
-1. Extend =udf_filter= with an optional device view of exact per-query rejected fractions.  Rate
-   precedence should be: explicit =search_params.filtering_rate=, per-query UDF rate, legacy scalar
-   UDF rate, then an estimator.
-2. Support only non-persistent =SINGLE_CTA=,
-   =CAGRA_RETENTION_SAFE=, and automatic =rho= in the first version.  Reject other FAVOR/UDF
-   combinations explicitly.
-3. Add a UDF-safe JIT specialization that calls the predicate; never reinterpret arbitrary UDF
-   payloads as packed bitsets.
-4. Add a bounded shared top-=k= accumulator that observes every first-seen passing seed/child by
-   raw distance.  It must not change scoring, cutoff, admission, parent selection, visited state,
-   or termination.
-5. Implement a generic systematic-sampling estimator similar to released FAVOR, capped near
-   10,000 samples, but validate exact-rate and estimated-rate arms separately.  YFCC selectivities
-   near =1e-5= cannot be estimated reliably from 10,000 samples, so exact per-query rates are the
-   oracle and production handling of ultra-sparse estimates must remain explicit.
-6. First test on YFCC: default UDF; exact-rate automatic legacy output; exact-rate automatic with
-   accumulator; and estimated-rate automatic with accumulator, at B0 and preserved-state deep
-   controls.  Require zero predicate violations, correct invalid sentinels, no traversal changes
-   when only the passive accumulator is toggled, and recall/work by arity and selectivity decile.
+The JIT payload now separates predicate kind, opaque data, query offset, private sampled rates, and
+the accumulator toggle.  Only nonpersistent SINGLE_CTA retention-safe automatic mode is accepted.
+The bounded CTA-local accumulator has capacity exactly =k=, retains passing nodes only, deduplicates
+internal IDs, and sorts by =(raw distance, internal id)=.  At L=512, W=2, k=10 on L4 it adds 84
+dynamic shared-memory bytes and changes measured occupancy from 15 to 14 active CTAs/SM.  It is
+traversal-passive: B0 legacy and accumulator diagnostics have identical exact distance work and
+GT-seen rate, while recall changes from 0.5384 to 0.6645.
+
+cuVS-bench accepts a generic dataset =filter= descriptor.  The first adapter,
+=spmat_contains_all=, parses strict BigANN sparse matrices, uploads only row offsets and columns,
+and applies the exact predicate =query_tags subset_of candidate_tags=.  Query offsets are carried
+through benchmark batching without changing the public cuVS API.  CPU validation after timing
+rejects predicate violations and malformed underfill sentinels.
+
+Reproduce all artifacts with:
+
+#+begin_src sh
+benchmarks/favor/yfcc_udf/prepare_workloads.py --source /home/ubuntu/big-ann-benchmarks/data/yfcc100M --index /home/ubuntu/FAVOR/.artifacts/yfcc/yfcc10m.cagra_g32_ig64.index --delta-d /home/ubuntu/FAVOR/.artifacts/yfcc/yfcc10m.cagra_g32_ig64.index.delta_d --selection-json /home/ubuntu/FAVOR/.artifacts/yfcc/raw/automatic_retention_accumulator_L512_W2_accumulator.json --output datasets/yfcc-10M
+benchmarks/favor/yfcc_udf/run_experiment.sh all
+python benchmarks/favor/yfcc_udf/analyze.py --result-root benchmarks/favor/yfcc_udf/results --data-root datasets --selection-json /home/ubuntu/FAVOR/.artifacts/yfcc/raw/automatic_retention_accumulator_L512_W2_accumulator.json --report YFCC_SINGLE_CTA_UDF_REPORT.org
+#+end_src
 
 Do not add MULTI_CTA UDF, a brute-force selector, retries, a dual frontier, or local-selectivity
 penalty control until SINGLE_CTA evidence passes a predeclared recall/QPS gate.

@@ -33,4 +33,28 @@ CUVS_EXPORT void benchmark_search_favor_with_known_filtering_rate(
   raft::device_matrix_view<float, std::int64_t, raft::row_major> distances,
   cuvs::neighbors::filtering::base_filter const& sample_filter);
 
+/** Benchmark-only UDF sampler; outputs remain private device arrays. */
+template <typename T>
+CUVS_EXPORT void benchmark_estimate_favor_udf_filtering_rates(
+  raft::resources const& res,
+  cagra::index<T, std::uint32_t> const& index,
+  std::uint32_t num_queries,
+  cuvs::neighbors::filtering::base_filter const& sample_filter,
+  float* filtering_rates,
+  std::uint32_t* passing_counts,
+  std::uint32_t sample_offset = 0);
+
+/** Run the private SINGLE_CTA FAVOR UDF path with previously sampled query-local rates. */
+template <typename T>
+CUVS_EXPORT void benchmark_search_favor_udf_with_sampled_rates(
+  raft::resources const& res,
+  cagra::search_params const& params,
+  cagra::index<T, std::uint32_t> const& index,
+  raft::device_matrix_view<const T, std::int64_t, raft::row_major> queries,
+  raft::device_matrix_view<std::int64_t, std::int64_t, raft::row_major> neighbors,
+  raft::device_matrix_view<float, std::int64_t, raft::row_major> distances,
+  cuvs::neighbors::filtering::base_filter const& sample_filter,
+  const float* filtering_rates,
+  bool passing_accumulator);
+
 }  // namespace cuvs::neighbors::cagra::detail

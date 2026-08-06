@@ -177,8 +177,18 @@ void fill_cagra_sample_filter(cagra_sample_filter<SourceIndexT>& out,
   using DecayedFilter = std::decay_t<FilterT>;
   if constexpr (is_bitset_filter<DecayedFilter>::value) {
     out.filter_data = make_cagra_bitset_filter_payload<SourceIndexT>(filter, stream);
+    out.filter_kind = cagra_sample_filter<SourceIndexT>::kind_bitset;
   } else if constexpr (is_udf_filter<DecayedFilter>::value) {
     out.filter_data = filter.filter_data;
+    out.filter_kind = cagra_sample_filter<SourceIndexT>::kind_udf;
+  } else if constexpr (requires { filter.filter; }) {
+    fill_cagra_sample_filter(out, filter.filter, stream);
+    if constexpr (requires { filter.filtering_rates; }) {
+      out.filtering_rates = filter.filtering_rates;
+    }
+    if constexpr (requires { filter.passing_accumulator; }) {
+      out.passing_accumulator = filter.passing_accumulator ? 1u : 0u;
+    }
   }
 }
 

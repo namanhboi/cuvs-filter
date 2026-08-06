@@ -1,0 +1,8 @@
+{
+  "_source_index": [
+    {
+      "source_index_type": "uint32_t",
+      "source_index_abbrev": "u32"
+    }
+  ]
+}

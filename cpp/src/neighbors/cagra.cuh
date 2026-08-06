@@ -9,6 +9,7 @@
 #include "detail/cagra/cagra_build.cuh"
 #include "detail/cagra/cagra_merge.cuh"
 #include "detail/cagra/cagra_search.cuh"
+#include "detail/cagra/filter_rate_estimator.cuh"
 #include "detail/cagra/graph_core.cuh"
 
 #include "detail/ann_utils.cuh"
@@ -462,8 +463,30 @@ void search(raft::resources const& res,
     auto& sample_filter =
       dynamic_cast<const cuvs::neighbors::filtering::udf_filter&>(sample_filter_ref);
     search_params params_copy = params;
-    RAFT_EXPECTS(params.filter_mode != filtering_mode::FAVOR,
-                 "FAVOR filtering currently supports only bitset filters");
+    if (params.filter_mode == filtering_mode::FAVOR) {
+      RAFT_EXPECTS(params.algo == search_algo::AUTO || params.algo == search_algo::SINGLE_CTA,
+                   "FAVOR UDF filtering currently supports only SINGLE_CTA search");
+      RAFT_EXPECTS(!params.persistent, "FAVOR UDF filtering does not support persistent search");
+      RAFT_EXPECTS(params.favor_penalty == favor_penalty_mode::CAGRA_RETENTION_SAFE,
+                   "FAVOR UDF filtering requires CAGRA_RETENTION_SAFE scoring");
+      RAFT_EXPECTS(params.favor_retention_fraction == 0.0f,
+                   "FAVOR UDF filtering currently requires automatic retention");
+
+      // Phase-one FAVOR UDF policy is sampling-only.  In particular, YFCC never uploads or uses
+      // precomputed exact selectivity, and caller-provided scalar hints cannot silently change the
+      // experiment. AUTO is resolved explicitly to the sole supported traversal here.
+      params_copy.algo = search_algo::SINGLE_CTA;
+      auto estimate    = detail::estimate_favor_udf_filtering_rates(
+        res, idx, static_cast<std::uint32_t>(queries.extent(0)), sample_filter);
+      // The search plan still requires a valid scalar; each CTA replaces it with its private
+      // sampled query rate before deriving the penalty coefficient and retention fraction.
+      params_copy.filtering_rate = 0.0f;
+      auto runtime_filter        = detail::CagraSampleFilterWithRuntimeState{
+        sample_filter, estimate.filtering_rates.data(), true};
+      return search_with_filtering<T, IdxT, decltype(runtime_filter), OutputIdxT>(
+        res, params_copy, idx, queries, neighbors, distances, runtime_filter);
+    }
+
     if (params.filtering_rate < 0.0) {
       const float min_filtering_rate = 0.0f;
       const float max_filtering_rate = 0.999f;

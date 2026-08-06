@@ -315,11 +315,12 @@ void bench_search(::benchmark::State& state,
         [[maybe_unused]] auto ntx_lap = nvtx.lap();
         [[maybe_unused]] auto gpu_lap = gpu_timer.lap(!no_lap_sync);
         try {
-          a->search(query_set + batch_offset * dataset->dim(),
-                    n_queries,
-                    k,
-                    neighbors_ptr + out_offset * k,
-                    distances_ptr + out_offset * k);
+          a->search_with_query_offset(query_set + batch_offset * dataset->dim(),
+                                      n_queries,
+                                      k,
+                                      neighbors_ptr + out_offset * k,
+                                      distances_ptr + out_offset * k,
+                                      static_cast<std::size_t>(batch_offset));
         } catch (const std::exception& e) {
           state.SkipWithError("Benchmark loop: " + std::string(e.what()));
           break;
@@ -361,6 +362,11 @@ void bench_search(::benchmark::State& state,
     std::size_t total_count = 0;
     std::size_t underfilled_query_count = 0;
     std::size_t missing_result_count    = 0;
+    std::size_t filter_violation_count  = 0;
+    std::size_t invalid_sentinel_errors = 0;
+    auto* validation_algo               = dynamic_cast<algo<T>*>(current_algo.get());
+    const bool validate_filter =
+      validation_algo != nullptr && validation_algo->supports_filter_validation();
 
     // We go through the groundtruth with same stride as the benchmark loop.
     size_t out_offset   = 0;
@@ -380,6 +386,10 @@ void bench_search(::benchmark::State& state,
                                                              1);
       std::vector<std::size_t> local_missing_result_count(num_recall_calculation_worker_threads +
                                                           1);
+      std::vector<std::size_t> local_filter_violation_count(num_recall_calculation_worker_threads +
+                                                            1);
+      std::vector<std::size_t> local_invalid_sentinel_errors(num_recall_calculation_worker_threads +
+                                                             1);
       int chunk_size =
         n_queries / (num_recall_calculation_worker_threads + 1);  // +1 for the main thread
       int remainder           = n_queries % (num_recall_calculation_worker_threads + 1);
@@ -394,8 +404,17 @@ void bench_search(::benchmark::State& state,
             local_total_count[tid] += total;
             std::size_t valid_results = 0;
             for (std::uint32_t rank = 0; rank < k; ++rank) {
-              valid_results +=
+              const bool valid =
+                candidates[rank] >= 0 &&
                 static_cast<std::size_t>(candidates[rank]) < dataset->base_set_size();
+              valid_results += valid;
+              if (valid && validate_filter &&
+                  !validation_algo->is_filter_valid(i_orig_idx, candidates[rank])) {
+                ++local_filter_violation_count[tid];
+              }
+              if (!valid && candidates[rank] != std::numeric_limits<index_type>::max()) {
+                ++local_invalid_sentinel_errors[tid];
+              }
             }
             if (valid_results < k) {
               ++local_underfilled_query_count[tid];
@@ -424,6 +443,10 @@ void bench_search(::benchmark::State& state,
         local_underfilled_query_count.begin(), local_underfilled_query_count.end(), 0);
       missing_result_count +=
         std::accumulate(local_missing_result_count.begin(), local_missing_result_count.end(), 0);
+      filter_violation_count += std::accumulate(
+        local_filter_violation_count.begin(), local_filter_violation_count.end(), 0);
+      invalid_sentinel_errors += std::accumulate(
+        local_invalid_sentinel_errors.begin(), local_invalid_sentinel_errors.end(), 0);
 
       out_offset += n_queries;
       batch_offset = (batch_offset + queries_stride) % query_set_size;
@@ -444,6 +467,21 @@ void bench_search(::benchmark::State& state,
       {"MissingResultSlots",
        {static_cast<double>(missing_result_count) / static_cast<double>(rows * k),
         benchmark::Counter::kAvgThreads}});
+    if (validate_filter) {
+      state.counters.insert(
+        {"FilterViolations",
+         {static_cast<double>(filter_violation_count) / static_cast<double>(rows * k),
+          benchmark::Counter::kAvgThreads}});
+      state.counters.insert(
+        {"InvalidSentinelErrors",
+         {static_cast<double>(invalid_sentinel_errors) / static_cast<double>(rows * k),
+          benchmark::Counter::kAvgThreads}});
+      if (filter_violation_count != 0 || invalid_sentinel_errors != 0) {
+        state.SkipWithError("Filtered search produced " + std::to_string(filter_violation_count) +
+                            " predicate violations and " + std::to_string(invalid_sentinel_errors) +
+                            " invalid sentinels");
+      }
+    }
   }
 }
 

@@ -28,6 +28,13 @@ class configuration {
   };
 
   struct dataset_conf {
+    struct udf_filter_conf {
+      std::string adapter;
+      std::string base_metadata_file;
+      std::string query_metadata_file;
+      nlohmann::json options = nlohmann::json::object();
+    };
+
     std::string name;
     std::string base_file;
     // use only a subset of base_file,
@@ -45,6 +52,7 @@ class configuration {
 
     std::optional<double> filtering_rate{std::nullopt};
     std::optional<std::string> filter_bitset_file{std::nullopt};
+    std::optional<udf_filter_conf> udf_filter{std::nullopt};
   };
 
   [[nodiscard]] inline auto get_dataset_conf() const -> const dataset_conf&
@@ -92,6 +100,22 @@ class configuration {
     }
     if (conf.contains("filter_bitset_file")) {
       dataset_conf_.filter_bitset_file = combine_path(data_prefix, conf.at("filter_bitset_file"));
+    }
+    if (conf.contains("filter")) {
+      const auto& filter = conf.at("filter");
+      if (filter.at("kind") != "udf") {
+        log_error("Unsupported filtered-dataset kind '%s'",
+                  filter.at("kind").get<std::string>().c_str());
+      }
+      dataset_conf::udf_filter_conf udf;
+      udf.adapter             = filter.at("adapter");
+      udf.base_metadata_file  = combine_path(data_prefix, filter.at("base_metadata_file"));
+      udf.query_metadata_file = combine_path(data_prefix, filter.at("query_metadata_file"));
+      if (filter.contains("options")) { udf.options = filter.at("options"); }
+      dataset_conf_.udf_filter = std::move(udf);
+    }
+    if (dataset_conf_.filter_bitset_file.has_value() && dataset_conf_.udf_filter.has_value()) {
+      log_error("A dataset cannot configure both filter_bitset_file and a UDF filter");
     }
 
     if (conf.contains("groundtruth_neighbors_file")) {

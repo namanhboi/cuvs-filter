@@ -899,10 +899,25 @@ void select_and_run(
                    num_queries,
                    smem_size);
 
+    if (diagnostics) {
+      int active_blocks_per_sm = 0;
+      int max_threads_per_sm   = 0;
+      int device_id            = 0;
+      RAFT_CUDA_TRY(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+        &active_blocks_per_sm, launcher->get_kernel(), block_size, smem_size));
+      RAFT_CUDA_TRY(cudaGetDevice(&device_id));
+      RAFT_CUDA_TRY(cudaDeviceGetAttribute(
+        &max_threads_per_sm, cudaDevAttrMaxThreadsPerMultiProcessor, device_id));
+      favor_search_diagnostics::set_launch_metrics(
+        {block_size,
+         smem_size,
+         static_cast<std::uint32_t>(active_blocks_per_sm),
+         static_cast<std::uint32_t>(max_threads_per_sm)});
+    }
+
     if (favor) {
-      const auto favor_local_gap_multiplier =
-        favor_penalty_coefficient(ps.filtering_rate, ps.itopk_size) * ps.favor_penalty_lambda;
       constexpr std::uint32_t favor_retire_rejected_parent_mask = std::uint32_t{1} << 31;
+      constexpr std::uint32_t favor_automatic_retention_mask    = std::uint32_t{1} << 30;
       auto favor_penalty_mode_value = static_cast<std::uint32_t>(ps.favor_penalty);
       const auto selectivity        = 1.0f - ps.filtering_rate;
       const bool retire_rejected_parents =
@@ -917,6 +932,9 @@ void select_and_run(
           selectivity,
           ps.itopk_size,
           topk);
+      }
+      if (ps.favor_retention_fraction == 0.0f && filter_payload.filtering_rates != nullptr) {
+        favor_penalty_mode_value |= favor_automatic_retention_mask;
       }
       const auto favor_retention_fraction =
         ps.favor_retention_fraction == 0.0f
@@ -958,7 +976,7 @@ void select_and_run(
             ps.filtering_rate,
             ps.favor_delta_d,
             favor_penalty_mode_value,
-            favor_local_gap_multiplier,
+            ps.favor_penalty_lambda,
             favor_retention_fraction,
             favor_adaptive_start_iteration_u32,
             favor_adaptive_prefix_size_u32);

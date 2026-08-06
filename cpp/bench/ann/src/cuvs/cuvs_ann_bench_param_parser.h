@@ -521,6 +521,15 @@ void parse_search_param(const nlohmann::json& conf,
     }
     param.favor_seed_masks = conf.at("favor_seed_masks").get<std::vector<std::uint64_t>>();
   }
+  if (conf.contains("favor_udf_include_sampling")) {
+    param.favor_udf_include_sampling = conf.at("favor_udf_include_sampling");
+  }
+  if (conf.contains("favor_udf_passing_accumulator")) {
+    param.favor_udf_passing_accumulator = conf.at("favor_udf_passing_accumulator");
+  }
+  if (conf.contains("favor_udf_sample_offset")) {
+    param.favor_udf_sample_offset = conf.at("favor_udf_sample_offset");
+  }
   if (conf.contains("favor_delta_d_file")) {
     param.favor_delta_d_file = conf.at("favor_delta_d_file").get<std::string>();
   }

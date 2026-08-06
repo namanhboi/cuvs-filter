@@ -1,0 +1,75 @@
+/*
+ * SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include <neighbors/detail/cagra/jit_lto_kernels/extern_device_functions.cuh>
+#include <neighbors/detail/cagra/jit_lto_kernels/kernel_def.hpp>
+
+namespace {
+
+using source_index_t = @source_index_type@;
+using cagra_sample_filter_t = cuvs::neighbors::cagra::detail::cagra_sample_filter<source_index_t>;
+
+}  // namespace
+
+namespace cuvs::neighbors::cagra::detail::multi_kernel_search {
+
+extern "C" __global__ void estimate_filter_rate(const source_index_t* const source_indices_ptr,
+                                                const std::uint32_t dataset_size,
+                                                const std::uint32_t sample_step,
+                                                const std::uint32_t sample_count,
+                                                const std::uint32_t sample_offset,
+                                                const std::uint32_t num_queries,
+                                                cagra_sample_filter_t filter_payload,
+                                                float* const filtering_rates,
+                                                std::uint32_t* const passing_counts)
+{
+  const auto query_id = static_cast<std::uint32_t>(blockIdx.x);
+  if (query_id >= num_queries) { return; }
+
+  std::uint32_t local_count = 0;
+  for (std::uint32_t sample = threadIdx.x; sample < sample_count; sample += blockDim.x) {
+    const auto row = static_cast<std::uint32_t>((static_cast<std::uint64_t>(sample_offset) +
+                                                 static_cast<std::uint64_t>(sample) * sample_step) %
+                                                dataset_size);
+    const auto source_id =
+      source_indices_ptr == nullptr ? static_cast<source_index_t>(row) : source_indices_ptr[row];
+    local_count +=
+      static_cast<std::uint32_t>(cuvs::neighbors::detail::sample_filter<source_index_t>(
+        query_id + filter_payload.query_id_offset, source_id, filter_payload.sample_filter_data()));
+  }
+
+  for (std::uint32_t delta = 16; delta > 0; delta >>= 1) {
+    local_count += __shfl_down_sync(0xffffffffu, local_count, delta);
+  }
+
+  __shared__ std::uint32_t warp_counts[32];
+  const auto lane = threadIdx.x & 31u;
+  const auto warp = threadIdx.x >> 5u;
+  if (lane == 0) { warp_counts[warp] = local_count; }
+  __syncthreads();
+
+  if (warp == 0) {
+    const auto warp_count = (blockDim.x + 31u) >> 5u;
+    local_count           = lane < warp_count ? warp_counts[lane] : 0u;
+    for (std::uint32_t delta = 16; delta > 0; delta >>= 1) {
+      local_count += __shfl_down_sync(0xffffffffu, local_count, delta);
+    }
+    if (lane == 0) {
+      const auto passing = local_count;
+      // A zero-hit sample is underresolved, not proof that the predicate is empty.  The
+      // one-observation floor is deliberately derived only from the sample itself.
+      const auto effective_passing = passing == 0 ? 1u : passing;
+      const auto selectivity =
+        static_cast<float>(effective_passing) / static_cast<float>(sample_count);
+      filtering_rates[query_id] = 1.0f - selectivity;
+      if (passing_counts != nullptr) { passing_counts[query_id] = passing; }
+    }
+  }
+}
+
+static_assert(std::is_same_v<decltype(estimate_filter_rate),
+                             estimate_filter_rate_kernel_func_t<source_index_t>>);
+
+}  // namespace cuvs::neighbors::cagra::detail::multi_kernel_search

@@ -12,6 +12,7 @@
 #include "cuvs_ann_bench_utils.h"
 #include "favor_retry_diagnostic_session.h"
 #include "favor_search_diagnostic_session.h"
+#include "filtered_dataset_adapter.h"
 #include <rmm/mr/pinned_host_memory_resource.hpp>
 
 #include <cuvs/distance/distance.hpp>
@@ -126,6 +127,11 @@ class cuvs_cagra : public algo<T>, public algo_gpu {
     detail::favor_retry_diagnostic_config favor_retry_diagnostics;
     /** Benchmark-only independent B0 FAVOR starts. Empty preserves normal CAGRA behavior. */
     std::vector<std::uint64_t> favor_seed_masks;
+    /** Include query-local UDF sampling in every timed search (end-to-end) or reuse setup rates. */
+    bool favor_udf_include_sampling = true;
+    /** Benchmark-only output-policy control; false reproduces the pre-accumulator result queue. */
+    bool favor_udf_passing_accumulator = true;
+    std::uint32_t favor_udf_sample_offset{};
     float refine_ratio;
     AllocatorType graph_mem   = AllocatorType::kDevice;
     AllocatorType dataset_mem = AllocatorType::kDevice;
@@ -175,6 +181,12 @@ class cuvs_cagra : public algo<T>, public algo_gpu {
               int k,
               algo_base::index_type* neighbors,
               float* distances) const override;
+  void search_with_query_offset(const T* queries,
+                                int batch_size,
+                                int k,
+                                algo_base::index_type* neighbors,
+                                float* distances,
+                                std::size_t query_offset) const override;
   void search_base(const T* queries,
                    int batch_size,
                    int k,
@@ -202,6 +214,19 @@ class cuvs_cagra : public algo<T>, public algo_gpu {
     property.dataset_memory_type = MemoryType::kHostMmap;
     property.query_memory_type   = MemoryType::kDevice;
     return property;
+  }
+  [[nodiscard]] auto supports_filter_validation() const -> bool override
+  {
+    return udf_filter_adapter_ != nullptr;
+  }
+  [[nodiscard]] auto is_filter_valid(std::size_t query_id, algo_base::index_type candidate_id) const
+    -> bool override
+  {
+    return udf_filter_adapter_ != nullptr && candidate_id >= 0 &&
+           static_cast<std::uint64_t>(candidate_id) < udf_filter_adapter_->base_rows() &&
+           query_id < udf_filter_adapter_->query_rows() &&
+           udf_filter_adapter_->passes(static_cast<std::uint32_t>(query_id),
+                                       static_cast<std::uint32_t>(candidate_id));
   }
   void save(const std::string& file) const override;
   void load(const std::string&) override;
@@ -235,6 +260,14 @@ class cuvs_cagra : public algo<T>, public algo_gpu {
 
   std::shared_ptr<rmm::device_uvector<uint32_t>> filter_bitset_;
   std::shared_ptr<cuvs::neighbors::filtering::base_filter> filter_;
+  std::shared_ptr<detail::udf_filter_adapter> udf_filter_adapter_;
+  std::shared_ptr<detail::udf_filter_runtime> udf_filter_runtime_;
+  std::shared_ptr<rmm::device_uvector<float>> favor_udf_sampled_rates_;
+  std::shared_ptr<rmm::device_uvector<std::uint32_t>> favor_udf_sampled_passing_counts_;
+  bool favor_udf_include_sampling_{true};
+  bool favor_udf_passing_accumulator_{true};
+  std::uint32_t favor_udf_sample_offset_{};
+  mutable std::uint32_t udf_query_offset_{};
   bool filter_empty_{false};
   std::shared_ptr<detail::favor_diagnostic_session> favor_diagnostic_session_;
   std::shared_ptr<detail::favor_retry_diagnostic_session> favor_retry_diagnostic_session_;
@@ -327,7 +360,23 @@ template <typename T, typename IdxT>
 void cuvs_cagra<T, IdxT>::set_search_param(const search_param_base& param,
                                            const void* filter_bitset)
 {
-  if (index_ && filter_bitset != nullptr) {
+  const auto& dataset_conf = configuration::singleton().get_dataset_conf();
+  if (dataset_conf.udf_filter.has_value()) {
+    RAFT_EXPECTS(filter_bitset == nullptr,
+                 "A query-dependent UDF filter cannot be combined with a bitset filter");
+    if (!udf_filter_adapter_) {
+      udf_filter_adapter_ = detail::make_udf_filter_adapter(handle_, *dataset_conf.udf_filter);
+    }
+    RAFT_EXPECTS(index_ != nullptr, "The CAGRA index must be loaded before UDF metadata");
+    RAFT_EXPECTS(udf_filter_adapter_->base_rows() == index_->size(),
+                 "Filtered-dataset base metadata row count does not match the CAGRA index");
+    udf_filter_runtime_ = udf_filter_adapter_->make_runtime(handle_);
+    filter_ =
+      std::make_shared<cuvs::neighbors::filtering::udf_filter>(udf_filter_runtime_->filter());
+    filter_bitset_.reset();
+  } else if (index_ && filter_bitset != nullptr) {
+    udf_filter_runtime_.reset();
+    udf_filter_adapter_.reset();
     auto n_words   = raft::ceildiv<size_t>(index_->size(), sizeof(uint32_t) * 8);
     auto stream    = raft::resource::get_cuda_stream(handle_);
     filter_bitset_ = std::make_shared<rmm::device_uvector<uint32_t>>(n_words, stream);
@@ -335,10 +384,17 @@ void cuvs_cagra<T, IdxT>::set_search_param(const search_param_base& param,
       filter_bitset_->data(), reinterpret_cast<uint32_t const*>(filter_bitset), n_words, stream);
     filter_ = make_cuvs_filter(filter_bitset_->data(), index_->size());
   } else {
+    udf_filter_runtime_.reset();
+    udf_filter_adapter_.reset();
     filter_bitset_.reset();
     filter_ = make_cuvs_filter(nullptr, index_ ? index_->size() : 0);
   }
   auto sp = dynamic_cast<const search_param&>(param);
+  RAFT_EXPECTS(!udf_filter_runtime_ || !sp.dynamic_batching,
+               "Query-dependent UDF filters do not support dynamic batching");
+  RAFT_EXPECTS(!udf_filter_runtime_ || index_params_.num_dataset_splits <= 1 ||
+                 index_params_.merge_type == CagraMergeType::kPhysical,
+               "Query-dependent UDF filters require a physical CAGRA index");
   bool needs_dynamic_batcher_update =
     (dynamic_batching_max_batch_size_ != sp.dynamic_batching_max_batch_size) ||
     (dynamic_batching_n_queues_ != sp.dynamic_batching_n_queues) ||
@@ -349,7 +405,34 @@ void cuvs_cagra<T, IdxT>::set_search_param(const search_param_base& param,
   search_params_                          = sp.p;
   refine_ratio_                           = sp.refine_ratio;
   favor_seed_masks_                       = sp.favor_seed_masks;
+  favor_udf_include_sampling_             = sp.favor_udf_include_sampling;
+  favor_udf_passing_accumulator_          = sp.favor_udf_passing_accumulator;
+  favor_udf_sample_offset_                = sp.favor_udf_sample_offset;
   filter_empty_                           = false;
+  favor_udf_sampled_rates_.reset();
+  favor_udf_sampled_passing_counts_.reset();
+  if (udf_filter_runtime_ &&
+      search_params_.filter_mode == cuvs::neighbors::cagra::filtering_mode::FAVOR) {
+    RAFT_EXPECTS(search_params_.filter_mode == cuvs::neighbors::cagra::filtering_mode::FAVOR,
+                 "FAVOR UDF benchmark state requires FAVOR filtering");
+    auto stream              = raft::resource::get_cuda_stream(handle_);
+    const auto query_rows    = udf_filter_adapter_->query_rows();
+    favor_udf_sampled_rates_ = std::make_shared<rmm::device_uvector<float>>(query_rows, stream);
+    favor_udf_sampled_passing_counts_ =
+      std::make_shared<rmm::device_uvector<std::uint32_t>>(query_rows, stream);
+    if (!favor_udf_include_sampling_) {
+      udf_filter_runtime_->set_query_offset(0);
+      cuvs::neighbors::cagra::detail::benchmark_estimate_favor_udf_filtering_rates<T>(
+        handle_,
+        *index_,
+        query_rows,
+        *filter_,
+        favor_udf_sampled_rates_->data(),
+        favor_udf_sampled_passing_counts_->data(),
+        favor_udf_sample_offset_);
+      raft::resource::sync_stream(handle_);
+    }
+  }
   if (filter_bitset_ != nullptr && search_params_.filtering_rate < 0.0f) {
     const auto num_set_bits =
       cuvs::neighbors::cagra::detail::benchmark_count_favor_bitset_matches<T>(
@@ -625,7 +708,25 @@ void cuvs_cagra<T, IdxT>::load(const std::string& file)
 template <typename T, typename IdxT>
 std::unique_ptr<algo<T>> cuvs_cagra<T, IdxT>::copy()
 {
-  return std::make_unique<cuvs_cagra<T, IdxT>>(std::cref(*this));  // use copy constructor
+  auto result = std::make_unique<cuvs_cagra<T, IdxT>>(std::cref(*this));
+  if (udf_filter_adapter_) {
+    // Device metadata is immutable and shared.  The tiny device context is per copy because each
+    // benchmark thread advances through the query set independently.
+    result->udf_filter_runtime_ = udf_filter_adapter_->make_runtime(result->handle_);
+    result->filter_             = std::make_shared<cuvs::neighbors::filtering::udf_filter>(
+      result->udf_filter_runtime_->filter());
+    if (result->favor_udf_include_sampling_ && favor_udf_sampled_rates_) {
+      // Timed sampling writes one rate/count per query.  Give every benchmark copy independent
+      // output buffers so concurrent workers cannot overwrite each other's query slices.
+      auto stream           = raft::resource::get_cuda_stream(result->handle_);
+      const auto query_rows = udf_filter_adapter_->query_rows();
+      result->favor_udf_sampled_rates_ =
+        std::make_shared<rmm::device_uvector<float>>(query_rows, stream);
+      result->favor_udf_sampled_passing_counts_ =
+        std::make_shared<rmm::device_uvector<std::uint32_t>>(query_rows, stream);
+    }
+  }
+  return result;
 }
 
 template <typename T, typename IdxT>
@@ -643,6 +744,48 @@ void cuvs_cagra<T, IdxT>::search_base(
   if (filter_empty_) {
     detail::fill_empty_filter_results(
       handle_, neighbors, distances, static_cast<std::size_t>(batch_size) * k);
+    return;
+  }
+
+  if (udf_filter_runtime_ && favor_udf_sampled_rates_) {
+    auto run_udf_favor_search = [&]() {
+      if (favor_udf_include_sampling_) {
+        cuvs::neighbors::cagra::detail::benchmark_estimate_favor_udf_filtering_rates<T>(
+          handle_,
+          *index_,
+          static_cast<std::uint32_t>(batch_size),
+          *filter_,
+          favor_udf_sampled_rates_->data() + udf_query_offset_,
+          favor_udf_sampled_passing_counts_->data() + udf_query_offset_,
+          favor_udf_sample_offset_);
+      }
+      cuvs::neighbors::cagra::detail::benchmark_search_favor_udf_with_sampled_rates<T>(
+        handle_,
+        search_params_,
+        *index_,
+        queries_view,
+        neighbors_view,
+        distances_view,
+        *filter_,
+        favor_udf_sampled_rates_->data() + udf_query_offset_,
+        favor_udf_passing_accumulator_);
+    };
+    if (favor_diagnostic_session_) {
+      favor_diagnostic_session_->capture(handle_,
+                                         static_cast<std::uint32_t>(batch_size),
+                                         static_cast<std::uint32_t>(k),
+                                         static_cast<std::uint32_t>(index_->graph().extent(1)),
+                                         static_cast<std::uint32_t>(search_params_.search_width),
+                                         static_cast<std::int64_t>(index_->size()),
+                                         static_cast<std::uint32_t>(search_params_.itopk_size),
+                                         search_params_.max_iterations,
+                                         -1.0f,
+                                         true,
+                                         neighbors,
+                                         run_udf_favor_search);
+    } else {
+      run_udf_favor_search();
+    }
     return;
   }
 
@@ -871,5 +1014,25 @@ void cuvs_cagra<T, IdxT>::search(
     refine_helper(
       res, *input_dataset_v_, queries_v, candidate_ixs, k, neighbors, distances, index_->metric());
   }
+}
+
+template <typename T, typename IdxT>
+void cuvs_cagra<T, IdxT>::search_with_query_offset(const T* queries,
+                                                   int batch_size,
+                                                   int k,
+                                                   algo_base::index_type* neighbors,
+                                                   float* distances,
+                                                   std::size_t query_offset) const
+{
+  if (udf_filter_runtime_) {
+    RAFT_EXPECTS(query_offset <= std::numeric_limits<std::uint32_t>::max(),
+                 "Filtered-dataset query offset exceeds uint32");
+    RAFT_EXPECTS(
+      query_offset + static_cast<std::size_t>(batch_size) <= udf_filter_adapter_->query_rows(),
+      "Filtered-dataset query metadata does not cover this benchmark batch");
+    udf_filter_runtime_->set_query_offset(static_cast<std::uint32_t>(query_offset));
+    udf_query_offset_ = static_cast<std::uint32_t>(query_offset);
+  }
+  search(queries, batch_size, k, neighbors, distances);
 }
 }  // namespace cuvs::bench
