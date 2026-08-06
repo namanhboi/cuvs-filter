@@ -175,6 +175,27 @@ def summarize_group_diagnostics(result_root: Path) -> list[dict]:
     return output
 
 
+def pareto_frontier(points: list[dict], maximize_y: bool = True) -> list[dict]:
+    if not points:
+        return []
+    filtered = sorted(points, key=lambda p: (float(p["recall"]), float(p["qps"])), reverse=True)
+    frontier: list[dict] = []
+    best_qps = -1.0
+    for row in filtered:
+        x = float(row["recall"])
+        y = float(row["qps"])
+        if maximize_y:
+            if y >= best_qps:
+                frontier.append(row)
+                best_qps = y
+        else:
+            if y <= best_qps or best_qps < 0:
+                frontier.append(row)
+                best_qps = y
+    frontier.sort(key=lambda row: float(row["recall"]))
+    return frontier
+
+
 def plot_results(
     result_root: Path,
     correctness: list[dict],
@@ -189,10 +210,18 @@ def plot_results(
     plot_dir.mkdir(parents=True, exist_ok=True)
 
     fig, ax = plt.subplots(figsize=(7, 4.2))
-    for method in ("default_cagra", "automatic_accumulator"):
+    for method in sorted({r["variant"] for r in correctness if r["max_iterations"] == 0}):
         rows = [r for r in correctness if r["variant"] == method and r["max_iterations"] == 0]
-        ax.scatter([r["qps"] for r in rows], [r["recall"] for r in rows], label=method)
-    ax.set(xlabel="QPS (1,000-query batch)", ylabel="Recall@10", title="YFCC B0 sweep")
+        frontier = pareto_frontier(rows, maximize_y=True)
+        if frontier:
+            ax.plot(
+                [r["recall"] for r in frontier],
+                [r["qps"] for r in frontier],
+                marker="o",
+                label=method,
+            )
+    ax.set(xlabel="Recall@10", ylabel="QPS (1,000-query batch)", title="YFCC B0 Pareto frontier")
+    ax.set_xlim(0.0, 1.0)
     ax.grid(alpha=0.25)
     ax.legend()
     fig.tight_layout()
