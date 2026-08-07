@@ -70,6 +70,108 @@ UDF support adds no public selectivity array or search-parameter field.  An exis
 predicate over approximately 10,000 systematic base rows per query, ignores scalar rate hints,
 and keeps the resulting device rates private to that invocation.
 
+* UDF dataset harnesses
+
+The branch includes two single-CTA UDF harnesses under =benchmarks/favor/=.  Both are intended for
+reproducible comparisons of default CAGRA, FAVOR legacy automatic retention (no accumulator), and
+FAVOR accumulator automatic retention.
+
+- =yfcc_udf/= (YFCC subset)
+- =arxiv_udf/= (ARXIV-FANNS MEDIUM)
+
+Current implementation support:
+
+- single-CTA only,
+- nonpersistent query-dependent path,
+- retention-safe automatic scoring,
+- optional passing-only accumulator toggle,
+- one-bitset and UDF dataset descriptor modes through cuVS benchmark JSON.
+
+The benchmark adapter in-tree is:
+
+- =spmat_contains_all= (BigANN sparse-CSR-like metadata; query terms must be a subset of candidate
+  terms). Implemented in =cpp/bench/ann/src/cuvs/filtered_dataset_adapter.h=.
+
+** YFCC single-CTA UDF
+
+Generate and link YFCC workloads without copying raw binaries:
+
+#+begin_src sh
+benchmarks/favor/yfcc_udf/prepare_workloads.py \
+  --source /home/ubuntu/big-ann-benchmarks/data/yfcc100M \
+  --index /home/ubuntu/FAVOR/.artifacts/yfcc/yfcc10m.cagra_g32_ig64.index \
+  --delta-d /home/ubuntu/FAVOR/.artifacts/yfcc/yfcc10m.cagra_g32_ig64.index.delta_d \
+  --selection-json /home/ubuntu/FAVOR/.artifacts/yfcc/raw/automatic_retention_accumulator_L512_W2_accumulator.json \
+  --output datasets/yfcc-10M
+#+end_src
+
+Then run the full suite and generate the report:
+
+#+begin_src sh
+benchmarks/favor/yfcc_udf/run_experiment.sh all
+python benchmarks/favor/yfcc_udf/analyze.py \
+  --result-root benchmarks/favor/yfcc_udf/results \
+  --data-root datasets \
+  --selection-json /home/ubuntu/FAVOR/.artifacts/yfcc/raw/automatic_retention_accumulator_L512_W2_accumulator.json \
+  --report YFCC_SINGLE_CTA_UDF_REPORT.org
+#+end_src
+
+This produces:
+
+- =results/all_results_summary.csv=
+- =results/correctness_summary.csv=
+- =results/throughput_summary.csv=
+- =results/b0_summary.csv=
+- =results/plots/qps_recall_sweep.png=,
+- =results/plots/qps_recall_b0.png=,
+  and predicate-specific plots in =results/plots/=.  See
+  =YFCC_SINGLE_CTA_UDF_REPORT.org=.
+
+** ARXIV-For-FANNs MEDIUM single-CTA UDF
+
+Prepare converted dataset files from raw SPCL/arxiv-for-fanns-medium inputs:
+
+#+begin_src sh
+python benchmarks/favor/arxiv_udf/prepare_workloads.py \
+  --source /path/to/arxiv-for-fanns-medium-raw \
+  --output /home/ubuntu/cuvs-filter/datasets/arxiv-for-fanns-medium \
+  --query-count 10000
+#+end_src
+
+The script expects raw files named:
+
+- =database_vectors.fvecs=
+- =query_vectors.fvecs=
+- =database_attributes.jsonl=
+- =em_query_attributes.jsonl=
+- =emis_query_attributes.jsonl=
+- =r_query_attributes.jsonl=
+- =ground_truth_em.ivecs=,
+- =ground_truth_r.ivecs=,
+- =ground_truth_emis.ivecs=
+
+Then run:
+
+#+begin_src sh
+python benchmarks/favor/arxiv_udf/generate_configs.py \
+  --output benchmarks/favor/arxiv_udf/results/configs \
+  --result-root benchmarks/favor/arxiv_udf/results \
+  --data-root /home/ubuntu/cuvs-filter/datasets
+
+benchmarks/favor/arxiv_udf/run_experiment.sh all
+python benchmarks/favor/arxiv_udf/analyze.py \
+  --result-root benchmarks/favor/arxiv_udf/results \
+  --data-root datasets \
+  --report arxiv_udf_single_cta_udf_report.org
+#+end_src
+
+Prepared predicates under =datasets/arxiv-for-fanns-medium/= are =em=, =emis=, and =r/.  The
+=em= and =emis= branches use =query_metadata.spmat= and currently run through
+=spmat_contains_all=.
+
+For =r=, the conversion emits =base_metadata.rmeta= and =query_metadata.rmeta= and currently expects
+an =arxiv_range= adapter registration; treat that as adapter-coupled with your benchmark binary.
+
 ** Terminology and rate convention
 
 Let:
@@ -484,6 +586,8 @@ Use these documents in this order:
   comparing default and FAVOR component cost.
 - [[file:../../YFCC_SINGLE_CTA_UDF_REPORT.org][YFCC_SINGLE_CTA_UDF_REPORT.org]] — GPU YFCC UDF recall, work, sampling, throughput, and
   occupancy evidence.
+- [[file:arxiv_udf/results/results/arxiv_udf_single_cta_udf_report.org][ARXIV_SINGLE_CTA_UDF_REPORT.org]] — ARXIV-FANNS MEDIUM benchmark evidence
+  from the same single-CTA FAVOR/CAGRA sweep.
 
 Primary production-facing code:
 
