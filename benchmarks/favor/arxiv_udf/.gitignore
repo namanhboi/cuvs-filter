@@ -1,0 +1,19 @@
+# Keep only benchmark harness and curated results under arxiv_udf under version control.
+*
+!.gitignore
+!analyze.py
+!arxiv_build.json
+!generate_configs.py
+!prepare_workloads.py
+!run_experiment.sh
+!results/
+!results/*.csv
+!results/*.org
+!results/configs/
+!results/configs/*.json
+!results/configs_b0/
+!results/configs_b0/*.json
+!results/plots/
+!results/plots/*.png
+!results/results/
+!results/results/*.org

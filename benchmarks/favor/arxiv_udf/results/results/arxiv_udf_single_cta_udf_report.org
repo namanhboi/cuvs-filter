@@ -1,0 +1,56 @@
+#+title: ARXIV-For-FANNs MEDIUM Single-CTA UDF Report
+
+* Configurations
+
+Benchmarks are run with three UDF predicates: =em=, =emis=, =r=.
+
+* Data status
+
+Correctness: complete for all 3 predicates in `raw/*_correctness.json`.
+
+Throughput full sweep: available (full sweep completed).
+
+B0 throughput: available from `raw_b0/*_b0_throughput.json`.
+
+* Sweep summary
+
+The full matrix varies:
+- =itopk in {64,128,256,512}=
+- =search_width in {1,2,4}=
+- =max_iterations in {0,522,1044,2088,4176,7569}=
+
+For each (predicate, workload), =default_cagra= and both FAVOR variants were benchmarked with
+end-to-end timing (including per-query selectivity sampling when FILTER_MODE=favor).
+
+| Predicate | Variant | Best recall row (itopk,width,max_iterations,recall,qps) |
+|-
+| em | default_cagra | 512 | 1 | 1044 | 0.9964 | 1671.2 |
+| em | automatic_legacy | 512 | 1 | 1044 | 0.9957 | 3534.2 |
+| em | automatic_accumulator | 512 | 1 | 1044 | 0.9987 | 3532.2 |
+| emis | default_cagra | 512 | 2 | 522 | 0.7502 | 1935.3 |
+| emis | automatic_legacy | 512 | 2 | 522 | 0.6164 | 3408.4 |
+| emis | automatic_accumulator | 64 | 1 | 1044 | 0.8781 | 1954.0 |
+| r | default_cagra | 512 | 2 | 522 | 0.9960 | 1882.1 |
+| r | automatic_legacy | 512 | 1 | 1044 | 0.9887 | 3606.6 |
+| r | automatic_accumulator | 512 | 1 | 1044 | 0.9976 | 3605.8 |
+
+* B0 frontier (recall and QPS)
+
+| Predicate | Variant | itopk | width | max_iter | Recall@10 | QPS |
+|-
+| No B0 throughput rows found. |
+
+* Outputs
+
+- results/correctness_summary.csv
+- results/throughput_summary.csv
+- results/b0_summary.csv
+- results/plots/qps_recall_sweep.png
+- results/plots/qps_recall_b0.png
+- results/plots/qps_recall_sweep_em.png
+- results/plots/qps_recall_sweep_emis.png
+- results/plots/qps_recall_sweep_r.png
+- results/plots/qps_recall_b0_em.png
+- results/plots/qps_recall_b0_emis.png
+- results/plots/qps_recall_b0_r.png
+
