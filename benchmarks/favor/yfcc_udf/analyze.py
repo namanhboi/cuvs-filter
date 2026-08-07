@@ -34,7 +34,11 @@ def benchmark_rows(result_root: Path, name: str) -> list[dict]:
 
 def variant(search: dict) -> str:
     if search.get("filter_mode", "default") == "default":
-        return "default_cagra"
+        return (
+            "default_accumulator"
+            if search.get("favor_udf_passing_accumulator", False)
+            else "default_cagra"
+        )
     suffix = "accumulator" if search.get("favor_udf_passing_accumulator", True) else "legacy"
     if search.get("favor_udf_sample_offset", 0):
         suffix += "_shifted"
@@ -585,6 +589,10 @@ def main() -> None:
         return max(rowset, key=key)
 
     best_default = _best(correctness_by_variant.get("default_cagra", []), key=lambda r: r["recall"])
+    best_default_accumulator = _best(
+        correctness_by_variant.get("default_accumulator", []),
+        key=lambda r: r["recall"],
+    )
     best_legacy = _best(
         correctness_by_variant.get("automatic_legacy", []),
         key=lambda r: r["recall"],
@@ -667,7 +675,12 @@ def main() -> None:
         f"{r['underfilled']:.3f} | {r['frontier_exhaustion']:.3f} |"
         for r in diagnostics
     ) or "| unavailable | | | | | | |"
-    best_rows = [best_default, best_legacy, best_accumulator]
+    best_rows = [
+        best_default,
+        best_default_accumulator,
+        best_legacy,
+        best_accumulator,
+    ]
     correctness_text = "\n".join(
         f"| {canonical_variant(r['variant'])} | {r['itopk']} | {r['search_width']} | {r['max_iterations']} | "
         f"{r['recall']:.4f} | {r['qps']:.1f} | {r['underfilled_queries']:.3f} |"
@@ -718,6 +731,7 @@ Search never receives precomputed or exact selectivity; FAVOR samples the predic
 
 - Verdict: ={verdict}=.
 - Best default CAGRA (any max_iterations): recall {best_default['recall']:.4f} at L={best_default['itopk']}, W={best_default['search_width']}, i={best_default['max_iterations']}.
+- Best default CAGRA + passing-accumulator: recall {best_default_accumulator['recall']:.4f} at L={best_default_accumulator['itopk']}, W={best_default_accumulator['search_width']}, i={best_default_accumulator['max_iterations']}.
 - Best automatic legacy: recall {best_legacy['recall']:.4f} at L={best_legacy['itopk']}, W={best_legacy['search_width']}, i={best_legacy['max_iterations']}.
 - Best automatic accumulator: recall {best_accumulator['recall']:.4f} at L={best_accumulator['itopk']}, W={best_accumulator['search_width']}, i={best_accumulator['max_iterations']}.
 - All reported runs have zero filter violations and zero invalid-sentinel errors (the analyzer fails otherwise).

@@ -344,17 +344,17 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
     favor_penalty = reinterpret_cast<DistanceT*>(terminate_flag + 1);
     favor_cutoff  = favor_penalty + 1;
     auto* favor_extra_smem = reinterpret_cast<std::uint8_t*>(favor_cutoff + 1);
-    if (filter_payload.uses_passing_accumulator()) {
-      passing_accumulator_lock = reinterpret_cast<std::uint32_t*>(favor_extra_smem);
-      favor_extra_smem += sizeof(std::uint32_t);
-      passing_accumulator_indices = reinterpret_cast<IndexT*>(favor_extra_smem);
-      passing_accumulator_distances =
-        reinterpret_cast<DistanceT*>(passing_accumulator_indices + top_k);
-      favor_extra_smem = reinterpret_cast<std::uint8_t*>(passing_accumulator_distances + top_k);
-    }
     smem_work_ptr = reinterpret_cast<std::uint32_t*>(favor_extra_smem);
   } else {
     smem_work_ptr = reinterpret_cast<std::uint32_t*>(terminate_flag + 1);
+  }
+  if (filter_payload.uses_passing_accumulator()) {
+    passing_accumulator_lock = smem_work_ptr;
+    passing_accumulator_indices = reinterpret_cast<IndexT*>(passing_accumulator_lock + 1);
+    passing_accumulator_distances =
+      reinterpret_cast<DistanceT*>(passing_accumulator_indices + top_k);
+    smem_work_ptr =
+      reinterpret_cast<std::uint32_t*>(passing_accumulator_distances + top_k);
   }
 
   // A flag for filtering.
@@ -369,13 +369,11 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
       favor_cutoff[0] = raft::upper_bound<DistanceT>();
     }
   }
-  if constexpr (FAVOR) {
-    if (filter_payload.uses_passing_accumulator()) {
-      if (threadIdx.x == 0) { *passing_accumulator_lock = 0; }
-      for (std::uint32_t pos = threadIdx.x; pos < top_k; pos += blockDim.x) {
-        passing_accumulator_indices[pos]   = invalid_index;
-        passing_accumulator_distances[pos] = utils::get_max_value<DistanceT>();
-      }
+  if (filter_payload.uses_passing_accumulator()) {
+    if (threadIdx.x == 0) { *passing_accumulator_lock = 0; }
+    for (std::uint32_t pos = threadIdx.x; pos < top_k; pos += blockDim.x) {
+      passing_accumulator_indices[pos]   = invalid_index;
+      passing_accumulator_distances[pos] = utils::get_max_value<DistanceT>();
     }
   }
   // Init hashmap
@@ -451,21 +449,19 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   __syncthreads();
   _CLK_REC(clk_compute_1st_distance);
 
-  if constexpr (FAVOR) {
-    if (filter_payload.uses_passing_accumulator()) {
-      favor_observe_passing_candidates(passing_accumulator_indices,
-                                       passing_accumulator_distances,
-                                       top_k,
-                                       result_indices_buffer,
-                                       result_distances_buffer,
-                                       result_buffer_size,
-                                       index_msb_1_mask,
-                                       invalid_index,
-                                       source_indices_ptr,
-                                       query_id + query_id_offset,
-                                       filter_payload,
-                                       passing_accumulator_lock);
-    }
+  if (filter_payload.uses_passing_accumulator()) {
+    favor_observe_passing_candidates(passing_accumulator_indices,
+                                     passing_accumulator_distances,
+                                     top_k,
+                                     result_indices_buffer,
+                                     result_distances_buffer,
+                                     result_buffer_size,
+                                     index_msb_1_mask,
+                                     invalid_index,
+                                     source_indices_ptr,
+                                     query_id + query_id_offset,
+                                     filter_payload,
+                                     passing_accumulator_lock);
   }
   __syncthreads();
 
@@ -1060,21 +1056,19 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
     __syncthreads();
     _CLK_REC(clk_compute_distance);
 
-    if constexpr (FAVOR) {
-      if (filter_payload.uses_passing_accumulator()) {
-        favor_observe_passing_candidates(passing_accumulator_indices,
-                                         passing_accumulator_distances,
-                                         top_k,
-                                         result_indices_buffer + internal_topk,
-                                         result_distances_buffer + internal_topk,
-                                         search_width * graph_degree,
-                                         index_msb_1_mask,
-                                         invalid_index,
-                                         source_indices_ptr,
-                                         query_id + query_id_offset,
-                                         filter_payload,
-                                         passing_accumulator_lock);
-      }
+    if (filter_payload.uses_passing_accumulator()) {
+      favor_observe_passing_candidates(passing_accumulator_indices,
+                                       passing_accumulator_distances,
+                                       top_k,
+                                       result_indices_buffer + internal_topk,
+                                       result_distances_buffer + internal_topk,
+                                       search_width * graph_degree,
+                                       index_msb_1_mask,
+                                       invalid_index,
+                                       source_indices_ptr,
+                                       query_id + query_id_offset,
+                                       filter_payload,
+                                       passing_accumulator_lock);
     }
     __syncthreads();
 
@@ -1369,7 +1363,7 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
     unsigned j  = i + (top_k * query_id);
     unsigned ii = i;
     if constexpr (TOPK_BY_BITONIC_SORT) { ii = device::swizzling(i); }
-    const bool use_accumulator = FAVOR && filter_payload.uses_passing_accumulator();
+    const bool use_accumulator = filter_payload.uses_passing_accumulator();
     const auto output_distance =
       use_accumulator ? passing_accumulator_distances[i] : result_distances_buffer[ii];
     if (result_distances_ptr != nullptr) { result_distances_ptr[j] = output_distance; }

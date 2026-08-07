@@ -131,6 +131,7 @@ class cuvs_cagra : public algo<T>, public algo_gpu {
     bool favor_udf_include_sampling = true;
     /** Benchmark-only output-policy control; false reproduces the pre-accumulator result queue. */
     bool favor_udf_passing_accumulator = true;
+    bool favor_udf_passing_accumulator_is_set = false;
     std::uint32_t favor_udf_sample_offset{};
     float refine_ratio;
     AllocatorType graph_mem   = AllocatorType::kDevice;
@@ -405,16 +406,27 @@ void cuvs_cagra<T, IdxT>::set_search_param(const search_param_base& param,
   search_params_                          = sp.p;
   refine_ratio_                           = sp.refine_ratio;
   favor_seed_masks_                       = sp.favor_seed_masks;
-  favor_udf_include_sampling_             = sp.favor_udf_include_sampling;
-  favor_udf_passing_accumulator_          = sp.favor_udf_passing_accumulator;
+  if (search_params_.filter_mode == cuvs::neighbors::cagra::filtering_mode::DEFAULT) {
+    favor_udf_include_sampling_       = false;
+    favor_udf_passing_accumulator_ = sp.favor_udf_passing_accumulator_is_set
+                                       ? sp.favor_udf_passing_accumulator
+                                       : false;
+  } else {
+    favor_udf_include_sampling_             = sp.favor_udf_include_sampling;
+    favor_udf_passing_accumulator_          = sp.favor_udf_passing_accumulator;
+  }
   favor_udf_sample_offset_                = sp.favor_udf_sample_offset;
   filter_empty_                           = false;
   favor_udf_sampled_rates_.reset();
   favor_udf_sampled_passing_counts_.reset();
-  if (udf_filter_runtime_ &&
-      search_params_.filter_mode == cuvs::neighbors::cagra::filtering_mode::FAVOR) {
+  const bool is_favor_filtering_mode =
+    search_params_.filter_mode == cuvs::neighbors::cagra::filtering_mode::FAVOR;
+
+  const bool needs_udf_filter_rates =
+    udf_filter_runtime_ && is_favor_filtering_mode;
+  if (needs_udf_filter_rates) {
     RAFT_EXPECTS(search_params_.filter_mode == cuvs::neighbors::cagra::filtering_mode::FAVOR,
-                 "FAVOR UDF benchmark state requires FAVOR filtering");
+                 "benchmark UDF sampled-rate path supports FAVOR mode");
     auto stream              = raft::resource::get_cuda_stream(handle_);
     const auto query_rows    = udf_filter_adapter_->query_rows();
     favor_udf_sampled_rates_ = std::make_shared<rmm::device_uvector<float>>(query_rows, stream);
@@ -747,18 +759,43 @@ void cuvs_cagra<T, IdxT>::search_base(
     return;
   }
 
-  if (udf_filter_runtime_ && favor_udf_sampled_rates_) {
-    auto run_udf_favor_search = [&]() {
+  const bool run_udf_accumulator_path =
+    udf_filter_runtime_ &&
+    (search_params_.filter_mode == cuvs::neighbors::cagra::filtering_mode::FAVOR ||
+     favor_udf_passing_accumulator_);
+
+  if (run_udf_accumulator_path) {
+    float* sampled_rates =
+      (favor_udf_sampled_rates_ && favor_udf_sampled_rates_->size() > 0)
+        ? favor_udf_sampled_rates_->data() + udf_query_offset_
+        : nullptr;
+    auto run_udf_accumulated_search = [&]() {
       if (favor_udf_include_sampling_) {
         cuvs::neighbors::cagra::detail::benchmark_estimate_favor_udf_filtering_rates<T>(
           handle_,
           *index_,
           static_cast<std::uint32_t>(batch_size),
           *filter_,
-          favor_udf_sampled_rates_->data() + udf_query_offset_,
-          favor_udf_sampled_passing_counts_->data() + udf_query_offset_,
+          sampled_rates,
+          favor_udf_sampled_passing_counts_
+            ? favor_udf_sampled_passing_counts_->data() + udf_query_offset_
+            : nullptr,
           favor_udf_sample_offset_);
       }
+      if (search_params_.filter_mode == cuvs::neighbors::cagra::filtering_mode::FAVOR) {
+        cuvs::neighbors::cagra::detail::benchmark_search_favor_udf_with_sampled_rates<T>(
+          handle_,
+          search_params_,
+          *index_,
+          queries_view,
+          neighbors_view,
+          distances_view,
+          *filter_,
+          sampled_rates,
+          favor_udf_passing_accumulator_);
+        return;
+      }
+
       cuvs::neighbors::cagra::detail::benchmark_search_favor_udf_with_sampled_rates<T>(
         handle_,
         search_params_,
@@ -767,10 +804,13 @@ void cuvs_cagra<T, IdxT>::search_base(
         neighbors_view,
         distances_view,
         *filter_,
-        favor_udf_sampled_rates_->data() + udf_query_offset_,
+        sampled_rates,
         favor_udf_passing_accumulator_);
     };
     if (favor_diagnostic_session_) {
+      RAFT_EXPECTS(search_params_.filter_mode ==
+                     cuvs::neighbors::cagra::filtering_mode::FAVOR,
+                   "Favor-only diagnostics are not valid for default-mode UDF runs");
       favor_diagnostic_session_->capture(handle_,
                                          static_cast<std::uint32_t>(batch_size),
                                          static_cast<std::uint32_t>(k),
@@ -782,9 +822,9 @@ void cuvs_cagra<T, IdxT>::search_base(
                                          -1.0f,
                                          true,
                                          neighbors,
-                                         run_udf_favor_search);
+                                         run_udf_accumulated_search);
     } else {
-      run_udf_favor_search();
+      run_udf_accumulated_search();
     }
     return;
   }

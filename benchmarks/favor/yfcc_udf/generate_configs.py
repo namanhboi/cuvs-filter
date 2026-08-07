@@ -9,7 +9,7 @@ from pathlib import Path
 
 SWEEP_CELLS = [(l, w) for l in (64, 128, 256, 512) for w in (1, 2, 4)]
 DEEP_ITERATIONS = (522, 1044, 2088, 4176, 7569)
-MAX_ITERATIONS = (0, 522, 1044, 2088, 4176, 7569)
+MAX_ITERATIONS = (0,)
 SAMPLING_ESTIMATE_CELLS = (
     (64, 1, 0),
     (64, 2, 0),
@@ -39,14 +39,22 @@ def dataset(workload: str) -> dict:
     }
 
 
-def default_search(itopk: int, width: int, *, max_iterations: int = 0) -> dict:
-    return {
+def default_search(
+    itopk: int,
+    width: int,
+    *,
+    accumulator: bool = False,
+    max_iterations: int = 0,
+) -> dict:
+    out = {
         "algo": "single_cta",
         "filter_mode": "default",
         "itopk": itopk,
         "search_width": width,
         "max_iterations": max_iterations,
+        "favor_udf_passing_accumulator": accumulator,
     }
+    return out
 
 
 def favor_search(
@@ -148,7 +156,8 @@ def main() -> None:
     correctness = []
     for l, w in SWEEP_CELLS:
         for max_iterations in MAX_ITERATIONS:
-            correctness.append(default_search(l, w, max_iterations=max_iterations))
+            correctness.append(default_search(l, w, accumulator=False, max_iterations=max_iterations))
+            correctness.append(default_search(l, w, accumulator=True, max_iterations=max_iterations))
             correctness.append(
                 favor_search(
                     l,
@@ -170,7 +179,8 @@ def main() -> None:
     throughput = []
     for l, w in SWEEP_CELLS:
         for max_iterations in MAX_ITERATIONS:
-            throughput.append(default_search(l, w, max_iterations=max_iterations))
+            throughput.append(default_search(l, w, accumulator=False, max_iterations=max_iterations))
+            throughput.append(default_search(l, w, accumulator=True, max_iterations=max_iterations))
             throughput.append(
                 favor_search(
                     l,

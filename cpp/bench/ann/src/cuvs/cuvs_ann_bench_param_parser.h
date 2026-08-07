@@ -526,6 +526,7 @@ void parse_search_param(const nlohmann::json& conf,
   }
   if (conf.contains("favor_udf_passing_accumulator")) {
     param.favor_udf_passing_accumulator = conf.at("favor_udf_passing_accumulator");
+    param.favor_udf_passing_accumulator_is_set = true;
   }
   if (conf.contains("favor_udf_sample_offset")) {
     param.favor_udf_sample_offset = conf.at("favor_udf_sample_offset");

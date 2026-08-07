@@ -44,7 +44,7 @@ CUVS_EXPORT void benchmark_estimate_favor_udf_filtering_rates(
   std::uint32_t* passing_counts,
   std::uint32_t sample_offset = 0);
 
-/** Run the private SINGLE_CTA FAVOR UDF path with previously sampled query-local rates. */
+/** Run the private SINGLE_CTA UDF path with previously sampled query-local rates. */
 template <typename T>
 CUVS_EXPORT void benchmark_search_favor_udf_with_sampled_rates(
   raft::resources const& res,
