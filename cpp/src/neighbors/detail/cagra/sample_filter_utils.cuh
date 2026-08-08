@@ -15,24 +15,20 @@
 namespace cuvs::neighbors::cagra::detail {
 
 /**
- * Private runtime decoration used by FAVOR UDF search.
+ * Private runtime decoration used by benchmark UDF search.
  *
  * The public filter API intentionally does not expose per-query rates or result-accumulator
- * policy.  The dispatcher estimates the rates, owns their device storage for the duration of the
- * search, and attaches the pointer through this internal wrapper.
+ * policy. FAVOR attaches its sampled query-local rates; default CAGRA always attaches a null rate
+ * pointer and can independently select the passive passing-result accumulator.
  */
-template <class CagraSampleFilterT>
+template <class CagraSampleFilterT, bool PassingAccumulator>
 struct CagraSampleFilterWithRuntimeState {
   CagraSampleFilterT filter;
   const float* filtering_rates{};
-  bool passing_accumulator{};
+  static constexpr bool passing_accumulator = PassingAccumulator;
 
-  CagraSampleFilterWithRuntimeState(CagraSampleFilterT filter,
-                                    const float* filtering_rates,
-                                    bool passing_accumulator)
-    : filter(std::move(filter)),
-      filtering_rates(filtering_rates),
-      passing_accumulator(passing_accumulator)
+  CagraSampleFilterWithRuntimeState(CagraSampleFilterT filter, const float* filtering_rates)
+    : filter(std::move(filter)), filtering_rates(filtering_rates)
   {
   }
 
@@ -86,23 +82,13 @@ set_offset<cuvs::neighbors::filtering::none_sample_filter>(
 template <typename T>
 struct cagra_filter_uses_passing_accumulator : std::false_type {};
 
-template <typename InnerFilterT>
-struct cagra_filter_uses_passing_accumulator<CagraSampleFilterWithRuntimeState<InnerFilterT>>
-  : std::true_type {};
+template <typename InnerFilterT, bool PassingAccumulator>
+struct cagra_filter_uses_passing_accumulator<
+  CagraSampleFilterWithRuntimeState<InnerFilterT, PassingAccumulator>>
+  : std::bool_constant<PassingAccumulator> {};
 
 template <typename InnerFilterT>
 struct cagra_filter_uses_passing_accumulator<CagraSampleFilterWithQueryIdOffset<InnerFilterT>>
   : cagra_filter_uses_passing_accumulator<InnerFilterT> {};
 
-template <typename FilterT>
-constexpr bool cagra_filter_passing_accumulator_enabled(const FilterT& filter)
-{
-  if constexpr (requires { filter.passing_accumulator; }) {
-    return filter.passing_accumulator;
-  } else if constexpr (requires { filter.filter; }) {
-    return cagra_filter_passing_accumulator_enabled(filter.filter);
-  } else {
-    return false;
-  }
-}
 }  // namespace cuvs::neighbors::cagra::detail

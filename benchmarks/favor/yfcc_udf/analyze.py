@@ -16,10 +16,17 @@ import numpy as np
 
 def benchmark_rows(result_root: Path, name: str) -> list[dict]:
     raw = json.loads((result_root / "raw" / f"{name}.json").read_text())["benchmarks"]
+    failures = [row for row in raw if row.get("error_occurred")]
+    if failures:
+        messages = [str(row.get("error_message", "unknown benchmark failure")) for row in failures]
+        raise RuntimeError(f"benchmark failure in {name}: {'; '.join(messages)}")
     rows = [r for r in raw if r.get("run_type") == "iteration"]
     by_family = {}
     for row in rows:
-        by_family.setdefault(int(row["family_index"]), row)
+        family_index = int(row["family_index"])
+        if family_index in by_family:
+            raise RuntimeError(f"duplicate family_index={family_index} in {name}")
+        by_family[family_index] = row
     config = json.loads((result_root / "configs" / f"{name}.json").read_text())
     searches = config["index"][0]["search_params"]
     if set(by_family) != set(range(len(searches))):
@@ -27,6 +34,29 @@ def benchmark_rows(result_root: Path, name: str) -> list[dict]:
     output = []
     for index, search in enumerate(searches):
         row = dict(by_family[index])
+        context = f"{name} family_index={index}"
+        for metric in (
+            "Recall",
+            "items_per_second",
+            "Latency",
+            "FilterViolations",
+            "InvalidSentinelErrors",
+        ):
+            if metric not in row:
+                raise RuntimeError(f"missing required metric {metric} in {context}")
+            value = float(row[metric])
+            if not math.isfinite(value):
+                raise RuntimeError(f"non-finite metric {metric} in {context}: {value}")
+        if not 0.0 <= float(row["Recall"]) <= 1.0:
+            raise RuntimeError(f"recall outside [0, 1] in {context}: {row['Recall']}")
+        if float(row["items_per_second"]) <= 0.0 or float(row["Latency"]) <= 0.0:
+            raise RuntimeError(f"non-positive timing metric in {context}")
+        if float(row["FilterViolations"]) != 0.0 or float(row["InvalidSentinelErrors"]) != 0.0:
+            raise RuntimeError(
+                f"correctness failure in {context}: "
+                f"filter_violations={row['FilterViolations']}, "
+                f"invalid_sentinel_errors={row['InvalidSentinelErrors']}"
+            )
         row["search"] = search
         output.append(row)
     return output
@@ -55,8 +85,11 @@ def write_csv(path: Path, rows: list[dict]) -> None:
     if not rows:
         return
     path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = [name for name in rows[0] if not name.startswith("_")]
     with path.open("w", newline="") as stream:
-        writer = csv.DictWriter(stream, fieldnames=list(rows[0]), lineterminator="\n")
+        writer = csv.DictWriter(
+            stream, fieldnames=fieldnames, extrasaction="ignore", lineterminator="\n"
+        )
         writer.writeheader()
         writer.writerows(rows)
 
@@ -455,12 +488,235 @@ def plot_results(
     plt.close(fig)
 
 
+SWEEP_METHODS = ("default_cagra", "default_accumulator", "automatic_accumulator")
+
+
+def validate_accumulator_sweep(rows: list[dict], *, throughput: bool) -> None:
+    by_method: dict[str, set[tuple[int, int, int]]] = {method: set() for method in SWEEP_METHODS}
+    for row in rows:
+        method = canonical_variant(row["variant"])
+        if method not in by_method:
+            raise RuntimeError(f"unexpected method in accumulator comparison: {method}")
+        cell = (int(row["itopk"]), int(row["search_width"]), int(row["max_iterations"]))
+        if cell in by_method[method]:
+            raise RuntimeError(f"duplicate {method} parameter cell: {cell}")
+        by_method[method].add(cell)
+
+        search = row["_search"]
+        if int(search.get("max_queries", 0)) != 512:
+            raise RuntimeError(f"uncontrolled max_queries for {method} at {cell}")
+        if method.startswith("default_") and "favor_udf_include_sampling" in search:
+            raise RuntimeError(f"default CAGRA unexpectedly contains a sampling control at {cell}")
+        if throughput and method == "automatic_accumulator" and not bool(
+            search.get("favor_udf_include_sampling", False)
+        ):
+            raise RuntimeError(f"FAVOR throughput excludes selectivity sampling at {cell}")
+
+    reference = by_method[SWEEP_METHODS[0]]
+    if len(reference) != 64:
+        raise RuntimeError(f"expected 64 supported parameter cells per method, found {len(reference)}")
+    for method, cells in by_method.items():
+        if cells != reference:
+            missing = sorted(reference - cells)
+            extra = sorted(cells - reference)
+            raise RuntimeError(f"asymmetric sweep for {method}: missing={missing}, extra={extra}")
+
+
+def plot_accumulator_sweep(result_root: Path, throughput_rows: list[dict], batch_size: int) -> Path:
+    import matplotlib.pyplot as plt
+
+    plot_dir = result_root / "plots"
+    plot_dir.mkdir(parents=True, exist_ok=True)
+    output = plot_dir / "qps_recall_accumulator_comparison.png"
+    labels = {
+        "default_cagra": "default CAGRA",
+        "default_accumulator": "default + passing accumulator",
+        "automatic_accumulator": "automatic retention + accumulator",
+    }
+    styles = {
+        "default_cagra": {
+            "color": "tab:blue",
+            "linestyle": ":",
+            "marker": "o",
+            "markerfacecolor": "none",
+            "markersize": 8,
+            "zorder": 4,
+        },
+        "default_accumulator": {
+            "color": "tab:orange",
+            "linestyle": "--",
+            "marker": "x",
+            "markersize": 6,
+            "zorder": 3,
+        },
+        "automatic_accumulator": {
+            "color": "tab:green",
+            "linestyle": "-",
+            "marker": "o",
+            "markersize": 6,
+            "zorder": 2,
+        },
+    }
+
+    fig, ax = plt.subplots(figsize=(7.4, 4.5))
+    plotted_rows: list[dict] = []
+    for method in SWEEP_METHODS:
+        method_rows = [
+            row for row in throughput_rows if canonical_variant(row["variant"]) == method
+        ]
+        frontier = pareto_frontier(method_rows)
+        if not frontier:
+            raise RuntimeError(f"empty Pareto frontier for {method}")
+        plotted_rows.extend(frontier)
+        ax.plot(
+            [row["recall"] for row in frontier],
+            [row["qps"] for row in frontier],
+            label=labels[method],
+            **styles[method],
+        )
+
+    min_recall = min(float(row["recall"]) for row in plotted_rows)
+    max_qps = max(float(row["qps"]) for row in plotted_rows)
+    ax.set(
+        xlabel="Recall@10",
+        ylabel="QPS",
+        title=f"YFCC-10M SINGLE_CTA end-to-end sweep ({_pretty_batch_size(batch_size)} queries)",
+        xlim=(max(0.0, min_recall - 0.02), 1.0),
+        ylim=(0.0, max_qps * 1.05),
+    )
+    ax.grid(alpha=0.25)
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    fig.savefig(output, dpi=180)
+    plt.close(fig)
+    return output
+
+
+def write_accumulator_sweep_report(
+    report: Path,
+    result_root: Path,
+    throughput_rows: list[dict],
+    batch_size: int,
+    plot_path: Path,
+) -> None:
+    rows_by_method = {
+        method: [
+            row for row in throughput_rows if canonical_variant(row["variant"]) == method
+        ]
+        for method in SWEEP_METHODS
+    }
+    best_recall = {
+        method: max(rows, key=lambda row: (float(row["recall"]), float(row["qps"])))
+        for method, rows in rows_by_method.items()
+    }
+    target_recall = 0.905
+    target_rows = {
+        method: max(
+            (row for row in rows if float(row["recall"]) >= target_recall),
+            key=lambda row: float(row["qps"]),
+            default=None,
+        )
+        for method, rows in rows_by_method.items()
+    }
+
+    default_by_cell = {
+        (row["itopk"], row["search_width"], row["max_iterations"]): row
+        for row in rows_by_method["default_cagra"]
+    }
+    accumulator_by_cell = {
+        (row["itopk"], row["search_width"], row["max_iterations"]): row
+        for row in rows_by_method["default_accumulator"]
+    }
+    paired_recall_deltas = []
+    paired_qps_deltas = []
+    recall_wins = 0
+    for cell, baseline in default_by_cell.items():
+        accumulated = accumulator_by_cell[cell]
+        recall_delta = float(accumulated["recall"]) - float(baseline["recall"])
+        paired_recall_deltas.append(recall_delta)
+        paired_qps_deltas.append(
+            (float(accumulated["qps"]) / float(baseline["qps"]) - 1.0) * 100.0
+        )
+        recall_wins += recall_delta > 0.0
+
+    best_lines = []
+    target_lines = []
+    for method in SWEEP_METHODS:
+        row = best_recall[method]
+        best_lines.append(
+            f"| {method} | {row['itopk']} | {row['search_width']} | "
+            f"{row['max_iterations']} | {row['recall']:.4f} | {row['qps']:.1f} |"
+        )
+        target = target_rows[method]
+        if target is None:
+            target_lines.append(f"| {method} | not reached | | | |")
+        else:
+            target_lines.append(
+                f"| {method} | {target['qps']:.1f} | {target['recall']:.4f} | "
+                f"{target['itopk']} | {target['search_width']} | {target['max_iterations']} |"
+            )
+
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.write_text(
+        f"""#+title: YFCC-10M Default Accumulator Comparison
+
+* Scope
+
+This report compares exactly three SINGLE_CTA methods over the same 64 supported =(L, W,
+max_iterations)= cells: =default_cagra=, =default_accumulator=, and
+=automatic_accumulator=.  The external benchmark batch contains {batch_size:,} queries and uses one
+repetition after warmup.  Every method uses =max_queries=512= internally.  FAVOR timing includes
+per-query selectivity sampling; both default methods perform no selectivity estimation.
+
+The two =W=4= cells at =max_iterations in {{4176,7569}}= are excluded for every method because
+their required visited set exceeds CAGRA's hard 1M-slot hash table at the default 0.5 fill limit.
+All included rows have zero filter violations and zero invalid-sentinel errors.
+
+* Pareto frontier
+
+[[file:{plot_path}]]
+
+* Highest recall observed
+
+| Method | L | W | Max iterations | Recall@10 | QPS |
+|-
+{chr(10).join(best_lines)}
+
+* Fastest point at recall >= {target_recall:.3f}
+
+| Method | QPS | Recall@10 | L | W | Max iterations |
+|-
+{chr(10).join(target_lines)}
+
+* Paired default-accumulator effect
+
+Across the 64 exactly matched cells, the accumulator improves recall in {recall_wins} cells.  Its
+mean recall delta is {statistics.fmean(paired_recall_deltas):+.6f}; its mean paired QPS delta is
+{statistics.fmean(paired_qps_deltas):+.2f}% relative to default CAGRA.
+
+* Artifacts
+
+- ={result_root / 'correctness_summary.csv'}=
+- ={result_root / 'throughput_summary.csv'}=
+- ={plot_path}=
+
+* Reproduction
+
+#+begin_src sh
+YFCC_RESULT_ROOT={result_root} benchmarks/favor/yfcc_udf/run_experiment.sh accumulator_comparison
+python benchmarks/favor/yfcc_udf/analyze.py --sweep-only --result-root {result_root} --data-root datasets --report {report}
+#+end_src
+"""
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--result-root", type=Path, required=True)
     parser.add_argument("--data-root", type=Path, required=True)
-    parser.add_argument("--selection-json", type=Path, required=True)
+    parser.add_argument("--selection-json", type=Path)
     parser.add_argument("--report", type=Path, required=True)
+    parser.add_argument("--sweep-only", action="store_true")
     args = parser.parse_args()
 
     correctness = []
@@ -478,6 +734,7 @@ def main() -> None:
                 "missing_result_slots": _safe_float(row, "MissingResultSlots", 0.0),
                 "filter_violations": _safe_float(row, "FilterViolations", 0.0),
                 "invalid_sentinel_errors": _safe_float(row, "InvalidSentinelErrors", 0.0),
+                "_search": search,
             }
         )
     write_csv(args.result_root / "correctness_summary.csv", correctness)
@@ -496,11 +753,32 @@ def main() -> None:
                 "latency_seconds": _safe_float(row, "Latency", 0.0),
                 "filter_violations": _safe_float(row, "FilterViolations", 0.0),
                 "invalid_sentinel_errors": _safe_float(row, "InvalidSentinelErrors", 0.0),
+                "_search": search,
             }
         )
     write_csv(args.result_root / "throughput_summary.csv", throughput)
 
     throughput_batch = _query_batch_size(args.result_root, "throughput")
+    if args.sweep_only:
+        validate_accumulator_sweep(correctness, throughput=False)
+        validate_accumulator_sweep(throughput, throughput=True)
+        plot_path = plot_accumulator_sweep(
+            args.result_root,
+            throughput,
+            throughput_batch,
+        )
+        write_accumulator_sweep_report(
+            args.report,
+            args.result_root,
+            throughput,
+            throughput_batch,
+            plot_path,
+        )
+        return
+
+    if args.selection_json is None:
+        parser.error("--selection-json is required unless --sweep-only is used")
+
     sampling_batch = _query_batch_size(args.result_root, "throughput_sampling")
     sampling_points: list[dict] = []
     if (args.result_root / "raw" / "throughput_sampling.json").exists():

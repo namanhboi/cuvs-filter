@@ -227,14 +227,6 @@ struct search
     cudaStream_t stream                 = raft::resource::get_cuda_stream(res);
     constexpr uintptr_t kOutputIndexTag = raft::Pow2<sizeof(OutputIndexT)>::Log2;
     const auto result_indices_uintptr   = reinterpret_cast<uintptr_t>(result_indices_ptr);
-    auto launch_smem_size               = smem_size;
-    if constexpr (cagra_filter_uses_passing_accumulator<SAMPLE_FILTER_T>::value) {
-      if (!cagra_filter_passing_accumulator_enabled(sample_filter)) {
-        launch_smem_size -=
-          sizeof(std::uint32_t) +
-          static_cast<std::uint32_t>(topk * (sizeof(INDEX_T) + sizeof(DISTANCE_T)));
-      }
-    }
     static_assert(kOutputIndexTag <= 3, "OutputIndexT can't be more than 8 bytes");
     if constexpr (kOutputIndexTag <= 1) {
       // NB: there's no need for runtime check here for larger OutputIndexT naturally aligned
@@ -259,7 +251,7 @@ struct search
                    topk,
                    num_itopk_candidates,
                    static_cast<uint32_t>(thread_block_size),
-                   launch_smem_size,
+                   smem_size,
                    hash_bitlen,
                    hashmap.data(),
                    small_hash_bitlen,

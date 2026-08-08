@@ -5,6 +5,7 @@
 
 #include <gtest/gtest.h>
 
+#include "../../../src/neighbors/cagra_benchmark.hpp"
 #include "../ann_cagra.cuh"
 
 #include <cuvs/core/bitset.hpp>
@@ -173,6 +174,51 @@ class CagraUdfFilterTest : public ::testing::TestWithParam<cagra::search_algo> {
     return result;
   }
 
+  cagra_search_result search_default_with_accumulator(
+    cuvs::neighbors::filtering::base_filter const& filter,
+    bool passing_accumulator,
+    const float* sampled_rates = nullptr,
+    cagra::search_algo algo    = cagra::search_algo::SINGLE_CTA)
+  {
+    auto neighbors = raft::make_device_matrix<std::int64_t, int64_t>(res, n_queries, k);
+    auto distances = raft::make_device_matrix<float, int64_t>(res, n_queries, k);
+
+    cagra::search_params search_params;
+    search_params.algo              = algo;
+    search_params.filter_mode       = cagra::filtering_mode::DEFAULT;
+    search_params.itopk_size        = 64;
+    search_params.max_queries       = 2;
+    search_params.thread_block_size = 256;
+
+    cagra::detail::benchmark_search_favor_udf_with_sampled_rates<float>(
+      res,
+      search_params,
+      *index,
+      raft::make_const_mdspan(queries->view()),
+      neighbors.view(),
+      distances.view(),
+      filter,
+      sampled_rates,
+      passing_accumulator);
+
+    auto stream = raft::resource::get_cuda_stream(res);
+    std::vector<std::int64_t> host_neighbors(n_queries * k);
+    cagra_search_result result{std::vector<uint32_t>(n_queries * k),
+                               std::vector<float>(n_queries * k)};
+    raft::copy(host_neighbors.data(), neighbors.data_handle(), host_neighbors.size(), stream);
+    raft::copy(result.distances.data(), distances.data_handle(), result.distances.size(), stream);
+    raft::resource::sync_stream(res);
+    std::transform(host_neighbors.begin(),
+                   host_neighbors.end(),
+                   result.neighbors.begin(),
+                   [](std::int64_t source_id) {
+                     return source_id == std::numeric_limits<std::int64_t>::max()
+                              ? std::numeric_limits<std::uint32_t>::max()
+                              : static_cast<std::uint32_t>(source_id);
+                   });
+    return result;
+  }
+
   raft::resources res;
   std::optional<raft::device_matrix<float, int64_t>> dataset = std::nullopt;
   std::optional<raft::device_matrix<float, int64_t>> queries = std::nullopt;
@@ -301,6 +347,50 @@ TEST_P(CagraUdfFilterTest, HighFilteringRateReturnsOnlyValidNeighbors)
       EXPECT_GE(source_id, static_cast<uint32_t>(high_filtering_threshold));
     }
   }
+}
+
+TEST_P(CagraUdfFilterTest, DefaultPassingAccumulatorIsPassiveAndRetainsPassingCandidates)
+{
+  if (GetParam() != cagra::search_algo::SINGLE_CTA) { GTEST_SKIP(); }
+
+  cuvs::neighbors::filtering::udf_filter udf_filter(
+    high_filtering_rate_udf_source(), nullptr, high_filtering_rate);
+  const auto public_legacy  = search(udf_filter);
+  const auto private_legacy = search_default_with_accumulator(udf_filter, false);
+  const auto accumulated    = search_default_with_accumulator(udf_filter, true);
+
+  expect_same_results(public_legacy, private_legacy);
+  std::size_t legacy_valid{};
+  std::size_t accumulated_valid{};
+  for (std::size_t pos = 0; pos < accumulated.neighbors.size(); ++pos) {
+    const auto legacy_id = private_legacy.neighbors[pos];
+    legacy_valid += legacy_id < static_cast<std::uint32_t>(n_rows);
+
+    const auto accumulated_id = accumulated.neighbors[pos];
+    if (accumulated_id < static_cast<std::uint32_t>(n_rows)) {
+      ++accumulated_valid;
+      EXPECT_GE(accumulated_id, static_cast<std::uint32_t>(high_filtering_threshold));
+    } else {
+      EXPECT_EQ(accumulated_id, std::numeric_limits<std::uint32_t>::max());
+      EXPECT_EQ(accumulated.distances[pos], std::numeric_limits<float>::max());
+    }
+  }
+  EXPECT_GE(accumulated_valid, legacy_valid);
+  EXPECT_NE(accumulated.neighbors, private_legacy.neighbors);
+}
+
+TEST_P(CagraUdfFilterTest, DefaultPassingAccumulatorRejectsRatesAndMultiCta)
+{
+  if (GetParam() != cagra::search_algo::SINGLE_CTA) { GTEST_SKIP(); }
+
+  cuvs::neighbors::filtering::udf_filter udf_filter(
+    high_filtering_rate_udf_source(), nullptr, high_filtering_rate);
+  auto sampled_rates = raft::make_device_vector<float, int64_t>(res, n_queries);
+  EXPECT_THROW(search_default_with_accumulator(udf_filter, true, sampled_rates.data_handle()),
+               std::exception);
+  EXPECT_THROW(
+    search_default_with_accumulator(udf_filter, true, nullptr, cagra::search_algo::MULTI_CTA),
+    std::exception);
 }
 
 TEST_P(CagraUdfFilterTest, RepeatedUdfSearchWithSameSourceMatches)

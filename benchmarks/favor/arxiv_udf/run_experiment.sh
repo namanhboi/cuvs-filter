@@ -42,6 +42,11 @@ case "${stage}" in
       run_one "${predicate}_correctness" throughput 0.01s
     done
     ;;
+  accumulator_gate)
+    for predicate in em emis r; do
+      run_one "${predicate}_accumulator_gate" throughput 0.05s
+    done
+    ;;
   throughput)
     for predicate in em emis r; do
       run_one "${predicate}_throughput" throughput 0.2s
@@ -50,12 +55,13 @@ case "${stage}" in
   all)
     for predicate in em emis r; do
       run_one "${predicate}_smoke" latency 0.01s
+      run_one "${predicate}_accumulator_gate" throughput 0.05s
       run_one "${predicate}_correctness" throughput 0.01s
       run_one "${predicate}_throughput" throughput 0.2s
     done
     ;;
   *)
-    echo "usage: $0 {smoke|correctness|throughput|all}" >&2
+    echo "usage: $0 {smoke|accumulator_gate|correctness|throughput|all}" >&2
     exit 2
     ;;
 esac

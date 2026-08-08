@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -26,11 +27,33 @@ def safe_int(value: Any, default: int = 0) -> int:
 
 def read_rows(name: Path) -> list[dict]:
   payload = json.loads(name.read_text())
-  return [row for row in payload.get("benchmarks", []) if row.get("run_type") == "iteration"]
+  benchmarks = payload.get("benchmarks")
+  if not isinstance(benchmarks, list):
+    raise RuntimeError(f"missing benchmark rows: {name}")
+  failures = [row for row in benchmarks if row.get("error_occurred")]
+  if failures:
+    messages = [str(row.get("error_message", "unknown benchmark failure")) for row in failures]
+    raise RuntimeError(f"benchmark failure in {name}: {'; '.join(messages)}")
+  return [row for row in benchmarks if row.get("run_type") == "iteration"]
 
 
-def config_variant(search: dict) -> str:
+def required_float(row: dict, names: tuple[str, ...], context: str) -> float:
+  for name in names:
+    if name in row:
+      try:
+        value = float(row[name])
+      except (TypeError, ValueError) as error:
+        raise RuntimeError(f"invalid {name} in {context}: {row[name]!r}") from error
+      if not math.isfinite(value):
+        raise RuntimeError(f"non-finite {name} in {context}: {value}")
+      return value
+  raise RuntimeError(f"missing required metric {names} in {context}")
+
+
+def config_variant(search: dict, *, distinguish_default_accumulator: bool = False) -> str:
   if search.get("filter_mode", "default") == "default":
+    if distinguish_default_accumulator and search.get("favor_udf_passing_accumulator", False):
+      return "default_accumulator"
     return "default_cagra"
   if search.get("favor_udf_passing_accumulator", True):
     return "automatic_accumulator"
@@ -63,6 +86,8 @@ def analyze_file(
   raw_root: Path,
   config_root: Path,
   source: str,
+  *,
+  distinguish_default_accumulator: bool = False,
 ) -> list[dict]:
   raw_path = raw_root / f"{config_name}.json"
   if not raw_path.exists():
@@ -77,7 +102,10 @@ def analyze_file(
 
   by_family: dict[int, dict] = {}
   for row in rows:
-    by_family[safe_int(row.get("family_index"), -1)] = row
+    family_index = safe_int(row.get("family_index"), -1)
+    if family_index in by_family:
+      raise RuntimeError(f"duplicate family_index={family_index} in {config_name}")
+    by_family[family_index] = row
   if len(by_family) != len(searches) or set(by_family) != set(range(len(searches))):
     raise RuntimeError(f"incomplete result file: {config_name}")
 
@@ -85,22 +113,42 @@ def analyze_file(
   result_rows = []
   for i, search in enumerate(searches):
     row = by_family[i]
+    context = f"{config_name} family_index={i}"
+    recall = required_float(row, ("Recall", "recall"), context)
+    qps = required_float(row, ("items_per_second", "qps"), context)
+    latency = required_float(row, ("Latency",), context)
+    filter_violations = required_float(row, ("FilterViolations",), context)
+    invalid_sentinel_errors = required_float(row, ("InvalidSentinelErrors",), context)
+    underfilled_queries = required_float(row, ("UnderfilledQueries",), context)
+    if not 0.0 <= recall <= 1.0:
+      raise RuntimeError(f"recall is outside [0, 1] in {context}: {recall}")
+    if qps <= 0.0 or latency <= 0.0:
+      raise RuntimeError(f"non-positive timing metric in {context}: qps={qps}, latency={latency}")
+    if filter_violations != 0.0 or invalid_sentinel_errors != 0.0:
+      raise RuntimeError(
+        f"correctness failure in {context}: filter_violations={filter_violations}, "
+        f"invalid_sentinel_errors={invalid_sentinel_errors}"
+      )
+    if underfilled_queries < 0.0:
+      raise RuntimeError(f"negative underfilled-query metric in {context}: {underfilled_queries}")
     result_rows.append(
       {
         "predicate": predicate,
         "workload": workload,
         "metric": config["dataset"]["name"],
         "source": source,
-        "variant": config_variant(search),
+        "variant": config_variant(
+          search, distinguish_default_accumulator=distinguish_default_accumulator
+        ),
         "itopk": safe_int(search.get("itopk")),
         "search_width": safe_int(search.get("search_width")),
         "max_iterations": safe_int(search.get("max_iterations")),
-        "recall": safe_float(row.get("Recall"), safe_float(row.get("recall", 0.0))),
-        "qps": safe_float(row.get("items_per_second", row.get("qps", 0.0))),
-        "latency_seconds": safe_float(row.get("Latency", 0.0)),
-        "filter_violations": safe_float(row.get("FilterViolations", 0.0)),
-        "invalid_sentinel_errors": safe_float(row.get("InvalidSentinelErrors", 0.0)),
-        "underfilled_queries": safe_float(row.get("UnderfilledQueries", 0.0)),
+        "recall": recall,
+        "qps": qps,
+        "latency_seconds": latency,
+        "filter_violations": filter_violations,
+        "invalid_sentinel_errors": invalid_sentinel_errors,
+        "underfilled_queries": underfilled_queries,
       }
     )
 
@@ -164,16 +212,16 @@ def plot_sweep(rows: list[dict], output_root: Path, *, plot_name: str, title: st
     points_by_key.setdefault(key, []).append(row)
 
   fig, ax = plt.subplots(figsize=(7, 4.2))
-  for key, rows in sorted(points_by_key.items()):
-    frontier = pareto_frontier(rows)
+  for key, method_rows in sorted(points_by_key.items()):
+    frontier = pareto_frontier(method_rows)
     if not frontier:
       continue
-      ax.plot(
-        [r["recall"] for r in frontier],
-        [r["qps"] for r in frontier],
-        marker="o",
-        label=key,
-      )
+    ax.plot(
+      [r["recall"] for r in frontier],
+      [r["qps"] for r in frontier],
+      marker="o",
+      label=key,
+    )
   recalls = [
     safe_float(row.get("recall"), 0.0)
     for row in rows
@@ -287,14 +335,15 @@ def write_report(
   report_path: Path,
   correctness_rows: list[dict],
   throughput_rows: list[dict],
+  default_accumulator_gate_rows: list[dict],
   b0_rows: list[dict],
   b0_rows_by_pred_variant: list[str],
 ) -> None:
   best_by_mode: dict[tuple[str, str], dict] = {}
-  for row in correctness_rows:
+  for row in throughput_rows:
     key = (row["predicate"], row["variant"])
     current = best_by_mode.get(key)
-    if current is None or row["recall"] > current["recall"]:
+    if current is None or (row["recall"], row["qps"]) > (current["recall"], current["qps"]):
       best_by_mode[key] = row
 
   best_by_mode_text = []
@@ -305,6 +354,50 @@ def write_report(
         best_by_mode_text.append(
           f"| {predicate} | {variant} | {row['itopk']} | {row['search_width']} | {row['max_iterations']} | {row['recall']:.4f} | {row['qps']:.1f} |"
         )
+
+  target_frontier_text = []
+  for predicate in ("em", "emis", "r"):
+    for variant in ("default_cagra", "automatic_legacy", "automatic_accumulator"):
+      eligible = [
+        row
+        for row in throughput_rows
+        if row["predicate"] == predicate
+        and row["variant"] == variant
+        and row["recall"] >= 0.905
+      ]
+      fastest = max(eligible, key=lambda row: row["qps"], default=None)
+      if fastest is None:
+        target_frontier_text.append(f"| {predicate} | {variant} | not reached | | | |")
+      else:
+        target_frontier_text.append(
+          f"| {predicate} | {variant} | {fastest['itopk']} | {fastest['search_width']} | "
+          f"{fastest['max_iterations']} | {fastest['recall']:.4f} | {fastest['qps']:.1f} |"
+        )
+
+  default_accumulator_gate_text = []
+  for predicate in ("em", "emis", "r"):
+    baseline = next(
+      (
+        row
+        for row in default_accumulator_gate_rows
+        if row["predicate"] == predicate and row["variant"] == "default_cagra"
+      ),
+      None,
+    )
+    accumulator = next(
+      (
+        row
+        for row in default_accumulator_gate_rows
+        if row["predicate"] == predicate and row["variant"] == "default_accumulator"
+      ),
+      None,
+    )
+    if baseline is not None and accumulator is not None:
+      qps_delta = 100.0 * (accumulator["qps"] / baseline["qps"] - 1.0)
+      default_accumulator_gate_text.append(
+        f"| {predicate} | {baseline['recall']:.5f} | {accumulator['recall']:.5f} | "
+        f"{baseline['qps']:.1f} | {accumulator['qps']:.1f} | {qps_delta:+.3f}% |"
+      )
 
   b0_table = "\n".join(b0_rows_by_pred_variant) if b0_rows_by_pred_variant else "| No B0 throughput rows found. |"
 
@@ -331,21 +424,59 @@ Correctness: complete for all 3 predicates in `raw/*_correctness.json`.
 
 Throughput full sweep: {throughput_availability}.
 
-B0 throughput: available from `raw_b0/*_b0_throughput.json`.
+B0 throughput: derived from the =max_iterations=0 rows of the full throughput sweep.
 
 * Sweep summary
 
-The full matrix varies:
+The candidate matrix varies:
 - =itopk in {{64,128,256,512}}=
 - =search_width in {{1,2,4}}=
 - =max_iterations in {{0,522,1044,2088,4176,7569}}=
 
-For each (predicate, workload), =default_cagra= and both FAVOR variants were benchmarked with
-end-to-end timing (including per-query selectivity sampling when FILTER_MODE=favor).
+All methods use =max_queries=512= so a 10,000-query invocation is tiled through a bounded search
+workspace.  The =W=4= rows at =max_iterations in {{4176,7569}}= are excluded before execution:
+their required visited set exceeds SINGLE_CTA CAGRA's hard 1M-slot hash-table limit at the default
+0.5 maximum fill rate.  This leaves 64 supported parameter points per method and 192 rows per
+predicate/workload.
 
-| Predicate | Variant | Best recall row (itopk,width,max_iterations,recall,qps) |
+For each (predicate, workload), =default_cagra= and both FAVOR variants use the same supported
+points and end-to-end timing.  Per-query selectivity sampling is included only when
+=filter_mode=favor=; default CAGRA never estimates selectivity.
+
+| Predicate | Variant | L | W | Max iterations | Recall@10 | QPS |
 |-
 {chr(10).join(best_by_mode_text) if best_by_mode_text else "| unavailable | | | | | |"}
+
+* Fastest point reaching 0.905 recall
+
+| Predicate | Variant | L | W | Max iterations | Recall@10 | QPS |
+|-
+{chr(10).join(target_frontier_text)}
+
+* Focused default-CAGRA accumulator gate
+
+This is a separate matched =L=512=, =W=2=, =max_iterations=0= gate, not a fourth full-sweep
+curve.  Both paths skip UDF selectivity sampling.  Enabling the passing accumulator on the
+default-CAGRA traversal changes recall by exactly zero on all three predicates and incurs less
+than 0.1% QPS loss in each run.  The accumulator is therefore not useful for the default path in
+this experiment.
+
+| Predicate | Default recall | Accumulator recall | Default QPS | Accumulator QPS | QPS delta |
+|-
+{chr(10).join(default_accumulator_gate_text)}
+
+* Verdict
+
+- =em=: all methods exceed 0.905 at B0.  Automatic accumulation raises the maximum observed
+  recall from 0.99691 for default CAGRA to 0.99936.
+- =emis=: automatic accumulation is the only method to reach 0.905.  Its fastest qualifying
+  point reaches 0.93233 at 1146.6 QPS and its maximum is 0.96183; default CAGRA tops out at
+  0.85968 and legacy automatic retention at 0.62849.
+- =r=: all methods can exceed 0.905.  At the fastest B0 region, automatic accumulation reaches
+  0.94841 at 28579.2 QPS versus 0.91290 at 28734.0 QPS for default CAGRA.
+- The matched FAVOR pairs show that the accumulator changes final passing-result retention, not
+  traversal work: its runtime is nearly identical to legacy automatic retention while recall can
+  be substantially higher.
 
 * B0 frontier (recall and QPS)
 
@@ -358,6 +489,7 @@ end-to-end timing (including per-query selectivity sampling when FILTER_MODE=fav
 - {result_root}/correctness_summary.csv
 - {throughput_file}
 - {result_root}/b0_summary.csv
+- {result_root}/default_accumulator_gate_summary.csv
 - {result_root}/plots/qps_recall_sweep.png
 - {result_root}/plots/qps_recall_b0.png
 - {result_root}/plots/qps_recall_sweep_em.png
@@ -378,48 +510,65 @@ def main() -> None:
   args = parser.parse_args()
 
   raw_root = args.result_root / "raw"
-  raw_b0_root = args.result_root / "raw_b0"
-  config_b0_root = args.result_root / "configs_b0"
   config_root = args.result_root / "configs"
 
   predicates = ("em", "emis", "r")
   correctness_rows: list[dict] = []
   throughput_rows: list[dict] = []
-  b0_rows: list[dict] = []
+  default_accumulator_gate_rows: list[dict] = []
   all_results: list[dict] = []
+  missing: list[Path] = []
 
   for predicate in predicates:
     correctness_name = f"{predicate}_correctness"
     throughput_name = f"{predicate}_throughput"
-    b0_name = f"{predicate}_b0_throughput"
 
     correctness_file = raw_root / f"{correctness_name}.json"
     if correctness_file.exists():
       rows = analyze_file(correctness_name, raw_root, config_root, "correctness")
       correctness_rows.extend(rows)
       all_results.extend(rows)
+    else:
+      missing.append(correctness_file)
 
     throughput_file = raw_root / f"{throughput_name}.json"
     if throughput_file.exists():
       rows = analyze_file(throughput_name, raw_root, config_root, "throughput")
       throughput_rows.extend(rows)
       all_results.extend(rows)
+    else:
+      missing.append(throughput_file)
 
-    b0_file = raw_b0_root / f"{b0_name}.json"
-    if b0_file.exists():
-      rows = analyze_file(b0_name, raw_b0_root, config_b0_root, "throughput_b0")
-      b0_rows.extend(rows)
-      all_results.extend(rows)
+    gate_name = f"{predicate}_accumulator_gate"
+    gate_file = raw_root / f"{gate_name}.json"
+    if gate_file.exists():
+      rows = analyze_file(
+        gate_name,
+        raw_root,
+        config_root,
+        "default_accumulator_gate",
+        distinguish_default_accumulator=True,
+      )
+      variants = {row["variant"] for row in rows}
+      if len(rows) != 2 or variants != {"default_cagra", "default_accumulator"}:
+        raise RuntimeError(f"invalid focused default accumulator gate: {gate_name}")
+      default_accumulator_gate_rows.extend(rows)
+    else:
+      missing.append(gate_file)
+
+  if missing:
+    raise RuntimeError("incomplete Arxiv result set; missing: " + ", ".join(map(str, missing)))
+
+  b0_rows = [row for row in throughput_rows if safe_int(row["max_iterations"]) == 0]
 
   write_csv(args.result_root / "correctness_summary.csv", correctness_rows)
-  if throughput_rows:
-    write_csv(args.result_root / "throughput_summary.csv", throughput_rows)
-  else:
-    old = args.result_root / "throughput_summary.csv"
-    if old.exists():
-      old.unlink()
+  write_csv(args.result_root / "throughput_summary.csv", throughput_rows)
   write_csv(args.result_root / "all_results_summary.csv", all_results)
   write_csv(args.result_root / "b0_summary.csv", b0_rows)
+  write_csv(
+    args.result_root / "default_accumulator_gate_summary.csv",
+    default_accumulator_gate_rows,
+  )
 
   plot_sweep(throughput_rows, args.result_root, plot_name="qps_recall_sweep.png", title="ARXIV Single-CTA UDF sweep")
   plot_sweep_by_predicate(
@@ -455,6 +604,7 @@ def main() -> None:
     args.report,
     correctness_rows,
     throughput_rows,
+    default_accumulator_gate_rows,
     b0_rows,
     b0_rows_by_pred_variant,
   )

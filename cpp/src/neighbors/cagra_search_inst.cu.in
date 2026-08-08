@@ -7,6 +7,8 @@
 #include <neighbors/cagra.cuh>
 #include <neighbors/cagra_benchmark.hpp>
 
+#include <algorithm>
+
 namespace {
 
 using data_t = @data_type@;
@@ -87,13 +89,8 @@ CUVS_EXPORT void benchmark_estimate_favor_udf_filtering_rates<data_t>(
     dynamic_cast<cuvs::neighbors::filtering::udf_filter const*>(&sample_filter);
   RAFT_EXPECTS(udf_filter != nullptr,
                "benchmark_estimate_favor_udf_filtering_rates requires a UDF filter");
-  estimate_favor_udf_filtering_rates_into(res,
-                                          index,
-                                          num_queries,
-                                          *udf_filter,
-                                          filtering_rates,
-                                          passing_counts,
-                                          sample_offset);
+  estimate_favor_udf_filtering_rates_into(
+    res, index, num_queries, *udf_filter, filtering_rates, passing_counts, sample_offset);
 }
 
 template <>
@@ -116,8 +113,7 @@ CUVS_EXPORT void benchmark_search_favor_udf_with_sampled_rates<data_t>(
     filtering_rates != nullptr || params.filter_mode == filtering_mode::DEFAULT,
     "benchmark_search_favor_udf_with_sampled_rates requires sampled rates or filter_mode=DEFAULT");
 
-  auto runtime_filter = CagraSampleFilterWithRuntimeState{
-    *udf_filter, filtering_rates, passing_accumulator};
+  auto params_copy = params;
   if (params.filter_mode == filtering_mode::FAVOR) {
     RAFT_EXPECTS((params.algo == search_algo::AUTO || params.algo == search_algo::SINGLE_CTA) &&
                    !params.persistent &&
@@ -125,19 +121,41 @@ CUVS_EXPORT void benchmark_search_favor_udf_with_sampled_rates<data_t>(
                    params.favor_retention_fraction == 0.0f,
                  "benchmark_search_favor_udf_with_sampled_rates requires single-CTA retention-safe "
                  "UDF mode (AUTO or SINGLE_CTA)");
-    auto params_copy          = params;
-    params_copy.algo          = search_algo::SINGLE_CTA;
+    params_copy.algo           = search_algo::SINGLE_CTA;
     params_copy.filtering_rate = 0.0f;
-    search_with_filtering<data_t, std::uint32_t, decltype(runtime_filter), std::int64_t>(
-      res, params_copy, index, queries, neighbors, distances, runtime_filter);
-    return;
+  } else {
+    RAFT_EXPECTS(
+      params.filter_mode == filtering_mode::DEFAULT,
+      "benchmark_search_favor_udf_with_sampled_rates supports DEFAULT and FAVOR filter modes");
+    RAFT_EXPECTS((params.algo == search_algo::AUTO || params.algo == search_algo::SINGLE_CTA) &&
+                   !params.persistent,
+                 "default UDF passing accumulation supports only non-persistent SINGLE_CTA "
+                 "search (AUTO or SINGLE_CTA)");
+    RAFT_EXPECTS(filtering_rates == nullptr,
+                 "default CAGRA must not receive UDF selectivity estimates");
+    params_copy.algo = search_algo::SINGLE_CTA;
+    if (params_copy.filtering_rate < 0.0f) {
+      constexpr float min_filtering_rate = 0.0f;
+      constexpr float max_filtering_rate = 0.999f;
+      params_copy.filtering_rate =
+        udf_filter->filtering_rate < 0.0f
+          ? 0.0f
+          : std::min(std::max(udf_filter->filtering_rate, min_filtering_rate), max_filtering_rate);
+    }
   }
 
-  RAFT_EXPECTS(params.filter_mode == filtering_mode::DEFAULT,
-               "benchmark_search_favor_udf_with_sampled_rates supports DEFAULT and FAVOR filter modes");
-  auto params_copy = params;
-  search_with_filtering<data_t, std::uint32_t, decltype(runtime_filter), std::int64_t>(
-    res, params_copy, index, queries, neighbors, distances, runtime_filter);
+  auto run_with_policy = [&]<bool PassingAccumulator>() {
+    using runtime_filter_t =
+      CagraSampleFilterWithRuntimeState<cuvs::neighbors::filtering::udf_filter, PassingAccumulator>;
+    auto runtime_filter = runtime_filter_t{*udf_filter, filtering_rates};
+    search_with_filtering<data_t, std::uint32_t, runtime_filter_t, std::int64_t>(
+      res, params_copy, index, queries, neighbors, distances, runtime_filter);
+  };
+  if (passing_accumulator) {
+    run_with_policy.template operator()<true>();
+  } else {
+    run_with_policy.template operator()<false>();
+  }
 }
 
 }  // namespace cuvs::neighbors::cagra::detail

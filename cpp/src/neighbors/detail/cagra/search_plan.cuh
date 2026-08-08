@@ -52,8 +52,9 @@ template <typename InnerFilterT>
 struct is_cagra_bitset_sample_filter<CagraSampleFilterWithQueryIdOffset<InnerFilterT>>
   : is_cagra_bitset_sample_filter<InnerFilterT> {};
 
-template <typename InnerFilterT>
-struct is_cagra_bitset_sample_filter<CagraSampleFilterWithRuntimeState<InnerFilterT>>
+template <typename InnerFilterT, bool PassingAccumulator>
+struct is_cagra_bitset_sample_filter<
+  CagraSampleFilterWithRuntimeState<InnerFilterT, PassingAccumulator>>
   : is_cagra_bitset_sample_filter<InnerFilterT> {};
 
 /**

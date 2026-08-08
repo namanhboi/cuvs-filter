@@ -9,6 +9,10 @@ from pathlib import Path
 
 SWEEP_CELLS = [(l, w) for l in (64, 128, 256, 512) for w in (1, 2, 4)]
 MAX_ITERATIONS = (0, 522, 1044, 2088, 4176, 7569)
+MAX_QUERIES = 512
+GRAPH_DEGREE = 32
+MAX_HASH_SLOTS = 1 << 20
+HASHMAP_MAX_FILL_RATE = 0.5
 CORRECTNESS_WORKLOAD = "correctness_10000"
 THROUGHPUT_WORKLOAD = "throughput_10000"
 DATA_ROOT = Path(".")
@@ -44,13 +48,17 @@ def dataset(workload: str, predicate: str) -> dict:
   }
 
 
-def default_search(itopk: int, width: int, *, max_iterations: int = 0) -> dict:
+def default_search(
+  itopk: int, width: int, *, accumulator: bool = False, max_iterations: int = 0
+) -> dict:
   return {
     "algo": "single_cta",
     "filter_mode": "default",
+    "max_queries": MAX_QUERIES,
     "itopk": itopk,
     "search_width": width,
     "max_iterations": max_iterations,
+    "favor_udf_passing_accumulator": accumulator,
   }
 
 
@@ -65,6 +73,7 @@ def favor_search(
   return {
     "algo": "single_cta",
     "filter_mode": "favor",
+    "max_queries": MAX_QUERIES,
     "itopk": itopk,
     "search_width": width,
     "max_iterations": max_iterations,
@@ -107,6 +116,13 @@ def write(path: Path, payload: dict) -> None:
   path.write_text(json.dumps(payload, indent=2) + "\n")
 
 
+def supported_search(itopk: int, width: int, max_iterations: int) -> bool:
+  if max_iterations == 0:
+    return True
+  max_visited_nodes = itopk + width * GRAPH_DEGREE * max_iterations
+  return max_visited_nodes <= MAX_HASH_SLOTS * HASHMAP_MAX_FILL_RATE
+
+
 def main() -> None:
   global DATA_ROOT
   parser = argparse.ArgumentParser()
@@ -124,13 +140,34 @@ def main() -> None:
     # Single-query smoke runs against the full workload with batch_size=1.
     write(
       args.output / f"{predicate}_smoke.json",
-      config(THROUGHPUT_WORKLOAD, predicate, 1, [default_search(64, 1), favor_search(64, 1)]),
+      config(
+        THROUGHPUT_WORKLOAD,
+        predicate,
+        1,
+        [
+          default_search(64, 1),
+          default_search(64, 1, accumulator=True),
+          favor_search(64, 1, accumulator=False),
+          favor_search(64, 1),
+        ],
+      ),
+    )
+    write(
+      args.output / f"{predicate}_accumulator_gate.json",
+      config(
+        THROUGHPUT_WORKLOAD,
+        predicate,
+        query_count,
+        [default_search(512, 2), default_search(512, 2, accumulator=True)],
+      ),
     )
 
     correctness_searches: list[dict] = []
     throughput_searches: list[dict] = []
     for itopk, width in SWEEP_CELLS:
       for max_iterations in MAX_ITERATIONS:
+        if not supported_search(itopk, width, max_iterations):
+          continue
         correctness_searches.append(default_search(itopk, width, max_iterations=max_iterations))
         correctness_searches.append(
           favor_search(

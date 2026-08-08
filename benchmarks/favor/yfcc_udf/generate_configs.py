@@ -9,7 +9,11 @@ from pathlib import Path
 
 SWEEP_CELLS = [(l, w) for l in (64, 128, 256, 512) for w in (1, 2, 4)]
 DEEP_ITERATIONS = (522, 1044, 2088, 4176, 7569)
-MAX_ITERATIONS = (0,)
+MAX_ITERATIONS = (0, *DEEP_ITERATIONS)
+MAX_QUERIES = 512
+GRAPH_DEGREE = 32
+MAX_HASH_SLOTS = 1 << 20
+HASHMAP_MAX_FILL_RATE = 0.5
 SAMPLING_ESTIMATE_CELLS = (
     (64, 1, 0),
     (64, 2, 0),
@@ -49,6 +53,7 @@ def default_search(
     out = {
         "algo": "single_cta",
         "filter_mode": "default",
+        "max_queries": MAX_QUERIES,
         "itopk": itopk,
         "search_width": width,
         "max_iterations": max_iterations,
@@ -72,6 +77,7 @@ def favor_search(
     out = {
         "algo": "single_cta",
         "filter_mode": "favor",
+        "max_queries": MAX_QUERIES,
         "itopk": itopk,
         "search_width": width,
         "max_iterations": max_iterations,
@@ -126,6 +132,13 @@ def write(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n")
 
 
+def supported_search(itopk: int, width: int, max_iterations: int) -> bool:
+    if max_iterations == 0:
+        return True
+    max_visited_nodes = itopk + width * GRAPH_DEGREE * max_iterations
+    return max_visited_nodes <= MAX_HASH_SLOTS * HASHMAP_MAX_FILL_RATE
+
+
 def main() -> None:
     global DATA_ROOT
     parser = argparse.ArgumentParser()
@@ -141,7 +154,11 @@ def main() -> None:
         config(
             "latency_a1_d10",
             1,
-            [default_search(64, 1), favor_search(64, 1, include_sampling=True)],
+            [
+                default_search(64, 1),
+                default_search(64, 1, accumulator=True),
+                favor_search(64, 1, include_sampling=True),
+            ],
         ),
     )
     write(
@@ -156,16 +173,10 @@ def main() -> None:
     correctness = []
     for l, w in SWEEP_CELLS:
         for max_iterations in MAX_ITERATIONS:
+            if not supported_search(l, w, max_iterations):
+                continue
             correctness.append(default_search(l, w, accumulator=False, max_iterations=max_iterations))
             correctness.append(default_search(l, w, accumulator=True, max_iterations=max_iterations))
-            correctness.append(
-                favor_search(
-                    l,
-                    w,
-                    accumulator=False,
-                    max_iterations=max_iterations,
-                )
-            )
             correctness.append(
                 favor_search(
                     l,
@@ -179,17 +190,10 @@ def main() -> None:
     throughput = []
     for l, w in SWEEP_CELLS:
         for max_iterations in MAX_ITERATIONS:
+            if not supported_search(l, w, max_iterations):
+                continue
             throughput.append(default_search(l, w, accumulator=False, max_iterations=max_iterations))
             throughput.append(default_search(l, w, accumulator=True, max_iterations=max_iterations))
-            throughput.append(
-                favor_search(
-                    l,
-                    w,
-                    accumulator=False,
-                    include_sampling=True,
-                    max_iterations=max_iterations,
-                )
-            )
             throughput.append(
                 favor_search(
                     l,

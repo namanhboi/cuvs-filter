@@ -129,40 +129,16 @@ def _dedupe_to_k(row: np.ndarray, k: int) -> np.ndarray:
 def _read_ivec_prefixed_count(ivec: np.ndarray, query_count: int, k: int) -> np.ndarray | None:
   cursor = 0
   rows: list[np.ndarray] = []
-  for _ in range(query_count):
-    if cursor >= ivec.size:
-      return None
+  while cursor < ivec.size:
     count = int(ivec[cursor])
     cursor += 1
     if count <= 0 or cursor + count > ivec.size:
       return None
-    rows.append(_dedupe_to_k(ivec[cursor : cursor + count], k))
+    if len(rows) < query_count:
+      rows.append(_dedupe_to_k(ivec[cursor : cursor + count], k))
     cursor += count
-  return np.stack(rows, axis=0)
-
-
-def _read_ivec_fixed_k(ivec: np.ndarray, query_count: int, k: int) -> np.ndarray | None:
-  if ivec.size <= 1:
+  if len(rows) < query_count:
     return None
-  header = int(ivec[0])
-  if header <= 0:
-    return None
-
-  data = ivec[1:]
-  if data.size % header != 0:
-    if ivec.size % header != 0:
-      return None
-    data = ivec
-  rows_available = data.size // header
-  usable = min(rows_available, query_count)
-  if usable <= 0:
-    return None
-
-  rows = []
-  offset = 0
-  for _ in range(usable):
-    rows.append(_dedupe_to_k(data[offset : offset + header], k))
-    offset += header
   return np.stack(rows, axis=0)
 
 
@@ -178,10 +154,6 @@ def read_ivec_first_k(ivec_path: Path, query_count: int, k: int = GT_K) -> np.nd
   if parsed is not None and parsed.shape[0] >= query_count:
     return parsed
 
-  parsed = _read_ivec_fixed_k(values, query_count=query_count, k=k)
-  if parsed is not None and parsed.shape[0] >= query_count:
-    return parsed
-
   cursor = 0
   parsed_rows = 0
   while cursor < values.size:
@@ -192,18 +164,9 @@ def read_ivec_first_k(ivec_path: Path, query_count: int, k: int = GT_K) -> np.nd
     cursor += count
     parsed_rows += 1
 
-  fixed_rows = 0
-  if values.size >= 2:
-    header = int(values[0])
-    if header > 0:
-      if (values.size - 1) % header == 0:
-        fixed_rows = (values.size - 1) // header
-      elif values.size % header == 0:
-        fixed_rows = values.size // header
-
   raise ValueError(
     f"Could not parse {ivec_path}: first_values={values[:8].tolist()}, query_count={query_count}, "
-    f"k={k}, prefixed_rows={parsed_rows}, fixed_rows={fixed_rows}"
+    f"k={k}, prefixed_rows={parsed_rows}, consumed_values={cursor}, total_values={values.size}"
   )
 
 
@@ -222,18 +185,8 @@ def read_ivec_row_count(ivec_path: Path) -> int:
       break
     cursor += count
     rows += 1
-  if rows > 0:
+  if rows > 0 and cursor == values.size:
     return rows
-
-  if values.size < 2:
-    return 0
-  header = int(values[0])
-  if header <= 0:
-    return 0
-  if (values.size - 1) % header == 0:
-    return (values.size - 1) // header
-  if values.size % header == 0:
-    return values.size // header
   return 0
 
 def write_ivec_to_ibin(path: Path, ivec_path: Path, query_count: int, k: int = GT_K) -> None:

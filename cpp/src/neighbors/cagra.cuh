@@ -481,8 +481,9 @@ void search(raft::resources const& res,
       // The search plan still requires a valid scalar; each CTA replaces it with its private
       // sampled query rate before deriving the penalty coefficient and retention fraction.
       params_copy.filtering_rate = 0.0f;
-      auto runtime_filter        = detail::CagraSampleFilterWithRuntimeState{
-        sample_filter, estimate.filtering_rates.data(), true};
+      auto runtime_filter =
+        detail::CagraSampleFilterWithRuntimeState<cuvs::neighbors::filtering::udf_filter, true>{
+          sample_filter, estimate.filtering_rates.data()};
       return search_with_filtering<T, IdxT, decltype(runtime_filter), OutputIdxT>(
         res, params_copy, idx, queries, neighbors, distances, runtime_filter);
     }

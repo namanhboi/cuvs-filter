@@ -316,6 +316,181 @@ class spmat_contains_all_adapter final : public udf_filter_adapter {
   std::shared_ptr<spmat_contains_all_storage> storage_;
 };
 
+/** Host representation of the Arxiv range-metadata format. */
+struct arxiv_range_metadata {
+  std::uint32_t rows{};
+  std::uint32_t values_per_row{};
+  std::vector<std::int32_t> values;
+
+  arxiv_range_metadata(std::string const& path, std::uint32_t expected_values_per_row)
+    : values_per_row(expected_values_per_row)
+  {
+    if (values_per_row == 0) {
+      throw std::invalid_argument("Arxiv range metadata row width must be positive");
+    }
+
+    std::ifstream input(path, std::ios::binary | std::ios::ate);
+    if (!input) { throw std::runtime_error("Cannot open Arxiv range metadata: " + path); }
+    const auto file_size = input.tellg();
+    input.seekg(0);
+
+    input.read(reinterpret_cast<char*>(&rows), sizeof(rows));
+    if (!input || rows == 0) {
+      throw std::runtime_error("Invalid Arxiv range metadata header: " + path);
+    }
+    const auto value_count = static_cast<std::uint64_t>(rows) * values_per_row;
+    const auto expected_size =
+      sizeof(rows) + value_count * static_cast<std::uint64_t>(sizeof(std::int32_t));
+    if (file_size < 0 || static_cast<std::uint64_t>(file_size) != expected_size) {
+      throw std::runtime_error("Arxiv range metadata size does not match its header: " + path);
+    }
+
+    values.resize(static_cast<std::size_t>(value_count));
+    input.read(reinterpret_cast<char*>(values.data()),
+               static_cast<std::streamsize>(value_count * sizeof(std::int32_t)));
+    if (!input) { throw std::runtime_error("Truncated Arxiv range metadata: " + path); }
+  }
+
+  [[nodiscard]] auto at(std::uint32_t row, std::uint32_t column) const -> std::int32_t
+  {
+    return values[static_cast<std::size_t>(row) * values_per_row + column];
+  }
+};
+
+struct arxiv_range_device_context {
+  const std::int32_t* base_update_dates{};
+  const std::int32_t* query_ranges{};
+  std::uint32_t base_rows{};
+  std::uint32_t query_rows{};
+  std::uint32_t query_offset{};
+};
+
+struct arxiv_range_storage {
+  arxiv_range_storage(raft::resources const& res,
+                      std::string const& base_path,
+                      std::string const& query_path)
+    : base(base_path, 1),
+      queries(query_path, 2),
+      base_update_dates(base.values.size(), raft::resource::get_cuda_stream(res)),
+      query_ranges(queries.values.size(), raft::resource::get_cuda_stream(res))
+  {
+    for (std::uint32_t query_id = 0; query_id < queries.rows; ++query_id) {
+      if (queries.at(query_id, 0) > queries.at(query_id, 1)) {
+        throw std::runtime_error("Arxiv range metadata contains a start greater than its end");
+      }
+    }
+    auto stream = raft::resource::get_cuda_stream(res);
+    raft::copy(base_update_dates.data(), base.values.data(), base.values.size(), stream);
+    raft::copy(query_ranges.data(), queries.values.data(), queries.values.size(), stream);
+    raft::resource::sync_stream(res);
+  }
+
+  arxiv_range_metadata base;
+  arxiv_range_metadata queries;
+  rmm::device_uvector<std::int32_t> base_update_dates;
+  rmm::device_uvector<std::int32_t> query_ranges;
+};
+
+inline auto arxiv_range_udf_source() -> std::string
+{
+  return R"cpp(
+    struct arxiv_range_device_context {
+      const int32_t* base_update_dates;
+      const int32_t* query_ranges;
+      uint32_t base_rows;
+      uint32_t query_rows;
+      uint32_t query_offset;
+    };
+
+    __device__ bool cuvs_arxiv_range(uint32_t local_query_id,
+                                     source_index_t source_id,
+                                     void* filter_data)
+    {
+      const auto* ctx         = static_cast<const arxiv_range_device_context*>(filter_data);
+      const uint32_t query_id = ctx->query_offset + local_query_id;
+      if (source_id >= ctx->base_rows || query_id >= ctx->query_rows) { return false; }
+      const int32_t update_date = ctx->base_update_dates[source_id];
+      const int32_t range_start = ctx->query_ranges[2 * query_id];
+      const int32_t range_end   = ctx->query_ranges[2 * query_id + 1];
+      return update_date >= range_start && update_date <= range_end;
+    }
+  )cpp";
+}
+
+class arxiv_range_runtime final : public udf_filter_runtime {
+ public:
+  arxiv_range_runtime(raft::resources const& res,
+                      std::shared_ptr<const arxiv_range_storage> storage)
+    : storage_(std::move(storage)),
+      stream_(raft::resource::get_cuda_stream(res)),
+      context_(1, stream_)
+  {
+    set_query_offset(0);
+  }
+
+  void set_query_offset(std::uint32_t query_offset) override
+  {
+    RAFT_EXPECTS(query_offset < storage_->queries.rows,
+                 "Filtered-dataset query offset is out of range");
+    const arxiv_range_device_context context{storage_->base_update_dates.data(),
+                                             storage_->query_ranges.data(),
+                                             storage_->base.rows,
+                                             storage_->queries.rows,
+                                             query_offset};
+    RAFT_CUDA_TRY(
+      cudaMemcpyAsync(context_.data(), &context, sizeof(context), cudaMemcpyHostToDevice, stream_));
+  }
+
+  [[nodiscard]] auto filter() const -> cuvs::neighbors::filtering::udf_filter override
+  {
+    return cuvs::neighbors::filtering::udf_filter{
+      arxiv_range_udf_source(),
+      const_cast<arxiv_range_device_context*>(context_.data()),
+      -1.0f,
+      "cuvs_arxiv_range"};
+  }
+
+ private:
+  std::shared_ptr<const arxiv_range_storage> storage_;
+  rmm::cuda_stream_view stream_;
+  rmm::device_uvector<arxiv_range_device_context> context_;
+};
+
+class arxiv_range_adapter final : public udf_filter_adapter {
+ public:
+  arxiv_range_adapter(raft::resources const& res,
+                      configuration::dataset_conf::udf_filter_conf const& conf)
+    : storage_(std::make_shared<arxiv_range_storage>(
+        res, conf.base_metadata_file, conf.query_metadata_file))
+  {
+  }
+
+  [[nodiscard]] auto name() const -> const char* override { return "arxiv_range"; }
+  [[nodiscard]] auto base_rows() const -> std::uint32_t override { return storage_->base.rows; }
+  [[nodiscard]] auto query_rows() const -> std::uint32_t override { return storage_->queries.rows; }
+  [[nodiscard]] auto arity(std::uint32_t query_id) const -> std::uint32_t override
+  {
+    if (query_id >= query_rows()) { throw std::out_of_range("Filter query id is out of range"); }
+    return 2;
+  }
+  [[nodiscard]] auto passes(std::uint32_t query_id, std::uint32_t candidate_id) const
+    -> bool override
+  {
+    if (query_id >= query_rows() || candidate_id >= base_rows()) { return false; }
+    const auto update_date = storage_->base.at(candidate_id, 0);
+    return update_date >= storage_->queries.at(query_id, 0) &&
+           update_date <= storage_->queries.at(query_id, 1);
+  }
+  [[nodiscard]] auto make_runtime(raft::resources const& res) const
+    -> std::shared_ptr<udf_filter_runtime> override
+  {
+    return std::make_shared<arxiv_range_runtime>(res, storage_);
+  }
+
+ private:
+  std::shared_ptr<arxiv_range_storage> storage_;
+};
+
 inline auto make_udf_filter_adapter(raft::resources const& res,
                                     configuration::dataset_conf::udf_filter_conf const& conf)
   -> std::shared_ptr<udf_filter_adapter>
@@ -323,6 +498,7 @@ inline auto make_udf_filter_adapter(raft::resources const& res,
   if (conf.adapter == "spmat_contains_all") {
     return std::make_shared<spmat_contains_all_adapter>(res, conf);
   }
+  if (conf.adapter == "arxiv_range") { return std::make_shared<arxiv_range_adapter>(res, conf); }
   throw std::runtime_error("Unsupported filtered-dataset adapter: " + conf.adapter);
 }
 
