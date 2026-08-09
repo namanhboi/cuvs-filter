@@ -1,0 +1,52 @@
+{
+  "dataset": {
+    "name": "arxiv-emis-throughput_10000",
+    "base_file": "arxiv-for-fanns-medium/base.fbin",
+    "query_file": "arxiv-for-fanns-medium/emis/throughput_10000/query.fbin",
+    "groundtruth_neighbors_file": "arxiv-for-fanns-medium/emis/throughput_10000/groundtruth.ibin",
+    "distance": "euclidean",
+    "dtype": "float",
+    "filter": {
+      "kind": "udf",
+      "adapter": "spmat_contains_all",
+      "base_metadata_file": "arxiv-for-fanns-medium/emis/throughput_10000/../base_metadata.spmat",
+      "query_metadata_file": "arxiv-for-fanns-medium/emis/throughput_10000/query_metadata.spmat"
+    }
+  },
+  "search_basic_param": {
+    "batch_size": 10000,
+    "k": 10
+  },
+  "index": [
+    {
+      "name": "cagra-g32-ig64",
+      "algo": "cuvs_cagra",
+      "file": "arxiv-for-fanns-medium/cagra_g32_ig64.index",
+      "build_param": {
+        "graph_build_algo": "NN_DESCENT",
+        "graph_degree": 32,
+        "intermediate_graph_degree": 64
+      },
+      "search_params": [
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "max_queries": 512,
+          "itopk": 512,
+          "search_width": 2,
+          "max_iterations": 0,
+          "favor_udf_passing_accumulator": false
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "max_queries": 512,
+          "itopk": 512,
+          "search_width": 2,
+          "max_iterations": 0,
+          "favor_udf_passing_accumulator": true
+        }
+      ]
+    }
+  ]
+}

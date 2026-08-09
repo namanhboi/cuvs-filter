@@ -154,8 +154,20 @@ struct search
         std::max<std::uint32_t>(additional_smem_size, sizeof(scan_op_t::TempStorage));
     }
     if (favor_search_diagnostics::get_active_context() != nullptr) {
-      // The diagnostic child-distance path writes one hash outcome byte per candidate.
-      additional_smem_size = std::max<std::uint32_t>(additional_smem_size, num_itopk_candidates);
+      // The diagnostic child-distance path writes one hash-outcome byte per candidate. FAVOR's
+      // passing accumulator additionally reuses one predicate-outcome byte per candidate.
+      const auto diagnostic_candidate_bytes =
+        num_itopk_candidates * (filter_mode == filtering_mode::FAVOR &&
+                                    cagra_filter_uses_passing_accumulator<SAMPLE_FILTER_T>::value
+                                  ? 2u
+                                  : 1u);
+      additional_smem_size =
+        std::max<std::uint32_t>(additional_smem_size, diagnostic_candidate_bytes);
+    } else if constexpr (cagra_filter_uses_passing_accumulator<SAMPLE_FILTER_T>::value) {
+      // Production FAVOR kernels carry child predicate results from scoring to accumulation.
+      if (filter_mode == filtering_mode::FAVOR) {
+        additional_smem_size = std::max<std::uint32_t>(additional_smem_size, num_itopk_candidates);
+      }
     }
 
     smem_size = base_smem_size + additional_smem_size;

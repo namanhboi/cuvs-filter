@@ -72,8 +72,9 @@ RAFT_DEVICE_INLINE_FUNCTION void favor_observe_passing_candidates(
   const std::uint32_t filter_query_id,
   cagra_sample_filter<SourceIndexT> filter_payload,
   std::uint32_t* const accumulator_lock,
-  std::uint32_t* const diagnostic_observations = nullptr,
-  std::uint32_t* const diagnostic_insertions   = nullptr)
+  const std::uint8_t* const candidate_filter_outcomes = nullptr,
+  std::uint32_t* const diagnostic_observations        = nullptr,
+  std::uint32_t* const diagnostic_insertions          = nullptr)
 {
   if (accumulator_capacity == 0) { return; }
 
@@ -94,10 +95,29 @@ RAFT_DEVICE_INLINE_FUNCTION void favor_observe_passing_candidates(
       active = node != invalid_node;
     }
     if (active) {
-      const auto source =
-        source_indices_ptr == nullptr ? static_cast<SourceIndexT>(node) : source_indices_ptr[node];
-      active =
-        sample_filter<SourceIndexT>(filter_query_id, source, filter_payload.sample_filter_data());
+      // Once the accumulator is full, its kth raw distance can only decrease.  A candidate that
+      // is already strictly worse than this snapshot cannot enter the final top-k, so avoid the
+      // potentially expensive UDF call.  Keep equal-distance candidates: the deterministic graph
+      // id tie-break still has to be resolved by the insertion path.
+      const auto worst_node     = accumulator_indices[accumulator_capacity - 1];
+      const auto worst_distance = accumulator_distances[accumulator_capacity - 1];
+      if (worst_node != invalid_index && worst_distance < candidate_distances[candidate_pos]) {
+        active = false;
+      }
+    }
+    if (active) {
+      if (candidate_filter_outcomes != nullptr) {
+        // FAVOR child scoring has already evaluated every candidate that can affect either its
+        // traversal score or this accumulator.  Reuse that result instead of invoking the linked
+        // UDF a second time.  Outcome 3 means scoring proved the candidate irrelevant before the
+        // predicate was needed.
+        active = candidate_filter_outcomes[candidate_pos] == 1;
+      } else {
+        const auto source = source_indices_ptr == nullptr ? static_cast<SourceIndexT>(node)
+                                                          : source_indices_ptr[node];
+        active =
+          sample_filter<SourceIndexT>(filter_query_id, source, filter_payload.sample_filter_data());
+      }
       if (active) {
         // FAVOR adds penalties only to rejected candidates, so a passing candidate's stored
         // distance is its raw distance in every supported mode.
@@ -478,6 +498,7 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
       query_id + query_id_offset,
       filter_payload,
       passing_accumulator_lock,
+      nullptr,
       diagnostic_summary == nullptr ? nullptr : &diagnostic_summary->accumulator_observations,
       diagnostic_summary == nullptr ? nullptr : &diagnostic_summary->accumulator_insertions);
   }
@@ -939,6 +960,13 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
     __syncthreads();
     // compute the norms between child nodes and query node using JIT version
     _CLK_START();
+    const auto child_candidate_count = search_width * graph_degree;
+    auto* const child_hash_outcomes =
+      DIAGNOSTICS ? reinterpret_cast<std::uint8_t*>(smem_work_ptr) : nullptr;
+    auto* const child_filter_outcomes =
+      FAVOR && filter_payload.uses_passing_accumulator()
+        ? reinterpret_cast<std::uint8_t*>(smem_work_ptr) + (DIAGNOSTICS ? child_candidate_count : 0)
+        : nullptr;
     if constexpr (FAVOR) {
       if (favor_penalty_mode == 2) {
         if (favor_packed_bitset && source_indices_ptr == nullptr) {
@@ -969,7 +997,11 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
             0,
             nullptr,
             0,
-            reinterpret_cast<std::uint8_t*>(smem_work_ptr));
+            child_hash_outcomes,
+            child_filter_outcomes,
+            passing_accumulator_indices,
+            passing_accumulator_distances,
+            filter_payload.uses_passing_accumulator() ? top_k : 0);
         } else if (favor_packed_bitset) {
           compute_favor_retention_safe_distance_to_child_nodes_jit<IndexT,
                                                                    DistanceT,
@@ -998,7 +1030,11 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
             0,
             nullptr,
             0,
-            reinterpret_cast<std::uint8_t*>(smem_work_ptr));
+            child_hash_outcomes,
+            child_filter_outcomes,
+            passing_accumulator_indices,
+            passing_accumulator_distances,
+            filter_payload.uses_passing_accumulator() ? top_k : 0);
         } else {
           // UDF predicates cannot use the packed-bitset specialization.  Apply the same
           // retention-safe scoring through the generic linked sample_filter path.
@@ -1029,7 +1065,11 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
             0,
             nullptr,
             0,
-            reinterpret_cast<std::uint8_t*>(smem_work_ptr));
+            child_hash_outcomes,
+            child_filter_outcomes,
+            passing_accumulator_indices,
+            passing_accumulator_distances,
+            filter_payload.uses_passing_accumulator() ? top_k : 0);
         }
       } else {
         compute_favor_distance_to_child_nodes_jit<IndexT,
@@ -1059,7 +1099,11 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
           0,
           nullptr,
           0,
-          reinterpret_cast<std::uint8_t*>(smem_work_ptr));
+          child_hash_outcomes,
+          child_filter_outcomes,
+          passing_accumulator_indices,
+          passing_accumulator_distances,
+          filter_payload.uses_passing_accumulator() ? top_k : 0);
       }
     } else {
       compute_distance_to_child_nodes_jit<IndexT, DistanceT, DataT, 1, DIAGNOSTICS>(
@@ -1077,7 +1121,7 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
         search_width,
         nullptr,
         0,
-        reinterpret_cast<std::uint8_t*>(smem_work_ptr));
+        child_hash_outcomes);
     }
     // Critical: __syncthreads() must be reached by ALL threads
     // If any thread is stuck in compute_distance_to_child_nodes_jit, this will hang
@@ -1098,6 +1142,7 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
         query_id + query_id_offset,
         filter_payload,
         passing_accumulator_lock,
+        child_filter_outcomes,
         diagnostic_summary == nullptr ? nullptr : &diagnostic_summary->accumulator_observations,
         diagnostic_summary == nullptr ? nullptr : &diagnostic_summary->accumulator_insertions);
     }
@@ -1296,57 +1341,63 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
     __syncthreads();
   }
 
-  // Post process for filtering - use extern sample_filter function
-  for (unsigned i = threadIdx.x; i < internal_topk + search_width * graph_degree; i += blockDim.x) {
-    const auto node_id = result_indices_buffer[i] & ~index_msb_1_mask;
-    bool passes_filter = true;
-    if (node_id != (invalid_index & ~index_msb_1_mask)) {
-      if constexpr (FAVOR) {
-        if (favor_penalty_mode == 2 && filter_payload.is_bitset()) {
-          const auto source_id = to_source_index(node_id);
-          passes_filter        = favor_packed_bitset
-                                   ? device::favor_packed_bitset_test(favor_bitset.bitset_ptr, source_id)
-                                   : device::favor_bitset_test(favor_bitset, source_id);
+  // Accumulator output is already predicate-clean and raw-distance sorted.  The legacy filtering,
+  // compaction, and refill below only mutate the fused traversal buffer, which is discarded when
+  // the accumulator supplies the final output.  Skipping it removes up to
+  // internal_topk + search_width * graph_degree redundant UDF calls per query.
+  if (!filter_payload.uses_passing_accumulator()) {
+    for (unsigned i = threadIdx.x; i < internal_topk + search_width * graph_degree;
+         i += blockDim.x) {
+      const auto node_id = result_indices_buffer[i] & ~index_msb_1_mask;
+      bool passes_filter = true;
+      if (node_id != (invalid_index & ~index_msb_1_mask)) {
+        if constexpr (FAVOR) {
+          if (favor_penalty_mode == 2 && filter_payload.is_bitset()) {
+            const auto source_id = to_source_index(node_id);
+            passes_filter        = favor_packed_bitset
+                                     ? device::favor_packed_bitset_test(favor_bitset.bitset_ptr, source_id)
+                                     : device::favor_bitset_test(favor_bitset, source_id);
+          } else {
+            passes_filter = sample_filter<SourceIndexT>(query_id + query_id_offset,
+                                                        to_source_index(node_id),
+                                                        filter_payload.sample_filter_data());
+          }
         } else {
           passes_filter = sample_filter<SourceIndexT>(query_id + query_id_offset,
                                                       to_source_index(node_id),
                                                       filter_payload.sample_filter_data());
         }
-      } else {
-        passes_filter = sample_filter<SourceIndexT>(query_id + query_id_offset,
-                                                    to_source_index(node_id),
-                                                    filter_payload.sample_filter_data());
+      }
+      if (!passes_filter) {
+        result_distances_buffer[i] = utils::get_max_value<DistanceT>();
+        result_indices_buffer[i]   = invalid_index;
       }
     }
-    if (!passes_filter) {
-      result_distances_buffer[i] = utils::get_max_value<DistanceT>();
-      result_indices_buffer[i]   = invalid_index;
-    }
-  }
 
-  __syncthreads();
-  // Preserve logical distance order while compacting the physically swizzled bitonic buffer.
-  compact_invalid_to_end_of_list<TOPK_BY_BITONIC_SORT>(
-    result_indices_buffer, result_distances_buffer, internal_topk);
-
-  // If the sufficient number of valid indexes are not in the internal topk, pick up from the
-  // candidate list.
-  const auto topk_boundary_position =
-    TOPK_BY_BITONIC_SORT ? device::swizzling(top_k - 1) : top_k - 1;
-  if (top_k > internal_topk || (result_indices_buffer[topk_boundary_position] &
-                                ~index_msb_1_mask) == (invalid_index & ~index_msb_1_mask)) {
     __syncthreads();
-    topk_by_bitonic_sort_and_merge<BITONIC_SORT_AND_MERGE_MULTI_WARPS>(
-      result_distances_buffer,
-      result_indices_buffer,
-      max_itopk,
-      internal_topk,
-      result_distances_buffer + internal_topk,
-      result_indices_buffer + internal_topk,
-      max_candidates,
-      search_width * graph_degree,
-      topk_ws,
-      (iter == 0));
+    // Preserve logical distance order while compacting the physically swizzled bitonic buffer.
+    compact_invalid_to_end_of_list<TOPK_BY_BITONIC_SORT>(
+      result_indices_buffer, result_distances_buffer, internal_topk);
+
+    // If the sufficient number of valid indexes are not in the internal topk, pick up from the
+    // candidate list.
+    const auto topk_boundary_position =
+      TOPK_BY_BITONIC_SORT ? device::swizzling(top_k - 1) : top_k - 1;
+    if (top_k > internal_topk || (result_indices_buffer[topk_boundary_position] &
+                                  ~index_msb_1_mask) == (invalid_index & ~index_msb_1_mask)) {
+      __syncthreads();
+      topk_by_bitonic_sort_and_merge<BITONIC_SORT_AND_MERGE_MULTI_WARPS>(
+        result_distances_buffer,
+        result_indices_buffer,
+        max_itopk,
+        internal_topk,
+        result_distances_buffer + internal_topk,
+        result_indices_buffer + internal_topk,
+        max_candidates,
+        search_width * graph_degree,
+        topk_ws,
+        (iter == 0));
+    }
   }
   __syncthreads();
 

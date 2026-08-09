@@ -1,0 +1,201 @@
+#+title: SINGLE_CTA Passing-Accumulator Throughput Optimization
+
+* Verdict
+
+The bounded passing-result accumulator can be made substantially cheaper without changing the
+public API or its search results.  The retained kernel changes improve geometric-mean QPS over the
+previous implementation by:
+
+| Workload | Default + accumulator | FAVOR + accumulator |
+|-
+| YFCC-10M | +19.20% | +31.68% |
+| ArXiv EM | +0.89% | +1.81% |
+| ArXiv EMIS | +0.43% | +0.73% |
+| ArXiv R | +0.44% | +1.24% |
+
+YFCC is the clearest throughput win: every one of its 64 matched accumulator cells improved.  The
+worst improvements were +11.18% for default + accumulator and +16.85% for FAVOR + accumulator.
+The ArXiv gains are smaller because each candidate requires a 4,096-dimensional float distance;
+distance work dominates the UDF and accumulator bookkeeping.  ArXiv still confirms that the
+optimized path is correct across easy, range, and strongly negatively correlated predicates.
+
+The optimization does not solve insufficient traversal at B0.  It makes retaining passing results
+cheaper.  In particular, YFCC still needs deeper exploration to reach 0.905 recall, and EMIS still
+needs a larger budget despite the accumulator's large retention benefit.
+
+* Scope and compatibility
+
+- SINGLE_CTA only; MULTI_CTA behavior is unchanged.
+- Generic UDF and FAVOR retention-safe accumulator paths are covered.
+- No public fields, signatures, defaults, or serialized formats changed.
+- Accumulator-disabled default CAGRA remains on its original hot path.  Its YFCC geometric-mean QPS
+  changed by -0.09%, and its ArXiv change is within -0.01% to +0.03%, which is benchmark noise.
+- Both FAVOR throughput curves include per-query selectivity sampling end to end.  Default CAGRA
+  performs no selectivity estimation.
+
+* Accumulator invariant
+
+For each query, the accumulator stores at most =k= candidates that pass the UDF, ordered by raw
+distance and graph-id tie-break.  Its final entry is the current kth passing result.  Once the
+accumulator is full, this raw-distance threshold can only decrease.
+
+Therefore a new candidate whose raw distance is strictly worse than a full accumulator's current
+threshold cannot enter the final top-k.  It is safe to discard that candidate before invoking the
+UDF.  Equal-distance candidates are not discarded because the graph-id tie-break can still change
+the result.
+
+The accumulator remains passive with respect to traversal: its contents do not seed, score, stop,
+or otherwise change the fused CAGRA frontier.  It only changes which already-discovered passing
+candidates are retained for final output.
+
+* Retained optimizations
+
+** Threshold pruning before the UDF
+
+=favor_observe_passing_candidates= snapshots the kth accumulator entry before evaluating a
+candidate's UDF.  Strictly worse candidates are skipped.  A concurrent insertion can only lower
+the kth threshold, so a stale snapshot can cause extra work but cannot incorrectly discard a
+candidate.
+
+** Reuse FAVOR's child predicate outcome
+
+FAVOR scoring and the passing accumulator previously evaluated the same child predicate
+independently.  The distance/scoring phase now writes one byte per child into temporary shared
+memory:
+
+| Value | Meaning |
+|-
+| 0 | invalid or unprocessed child |
+| 1 | UDF passed |
+| 2 | UDF rejected |
+| 3 | valid child whose predicate was unnecessary for scoring and accumulation |
+
+The accumulator consumes this byte instead of invoking the UDF again.  The UDF is evaluated during
+child scoring only if the candidate can affect FAVOR scoring or can still enter the accumulator.
+The scratch space is allocated only for FAVOR + accumulator.  Diagnostic kernels retain their
+independent hash-outcome byte and receive a separate predicate-outcome region.
+
+This also removes pointless child UDF work from FAVOR legacy configurations when the effective
+child penalty is zero.  On YFCC, FAVOR without the accumulator improves by +29.65% geometric-mean
+QPS with recall unchanged.
+
+** Skip discarded legacy postprocessing
+
+When the accumulator supplies final neighbors and raw distances, the fused frontier's legacy UDF
+filtering, invalid compaction, and refill are discarded.  Those stages are now skipped entirely for
+accumulator output.  Accumulator-disabled searches still execute the original postprocessing.
+
+* Rejected experiments
+
+** Single-warp lock-free shared insertion
+
+A specialized single-warp insertion path serialized winner selection without the shared lock.  It
+was flat to slightly slower at B0 and about 0.8% slower in a representative deep traversal.  After
+threshold pruning, relatively few candidates reach insertion, so lock contention is no longer the
+dominant cost.  The experiment was fully reverted.
+
+** Fuse the default-path UDF into distance computation
+
+Evaluating the default accumulator's UDF in the distance lead lane regressed B0 QPS by about 5.5%
+and deep-traversal QPS by about 19%.  Random metadata reads moved onto the distance critical path
+and reduced latency hiding.  The default distance path was restored unchanged.
+
+** Persistent register-owned accumulator
+
+This was not implemented.  The same JIT kernel binary serves accumulator-enabled and disabled
+modes, so persistent per-thread register ownership could reduce occupancy for every mode.  The
+measured lock-free experiment also showed that insertion was no longer the limiting component.
+
+* YFCC-10M results
+
+The throughput sweep contains 64 matched =(L, W, max_iterations)= cells for each of four methods,
+10,000 queries per cell, one external repetition after warmup, and end-to-end FAVOR sampling.
+Recall changed by at most 0.00037 relative to the previous sweep.
+
+| Variant | Geometric-mean QPS change | Worst cell | Median cell |
+|-
+| default CAGRA | -0.09% | -1.23% | -0.15% |
+| default + accumulator | +19.20% | +11.18% | +18.36% |
+| FAVOR | +29.65% | +5.04% | +32.17% |
+| FAVOR + accumulator | +31.68% | +16.85% | +32.19% |
+
+Representative cells:
+
+| Variant | Parameters | Old QPS | New QPS | Recall |
+|-
+| default + accumulator | B0, L=64, W=1 | 92.70k | 122.77k | 0.4862 |
+| FAVOR + accumulator | B0, L=64, W=1 | 54.57k | 72.65k | 0.4528 |
+| default + accumulator | L=64, W=4, max_iter=2088 | 2.27k | 2.57k | 0.9120 |
+| FAVOR + accumulator | L=64, W=4, max_iter=2088 | 1.79k | 2.15k | 0.9091 |
+
+[[file:benchmarks/favor/yfcc_udf/results_accumulator_optimized_20260809/plots/qps_recall_four_method_sweep.png]]
+
+Detailed measurement record: =benchmarks/favor/YFCC_ACCUMULATOR_THROUGHPUT_OPTIMIZATION_REPORT.org=
+
+* ArXiv results
+
+The throughput sweep contains 256 rows for each of EM, EMIS, and R: the same 64 matched parameter
+cells for four methods.  Every throughput row and every short correctness-gate row reports zero
+filter violations and zero invalid-sentinel errors.  Recall is unchanged from the previous build
+apart from at most 0.00002 run noise in accumulator-disabled traversal.
+
+| Predicate | Default | Default + accumulator | FAVOR | FAVOR + accumulator |
+|-
+| EM | +0.02% | +0.89% | +2.30% | +1.81% |
+| EMIS | -0.00% | +0.43% | +1.20% | +0.73% |
+| R | -0.01% | +0.44% | +1.63% | +1.24% |
+
+The small optimization percentages are consistent with Amdahl's law.  ArXiv vectors contain 4,096
+float32 coordinates (16 KiB per candidate), whereas YFCC contains 192 uint8 coordinates (192 B per
+candidate).  The retained changes reduce UDF and accumulator work, not distance evaluations.
+
+EMIS demonstrates why the accumulator itself is still valuable even when optimizing it barely
+changes total QPS:
+
+| Comparison over 64 matched EMIS cells | Geometric-mean QPS delta | Mean recall delta |
+|-
+| default -> default + accumulator | -0.35% | +0.2100 |
+| FAVOR -> FAVOR + accumulator | -0.82% | +0.2167 |
+
+At EMIS B0 (=L=64, W=1, max_iterations=0=), default recall rises from 0.38886 to 0.54956
+for a QPS change from 28.63k to 28.34k.  FAVOR recall rises from 0.38558 to 0.55716 while QPS
+changes from 27.90k to 27.56k.  The accumulator fixes a major result-retention failure, but the
+remaining B0 gap is an exploration-depth problem.
+
+[[file:benchmarks/favor/arxiv_udf/results_accumulator_optimized_20260809/plots/qps_recall_sweep_em.png]]
+
+[[file:benchmarks/favor/arxiv_udf/results_accumulator_optimized_20260809/plots/qps_recall_sweep_emis.png]]
+
+[[file:benchmarks/favor/arxiv_udf/results_accumulator_optimized_20260809/plots/qps_recall_sweep_r.png]]
+
+Detailed measurement record: =benchmarks/favor/ARXIV_ACCUMULATOR_THROUGHPUT_OPTIMIZATION_REPORT.org=
+
+* Verification
+
+- Build targets: =cuvs=, =NEIGHBORS_ANN_CAGRA_FILTER_UDF_TEST=, and =CUVS_CAGRA_ANN_BENCH=.
+- Full UDF test binary: 42 tests run, 30 passed, 12 intentionally skipped for non-SINGLE_CTA
+  parameterizations, zero failures.
+- New passivity test compares accumulator output with unfiltered CAGRA for
+  =k in {1,10,31,32,33,64}=, covering both sides of the 32-lane boundary.
+- YFCC throughput: 256/256 rows complete and correct.
+- ArXiv throughput: 768/768 rows complete and correct.
+
+* Reproduction
+
+#+begin_src sh
+cmake --build cpp/build -j 8 --target cuvs NEIGHBORS_ANN_CAGRA_FILTER_UDF_TEST CUVS_CAGRA_ANN_BENCH
+LD_PRELOAD=$PWD/cpp/build/libcuvs.so cpp/build/gtests/NEIGHBORS_ANN_CAGRA_FILTER_UDF_TEST
+
+YFCC_RESULT_ROOT=$PWD/benchmarks/favor/yfcc_udf/results_accumulator_optimized_20260809 \
+  benchmarks/favor/yfcc_udf/run_experiment.sh accumulator_comparison
+python benchmarks/favor/yfcc_udf/analyze.py --sweep-only \
+  --result-root benchmarks/favor/yfcc_udf/results_accumulator_optimized_20260809 \
+  --data-root datasets \
+  --report benchmarks/favor/YFCC_ACCUMULATOR_THROUGHPUT_OPTIMIZATION_REPORT.org
+
+ARXIV_RESULT_ROOT=$PWD/benchmarks/favor/arxiv_udf/results_accumulator_optimized_20260809 \
+  benchmarks/favor/arxiv_udf/run_experiment.sh all
+python benchmarks/favor/arxiv_udf/analyze.py \
+  --result-root benchmarks/favor/arxiv_udf/results_accumulator_optimized_20260809 \
+  --report benchmarks/favor/ARXIV_ACCUMULATOR_THROUGHPUT_OPTIMIZATION_REPORT.org
+#+end_src

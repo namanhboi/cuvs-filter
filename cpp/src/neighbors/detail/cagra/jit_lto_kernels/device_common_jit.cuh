@@ -420,7 +420,11 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_child_nodes_jit_impl(
   const bool favor_retention_safe                  = false,
   const DistanceT favor_retention_fraction         = static_cast<DistanceT>(0.5),
   const cuvs::neighbors::detail::bitset_filter_data_t<SourceIndexT> favor_bitset = {},
-  std::uint8_t* diagnostic_hash_outcomes                                         = nullptr)
+  std::uint8_t* diagnostic_hash_outcomes                                         = nullptr,
+  std::uint8_t* filter_outcomes                                                  = nullptr,
+  const IndexT* accumulator_indices                                              = nullptr,
+  const DistanceT* accumulator_distances                                         = nullptr,
+  const std::uint32_t accumulator_capacity                                       = 0)
 {
   constexpr IndexT index_msb_1_mask = utils::gen_index_msb_1_mask<IndexT>::value;
   constexpr IndexT invalid_index    = ~static_cast<IndexT>(0);
@@ -429,6 +433,7 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_child_nodes_jit_impl(
   // necessary.
   for (uint32_t i = threadIdx.x; i < knn_k * search_width; i += blockDim.x) {
     if constexpr (RECORD_HASH_OUTCOME) { diagnostic_hash_outcomes[i] = 0; }
+    if (filter_outcomes != nullptr) { filter_outcomes[i] = 0; }
     const IndexT smem_parent_id = parent_indices[i / knn_k];
     IndexT child_id             = invalid_index;
     if (smem_parent_id != invalid_index) {
@@ -493,29 +498,45 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_child_nodes_jit_impl(
     if (valid_i && lead_lane) {
       auto final_dist = child_dist;
       if constexpr (APPLY_FAVOR) {
+        // Predicate status is also consumed by the optional passing-result accumulator.  Once
+        // that accumulator is full, its raw-distance threshold only improves, so candidates
+        // strictly beyond the current kth distance never need a predicate evaluation for output.
+        const bool accumulator_can_accept =
+          filter_outcomes != nullptr && accumulator_capacity != 0 &&
+          (accumulator_indices[accumulator_capacity - 1] == invalid_index ||
+           !(accumulator_distances[accumulator_capacity - 1] < child_dist));
+        const bool scoring_needs_filter =
+          favor_penalty > DistanceT{0} &&
+          (!favor_retention_safe ||
+           (favor_retention_fraction > DistanceT{0} && child_dist < favor_retention_cutoff));
+        const bool evaluate_filter = accumulator_can_accept || scoring_needs_filter;
+        bool passes_filter         = true;
+        if (filter_outcomes != nullptr && !evaluate_filter) {
+          // The candidate is valid but provably irrelevant to both scoring and accumulation.
+          filter_outcomes[j] = 3;
+        }
         if constexpr (RETENTION_SAFE_BITSET_ONLY) {
-          // Invalid candidates have upper-bound distance and fail this comparison. Combining
-          // validity and retention avoids a second predicate in the bitset-only hot path.
-          if (favor_penalty > DistanceT{0} && child_dist < favor_retention_cutoff) {
+          if (evaluate_filter) {
             const auto source_id = DIRECT_SOURCE_ID ? static_cast<SourceIndexT>(child_id)
                                                     : (source_indices_ptr == nullptr
                                                          ? static_cast<SourceIndexT>(child_id)
                                                          : source_indices_ptr[child_id]);
-            const bool passes_filter =
-              PACKED_BITSET ? favor_packed_bitset_test(favor_bitset.bitset_ptr, source_id)
-                            : favor_bitset_test(favor_bitset, source_id);
-            if (!passes_filter) {
+            passes_filter        = PACKED_BITSET
+                                     ? favor_packed_bitset_test(favor_bitset.bitset_ptr, source_id)
+                                     : favor_bitset_test(favor_bitset, source_id);
+            if (!passes_filter && scoring_needs_filter) {
               final_dist += favor_effective_penalty(
                 child_dist, favor_penalty, favor_retention_cutoff, true, favor_retention_fraction);
             }
           }
         } else {
-          if (child_id != invalid_index) {
+          if (evaluate_filter) {
             const auto source_id = source_indices_ptr == nullptr
                                      ? static_cast<SourceIndexT>(child_id)
                                      : source_indices_ptr[child_id];
-            if (!cuvs::neighbors::detail::sample_filter<SourceIndexT>(
-                  query_id, source_id, filter_payload.sample_filter_data())) {
+            passes_filter        = cuvs::neighbors::detail::sample_filter<SourceIndexT>(
+              query_id, source_id, filter_payload.sample_filter_data());
+            if (!passes_filter && scoring_needs_filter) {
               final_dist += favor_effective_penalty(child_dist,
                                                     favor_penalty,
                                                     favor_retention_cutoff,
@@ -523,6 +544,9 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_child_nodes_jit_impl(
                                                     favor_retention_fraction);
             }
           }
+        }
+        if (filter_outcomes != nullptr && evaluate_filter) {
+          filter_outcomes[j] = passes_filter ? 1 : 2;
         }
       }
       result_child_distances_ptr[j] = final_dist;
@@ -548,9 +572,13 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_child_nodes_jit(
   const IndexT* __restrict__ parent_indices,
   const IndexT* __restrict__ internal_topk_list,
   const uint32_t search_width,
-  int* __restrict__ result_position      = nullptr,
-  const int max_result_position          = 0,
-  std::uint8_t* diagnostic_hash_outcomes = nullptr)
+  int* __restrict__ result_position        = nullptr,
+  const int max_result_position            = 0,
+  std::uint8_t* diagnostic_hash_outcomes   = nullptr,
+  std::uint8_t* filter_outcomes            = nullptr,
+  const IndexT* accumulator_indices        = nullptr,
+  const DistanceT* accumulator_distances   = nullptr,
+  const std::uint32_t accumulator_capacity = 0)
 {
   compute_distance_to_child_nodes_jit_impl<false,
                                            IndexT,
@@ -583,7 +611,11 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_child_nodes_jit(
                                                                 false,
                                                                 static_cast<DistanceT>(0.5),
                                                                 {},
-                                                                diagnostic_hash_outcomes);
+                                                                diagnostic_hash_outcomes,
+                                                                filter_outcomes,
+                                                                accumulator_indices,
+                                                                accumulator_distances,
+                                                                accumulator_capacity);
 }
 
 template <typename IndexT,
@@ -614,7 +646,11 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_favor_distance_to_child_nodes_jit(
   const uint32_t traversed_hash_bitlen       = 0,
   int* __restrict__ result_position          = nullptr,
   const int max_result_position              = 0,
-  std::uint8_t* diagnostic_hash_outcomes     = nullptr)
+  std::uint8_t* diagnostic_hash_outcomes     = nullptr,
+  std::uint8_t* filter_outcomes              = nullptr,
+  const IndexT* accumulator_indices          = nullptr,
+  const DistanceT* accumulator_distances     = nullptr,
+  const std::uint32_t accumulator_capacity   = 0)
 {
   compute_distance_to_child_nodes_jit_impl<true,
                                            IndexT,
@@ -647,7 +683,11 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_favor_distance_to_child_nodes_jit(
                                                                 favor_retention_safe,
                                                                 favor_retention_fraction,
                                                                 {},
-                                                                diagnostic_hash_outcomes);
+                                                                diagnostic_hash_outcomes,
+                                                                filter_outcomes,
+                                                                accumulator_indices,
+                                                                accumulator_distances,
+                                                                accumulator_capacity);
 }
 
 template <typename IndexT,
@@ -678,7 +718,11 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_favor_retention_safe_distance_to_child_
   const uint32_t traversed_hash_bitlen       = 0,
   int* __restrict__ result_position          = nullptr,
   const int max_result_position              = 0,
-  std::uint8_t* diagnostic_hash_outcomes     = nullptr)
+  std::uint8_t* diagnostic_hash_outcomes     = nullptr,
+  std::uint8_t* filter_outcomes              = nullptr,
+  const IndexT* accumulator_indices          = nullptr,
+  const DistanceT* accumulator_distances     = nullptr,
+  const std::uint32_t accumulator_capacity   = 0)
 {
   compute_distance_to_child_nodes_jit_impl<true,
                                            IndexT,
@@ -711,7 +755,11 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_favor_retention_safe_distance_to_child_
                                                                 true,
                                                                 favor_retention_fraction,
                                                                 favor_bitset,
-                                                                diagnostic_hash_outcomes);
+                                                                diagnostic_hash_outcomes,
+                                                                filter_outcomes,
+                                                                accumulator_indices,
+                                                                accumulator_distances,
+                                                                accumulator_capacity);
 }
 
 }  // namespace cuvs::neighbors::cagra::detail::device

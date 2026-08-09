@@ -139,14 +139,15 @@ class CagraUdfFilterTest : public ::testing::TestWithParam<cagra::search_algo> {
 
   cagra_search_result search(cuvs::neighbors::filtering::base_filter const& filter,
                              float filtering_rate = -1.0f,
-                             bool favor           = false)
+                             bool favor           = false,
+                             int64_t result_k     = k)
   {
-    auto neighbors = raft::make_device_matrix<uint32_t, int64_t>(res, n_queries, k);
-    auto distances = raft::make_device_matrix<float, int64_t>(res, n_queries, k);
+    auto neighbors = raft::make_device_matrix<uint32_t, int64_t>(res, n_queries, result_k);
+    auto distances = raft::make_device_matrix<float, int64_t>(res, n_queries, result_k);
 
     cagra::search_params search_params;
     search_params.algo              = GetParam();
-    search_params.itopk_size        = 64;
+    search_params.itopk_size        = std::max<int64_t>(64, result_k);
     search_params.max_queries       = 2;
     search_params.thread_block_size = 256;
     search_params.filtering_rate    = filtering_rate;
@@ -166,8 +167,8 @@ class CagraUdfFilterTest : public ::testing::TestWithParam<cagra::search_algo> {
                   filter);
 
     auto stream = raft::resource::get_cuda_stream(res);
-    cagra_search_result result{std::vector<uint32_t>(n_queries * k),
-                               std::vector<float>(n_queries * k)};
+    cagra_search_result result{std::vector<uint32_t>(n_queries * result_k),
+                               std::vector<float>(n_queries * result_k)};
     raft::copy(result.neighbors.data(), neighbors.data_handle(), result.neighbors.size(), stream);
     raft::copy(result.distances.data(), distances.data_handle(), result.distances.size(), stream);
     raft::resource::sync_stream(res);
@@ -178,15 +179,16 @@ class CagraUdfFilterTest : public ::testing::TestWithParam<cagra::search_algo> {
     cuvs::neighbors::filtering::base_filter const& filter,
     bool passing_accumulator,
     const float* sampled_rates = nullptr,
-    cagra::search_algo algo    = cagra::search_algo::SINGLE_CTA)
+    cagra::search_algo algo    = cagra::search_algo::SINGLE_CTA,
+    int64_t result_k           = k)
   {
-    auto neighbors = raft::make_device_matrix<std::int64_t, int64_t>(res, n_queries, k);
-    auto distances = raft::make_device_matrix<float, int64_t>(res, n_queries, k);
+    auto neighbors = raft::make_device_matrix<std::int64_t, int64_t>(res, n_queries, result_k);
+    auto distances = raft::make_device_matrix<float, int64_t>(res, n_queries, result_k);
 
     cagra::search_params search_params;
     search_params.algo              = algo;
     search_params.filter_mode       = cagra::filtering_mode::DEFAULT;
-    search_params.itopk_size        = 64;
+    search_params.itopk_size        = std::max<int64_t>(64, result_k);
     search_params.max_queries       = 2;
     search_params.thread_block_size = 256;
 
@@ -202,9 +204,9 @@ class CagraUdfFilterTest : public ::testing::TestWithParam<cagra::search_algo> {
       passing_accumulator);
 
     auto stream = raft::resource::get_cuda_stream(res);
-    std::vector<std::int64_t> host_neighbors(n_queries * k);
-    cagra_search_result result{std::vector<uint32_t>(n_queries * k),
-                               std::vector<float>(n_queries * k)};
+    std::vector<std::int64_t> host_neighbors(n_queries * result_k);
+    cagra_search_result result{std::vector<uint32_t>(n_queries * result_k),
+                               std::vector<float>(n_queries * result_k)};
     raft::copy(host_neighbors.data(), neighbors.data_handle(), host_neighbors.size(), stream);
     raft::copy(result.distances.data(), distances.data_handle(), result.distances.size(), stream);
     raft::resource::sync_stream(res);
@@ -391,6 +393,21 @@ TEST_P(CagraUdfFilterTest, DefaultPassingAccumulatorRejectsRatesAndMultiCta)
   EXPECT_THROW(
     search_default_with_accumulator(udf_filter, true, nullptr, cagra::search_algo::MULTI_CTA),
     std::exception);
+}
+
+TEST_P(CagraUdfFilterTest, PassingAccumulatorMatchesAcceptAllAcrossTopKBoundaries)
+{
+  if (GetParam() != cagra::search_algo::SINGLE_CTA) { GTEST_SKIP(); }
+
+  cuvs::neighbors::filtering::none_sample_filter no_filter;
+  cuvs::neighbors::filtering::udf_filter udf_filter(accept_all_udf_source(), nullptr, 0.0f);
+  for (const auto result_k :
+       {int64_t{1}, int64_t{10}, int64_t{31}, int64_t{32}, int64_t{33}, int64_t{64}}) {
+    const auto expected = search(no_filter, 0.0f, false, result_k);
+    const auto actual   = search_default_with_accumulator(
+      udf_filter, true, nullptr, cagra::search_algo::SINGLE_CTA, result_k);
+    expect_same_results(expected, actual);
+  }
 }
 
 TEST_P(CagraUdfFilterTest, RepeatedUdfSearchWithSameSourceMatches)
