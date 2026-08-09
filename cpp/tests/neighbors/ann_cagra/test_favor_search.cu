@@ -55,11 +55,14 @@ struct favor_policy_result {
   std::uint32_t finite_count;
   float penalty;
   float cutoff;
+  float reference_penalty;
 };
 
 template <bool Swizzled>
 __global__ void evaluate_favor_policy_kernel(const float* distances,
                                              std::uint32_t retained_size,
+                                             float filtering_rate,
+                                             float delta_d,
                                              favor_policy_result* result)
 {
   if (threadIdx.x != 0) { return; }
@@ -69,6 +72,8 @@ __global__ void evaluate_favor_policy_kernel(const float* distances,
   result->penalty =
     detail::device::favor_query_local_penalty<Swizzled>(distances, finite_count, 1000.0f, 1.0f);
   result->cutoff = detail::device::favor_retention_cutoff<Swizzled>(distances, finite_count);
+  result->reference_penalty =
+    detail::device::favor_reference_penalty_device(filtering_rate, retained_size, delta_d);
 }
 
 template <bool Swizzled>
@@ -281,8 +286,10 @@ void check_favor_policy_layout(std::uint32_t retained_size, std::uint32_t finite
   rmm::device_uvector<float> distances(retained_size, stream);
   rmm::device_uvector<favor_policy_result> result(1, stream);
   raft::copy(distances.data(), host_distances.data(), retained_size, stream);
+  constexpr float filtering_rate = 0.9985f;
+  constexpr float delta_d        = 695.924f;
   evaluate_favor_policy_kernel<Swizzled>
-    <<<1, 1, 0, stream>>>(distances.data(), retained_size, result.data());
+    <<<1, 1, 0, stream>>>(distances.data(), retained_size, filtering_rate, delta_d, result.data());
   RAFT_CUDA_TRY(cudaPeekAtLastError());
 
   favor_policy_result host_result{};
@@ -293,6 +300,9 @@ void check_favor_policy_layout(std::uint32_t retained_size, std::uint32_t finite
   EXPECT_EQ(
     host_result.cutoff,
     finite_count == 0 ? std::numeric_limits<float>::max() : static_cast<float>(finite_count));
+  EXPECT_NEAR(host_result.reference_penalty,
+              detail::favor_reference_penalty(filtering_rate, retained_size, delta_d),
+              1e-3f);
 }
 
 TEST(CagraFavorPolicyTest, UsesLogicalRanksAcrossSwizzleBoundaries)

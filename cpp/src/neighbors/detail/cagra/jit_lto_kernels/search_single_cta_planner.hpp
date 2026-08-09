@@ -31,15 +31,39 @@ struct CagraSingleCtaSearchPlanner
                               bool /*is_vpq*/,
                               uint32_t /*pq_bits*/,
                               uint32_t /*pq_len*/,
-                              bool persistent = false,
-                              bool favor      = false,
+                              bool persistent  = false,
+                              bool favor       = false,
                               bool diagnostics = false)
     : CagraPlannerBase<DataTag, IndexTag, DistanceTag, QueryTag, CodebookTag, SampleFilterJitTag>(
         persistent ? "search_single_cta_p"
-                   : (diagnostics ? "search_single_cta_favor_diagnostic"
+                   : (diagnostics ? (favor ? "search_single_cta_favor_diagnostic"
+                                           : "search_single_cta_default_diagnostic")
                                   : (favor ? "search_single_cta_favor" : "search_single_cta")),
         launcher_jit_cache)
   {
+  }
+
+  void add_default_diagnostic_kernel_fragment(bool topk_by_bitonic_sort,
+                                              bool bitonic_sort_and_merge_multi_warps)
+  {
+    auto add = [&]<bool TopkByBitonic, bool MultiWarpMerge>() {
+      this->template add_static_fragment<
+        fragment_tag_search_single_cta_default_diagnostic<DataTag,
+                                                          SourceIndexTag,
+                                                          IndexTag,
+                                                          DistanceTag,
+                                                          TopkByBitonic,
+                                                          MultiWarpMerge>>();
+    };
+    if (topk_by_bitonic_sort && bitonic_sort_and_merge_multi_warps) {
+      add.template operator()<true, true>();
+    } else if (topk_by_bitonic_sort) {
+      add.template operator()<true, false>();
+    } else if (bitonic_sort_and_merge_multi_warps) {
+      add.template operator()<false, true>();
+    } else {
+      add.template operator()<false, false>();
+    }
   }
 
   void add_search_kernel_fragment(bool topk_by_bitonic_sort,
@@ -115,13 +139,13 @@ struct CagraSingleCtaSearchPlanner
   {
     auto add = [&]<bool TopkByBitonic, bool MultiWarpMerge>() {
       if (diagnostics) {
-        this->template add_static_fragment<fragment_tag_search_single_cta_favor_diagnostic<
-          DataTag,
-          SourceIndexTag,
-          IndexTag,
-          DistanceTag,
-          TopkByBitonic,
-          MultiWarpMerge>>();
+        this->template add_static_fragment<
+          fragment_tag_search_single_cta_favor_diagnostic<DataTag,
+                                                          SourceIndexTag,
+                                                          IndexTag,
+                                                          DistanceTag,
+                                                          TopkByBitonic,
+                                                          MultiWarpMerge>>();
       } else {
         this->template add_static_fragment<fragment_tag_search_single_cta_favor<DataTag,
                                                                                 SourceIndexTag,

@@ -1,0 +1,7 @@
+predicate,workload,metric,source,variant,itopk,search_width,max_iterations,recall,qps,latency_seconds,filter_violations,invalid_sentinel_errors,underfilled_queries
+em,throughput,arxiv-em-throughput_10000,throughput,default_cagra,512,2,0,0.99516,3784.3945617487784,2.642436864,0.0,0.0,0.0063
+em,throughput,arxiv-em-throughput_10000,throughput,default_accumulator,512,2,0,0.99774,3754.4458246739036,2.663516061,0.0,0.0,0.0011
+emis,throughput,arxiv-emis-throughput_10000,throughput,default_cagra,512,2,0,0.69117,3783.522228280246,2.643048301,0.0,0.0,0.3691
+emis,throughput,arxiv-emis-throughput_10000,throughput,default_accumulator,512,2,0,0.78755,3751.980317729688,2.665265635,0.0,0.0,0.0266
+r,throughput,arxiv-r-throughput_10000,throughput,default_cagra,512,2,0,0.99427,3787.271868947773,2.640428873,0.0,0.0,0.0075
+r,throughput,arxiv-r-throughput_10000,throughput,default_accumulator,512,2,0,0.99741,3775.4403907100877,2.648703686,0.0,0.0,0.0002

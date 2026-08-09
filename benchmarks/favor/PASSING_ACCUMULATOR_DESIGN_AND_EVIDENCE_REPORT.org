@@ -1,0 +1,311 @@
+#+title: Bounded Passing-Result Accumulator: Design and Evidence
+#+date: 2026-08-08
+#+options: toc:2 num:nil
+
+* Verdict
+
+The bounded passing-result accumulator is correct and materially useful, but it solves a specific
+problem: /result-selection loss/.  A fused CAGRA queue can evaluate an exact filtered neighbor and
+later evict it because the same bounded structure is serving as both the traversal frontier and the
+eventual result source.  The accumulator passively retains the best =k= passing candidates seen at
+any point, ordered by raw distance.
+
+It does not make traversal deeper, alter parent selection, or discover a ground-truth node that the
+search never evaluated.  YFCC demonstrates both limits at once:
+
+- At B0, default CAGRA sees 0.6647 of exact ground truth and the accumulator returns 0.6647.  The
+  remaining gap is exploration depth.
+- At the deep control, default CAGRA sees 0.9323 but returns only 0.6447.  The accumulator returns
+  0.9324 at the same traversal work.  That gap is result-selection loss.
+
+The production sweeps confirm that this is not a diagnostic-only effect.  The accumulator improves
+recall at all 64 matched cells for both default and FAVOR on every arXiv predicate.  On YFCC it
+improves default at 64/64 cells and FAVOR at 63/64 cells.
+
+The best current production policy is therefore dataset dependent.  Default CAGRA plus the
+accumulator supplies the strongest target-recall result on YFCC and arXiv EMIS.  FAVOR scoring is
+still useful as an exploration policy, but it does not consistently beat raw default traversal once
+both methods receive correct passing-result retention.
+
+* The failure mode
+
+SINGLE_CTA CAGRA keeps a bounded mixed =itopk= containing both passing and rejected candidates.  The
+same structure controls traversal and supplies the candidates that are filtered for final output.
+This coupling is lossy for filtered search: a candidate can pass the predicate, be one of the exact
+filtered top-k by raw distance, and still be displaced from the mixed queue by rejected nodes or by
+the queue's traversal scoring before output is produced.
+
+#+begin_example
+                         +--> mixed itopk --> parent selection / traversal
+distance + predicate ----|
+                         +--> passing-only top-k accumulator --> final output when enabled
+#+end_example
+
+The accumulator is not another frontier.  It observes candidates already evaluated by traversal.
+Its capacity is exactly =k=, and its order is =(raw_distance, internal_graph_id)=.  This makes it the
+best filtered result over the evaluated set without preserving every passing discovery.
+
+The diagnostic terms used in this report are:
+
+- =GT seen=: fraction of exact filtered top-k IDs whose vector distance was evaluated.
+- =recall=: fraction of exact filtered top-k IDs returned.
+- =selection loss=: =GT seen - recall=.
+
+When the ground truth is exact and ties are resolved consistently, accumulator recall should equal
+the GT-seen oracle.  The CPU study observes a maximum numerical mismatch of only =7.1e-08=, and the
+GPU YFCC diagnostic agrees to the displayed precision.
+
+* GPU implementation in cuVS
+
+** State and lifetime
+
+The implementation is confined to the SINGLE_CTA JIT search path in
+=cpp/src/neighbors/detail/cagra/jit_lto_kernels/search_single_cta_jit.cuh=.  When enabled, every CTA
+allocates the following extra shared memory:
+
+#+begin_example
+sizeof(uint32_t) lock + k * sizeof(IndexT) + k * sizeof(DistanceT)
+#+end_example
+
+For =k=10= with 32-bit indices and float distances, this is 84 bytes per CTA before ordinary
+alignment effects.  Entries initialize to the invalid-index sentinel and maximum distance.
+
+The accumulator observes:
+
+1. valid passing candidates from the initial random candidate pool; and
+2. valid passing child candidates immediately after their distances are computed, before the mixed
+   top-k merge can evict them.
+
+It strips CAGRA's expanded-state tag, maps internal IDs through =source_indices_ptr= when necessary,
+and evaluates the active UDF against the source ID.  Passing candidates retain raw distance in both
+default and FAVOR modes because FAVOR penalties apply only to rejected candidates.
+
+** Parallel insertion
+
+=favor_observe_passing_candidates= partitions the candidate range across warps.  Each warp selects
+at most its best =k= passing candidates.  No lower-ranked item from that partition can enter the
+global top-k, so discarding the rest is exact.  Warp leaders then update the CTA-wide array under a
+small shared-memory lock.
+
+Insertion:
+
+- rejects duplicates by internal graph ID;
+- uses raw distance and then internal graph ID as a deterministic tie break;
+- shifts the bounded sorted suffix and drops the worst entry; and
+- rejects candidates that are strictly worse than the current full accumulator from an unlocked
+  snapshot, while equal-distance candidates take the lock so the ID tie break remains safe.
+
+The output stage reads accumulator IDs and distances instead of the mixed result buffer when the
+policy is enabled.  Underfilled suffixes use the normal invalid sentinel and maximum distance.
+
+** Traversal independence
+
+The accumulator does not modify:
+
+- distance scoring or FAVOR penalty calculation;
+- mixed-itopk admission or eviction;
+- parent selection or rejected-parent retirement;
+- visited-hash state;
+- =max_iterations=, automatic B0 resolution, or FAVOR termination; or
+- query-local selectivity estimates.
+
+For default CAGRA, the sampled-rate pointer is required to be null and selectivity estimation is not
+run.  For FAVOR, the production curves in this report include per-query GPU sampling end to end.
+
+** API boundary
+
+No public =cagra::search_params= field or public filter type was added.  The benchmark parser owns
+=favor_udf_passing_accumulator=, and the benchmark-only helper wraps the ordinary UDF in
+=CagraSampleFilterWithRuntimeState<Filter, PassingAccumulator>=.  The compile-time boolean lets the
+SINGLE_CTA planner reserve the extra shared memory.  The wrapper still satisfies the generic sample
+filter contract through =operator()=.
+
+The private helper explicitly rejects MULTI_CTA and rejects a sampled-rate pointer in default mode.
+Default CAGRA without an explicitly requested accumulator continues through the ordinary public
+search path.
+
+* CPU implementation in FAVOR
+
+The CPU counterpart is the algorithmic diagnostic in
+=/home/ubuntu/FAVOR/include/cagra_queue_diagnostic.h=.  Its =passing_accumulator= owns a vector with
+capacity =k=.  =observe= ignores rejected candidates and duplicates, finds the sorted insertion point
+with =lower_bound=, inserts by =(raw_distance, internal_graph_id)=, and removes the worst entry when
+necessary.
+
+It observes passing seeds and newly evaluated children in both fused and dual-frontier diagnostic
+modes.  At each checkpoint the CPU diagnostic records two outputs side by side:
+
+- the legacy result obtained from the traversal/result queue; and
+- =passing_accumulator_output_ids= and =passing_accumulator_recall=.
+
+That side-by-side interface is diagnostic.  On the GPU, enabling the policy makes the accumulator
+the returned =neighbors/distances= result rather than emitting a second public output stream.
+
+The CPU runner also checks that enabling the observer leaves expansion, admission, eviction,
+visited-state, stop-reason, and legacy-output traces unchanged.  It is an algorithmic implementation,
+not a CPU throughput baseline.
+
+* Direct GT-seen evidence on YFCC
+
+The matched diagnostic used 1,000 YFCC queries, =L=512=, =W=2=, =k=10=, and the same degree-32 CAGRA
+graph.  B0 resolves to 262 iterations; the deep control requests 7,569 iterations.  Every row had
+zero filter violations, invalid-sentinel errors, and visited-hash-full events.
+
+| Budget | Traversal/output policy | Recall@10 | GT seen | Selection loss | Mean iterations | Exact distances/query |
+|-
+| B0 | default mixed output | 0.5414 | 0.6647 | 0.1233 | 262.0 | 8,418.2 |
+| B0 | default + accumulator | 0.6647 | 0.6647 | 0.0000 | 262.0 | 8,418.2 |
+| B0 | FAVOR + accumulator | 0.6714 | 0.6714 | 0.0000 | 261.5 | 10,662.0 |
+| Deep | default mixed output | 0.6447 | 0.9323 | 0.2876 | 6,788.6 | 189,611.5 |
+| Deep | default + accumulator | 0.9324 | 0.9324 | 0.0000 | 6,787.1 | 189,566.9 |
+| Deep | FAVOR + accumulator | 0.9312 | 0.9312 | 0.0000 | 5,791.4 | 171,560.3 |
+
+The tiny deep default work difference is normal run-to-run termination variation; it is 0.03%, while
+the recall gain is 0.2877.  The accumulator is therefore recovering already evaluated neighbors,
+not buying recall with a hidden deeper search.
+
+The B0 result is equally important: removing all selection loss still gives only 0.6647 recall.
+An accumulator cannot solve insufficient traversal depth.
+
+* Production sweep contract
+
+Both datasets use all 10,000 queries per measured invocation and one timed repetition after warmup.
+The four methods are:
+
+| Report label | Traversal score/lifecycle | Output |
+|-
+| default CAGRA | raw distance, default rejected-parent retirement | mixed queue |
+| default + passing accumulator | identical default traversal | passing accumulator |
+| FAVOR | automatic retention-safe penalty and lifecycle | mixed queue |
+| FAVOR + passing accumulator | identical FAVOR traversal | passing accumulator |
+
+Each method is evaluated at the same 64 valid parameter cells:
+
+- =L in {64,128,256,512}=
+- =W in {1,2,4}=
+- =max_iterations in {0,522,1044,2088,4176,7569}=
+
+The two =W=4= cells at 4,176 and 7,569 iterations are excluded for every method because their visited
+set exceeds SINGLE_CTA's hard hash-table capacity.  Default modes perform no selectivity sampling;
+both FAVOR modes include sampling in timed end-to-end QPS.
+
+* Production results
+
+** YFCC-10M contains-all predicate
+
+| Paired change | Recall wins | Mean recall delta | Mean paired QPS delta |
+|-
+| default -> default + accumulator | 64 / 64 | +0.236442 | -37.79% |
+| FAVOR -> FAVOR + accumulator | 63 / 64 | +0.059949 | -13.63% |
+
+The fastest target-recall points are:
+
+| Method | Recall@10 | QPS | L | W | Max iterations |
+|-
+| default + passing accumulator | 0.9120 | 2,271.4 | 64 | 4 | 2,088 |
+| FAVOR + passing accumulator | 0.9089 | 1,791.8 | 64 | 4 | 2,088 |
+
+Neither legacy output reaches 0.905 in the tested grid.  Default plus accumulation also has the
+highest observed recall, 0.9393.  Once both methods retain passing results correctly, FAVOR beats
+default recall at only 9/64 matched cells and beats its QPS at none.
+
+YFCC's accumulator cost is real.  Its UDF is a nested contains-all scan over sparse candidate tags,
+so observing every candidate performs substantially more predicate work than default's legacy
+parent/output filtering.  FAVOR already needs per-candidate predicate state for scoring, which is
+why its additional accumulator cost is smaller, though it still repeats predicate evaluation in the
+current implementation.
+
+** arXiv range predicates
+
+| Predicate | Paired change | Recall wins | Mean recall delta | Mean paired QPS delta |
+|-
+| EM | default -> default + accumulator | 64 / 64 | +0.012108 | -1.22% |
+| EM | FAVOR -> FAVOR + accumulator | 64 / 64 | +0.006215 | -0.70% |
+| EMIS | default -> default + accumulator | 64 / 64 | +0.210009 | -0.78% |
+| EMIS | FAVOR -> FAVOR + accumulator | 64 / 64 | +0.216673 | -0.36% |
+| R | default -> default + accumulator | 64 / 64 | +0.019030 | -0.71% |
+| R | FAVOR -> FAVOR + accumulator | 64 / 64 | +0.028499 | -0.58% |
+
+EM and R are already easy for the mixed queue, so accumulation adds only modest recall.  EMIS is the
+selection-stress case: neither legacy method reaches 0.905 anywhere in the grid, while both
+accumulator methods do.
+
+| Predicate | Method | Fastest recall >= 0.905 | QPS | L | W | Max iterations |
+|-
+| EM | default CAGRA | 0.9427 | 28,822.6 | 64 | 1 | 0 |
+| EM | default + accumulator | 0.9651 | 28,318.3 | 64 | 1 | 0 |
+| EM | FAVOR | 0.9554 | 28,123.5 | 64 | 1 | 0 |
+| EM | FAVOR + accumulator | 0.9647 | 28,029.9 | 64 | 1 | 0 |
+| EMIS | default + accumulator | 0.9114 | 1,744.6 | 64 | 1 | 1,044 |
+| EMIS | FAVOR + accumulator | 0.9375 | 1,184.6 | 64 | 2 | 1,044 |
+| R | default CAGRA | 0.9129 | 28,760.0 | 64 | 1 | 0 |
+| R | default + accumulator | 0.9494 | 28,461.2 | 64 | 1 | 0 |
+| R | FAVOR | 0.9419 | 14,819.9 | 128 | 4 | 0 |
+| R | FAVOR + accumulator | 0.9528 | 28,467.9 | 64 | 4 | 0 |
+
+The arXiv UDF is only one date load plus two range-bound loads and comparisons.  That explains why
+the accumulator's mean QPS cost stays near or below 1%, unlike YFCC's sparse tag-set scan.
+
+The strongest same-work arXiv example is EMIS at =L=512=, =W=2=, 7,569 iterations: default returns
+0.85968 at 36.98 seconds for 10,000 queries, while default plus accumulation returns 0.99987 at
+37.30 seconds.  The budget is identical and runtime differs by less than 1%.
+
+* Correctness and fairness checks
+
+- YFCC and each arXiv predicate contain exactly 64 throughput cells per method.
+- Each arXiv raw throughput file contains exactly 256 iteration rows, for 768 total.
+- All YFCC and arXiv throughput rows have zero filter violations and zero invalid-sentinel errors.
+- Short correctness gates cover three parameter cells per method on the first 1,000 queries and also
+  have zero violations/errors.
+- Default accumulator-on/off pairs never receive sampled selectivity.  Both FAVOR pairs include GPU
+  selectivity sampling in the measured end-to-end time.
+- Hash-capacity exclusions are applied symmetrically before execution.
+- The unit test verifies that the private default-without-accumulator path exactly matches the public
+  default CAGRA result path; it also checks accumulator filter validity and sentinel layout.
+- The YFCC diagnostic compares GT-seen and distance-work counters, while the CPU diagnostic requires
+  complete traversal-trace equivalence with the observer enabled and disabled.
+
+* Limits and optimization implications
+
+The accumulator is bounded and passive, so it cannot:
+
+- recover a GT node never evaluated by traversal;
+- fix premature FAVOR termination or a too-small B0 budget;
+- improve graph reachability; or
+- provide an independent expansion frontier.
+
+It currently supports only the private SINGLE_CTA UDF path.  Extending it to MULTI_CTA requires a
+different cross-CTA reduction/lifetime design and is not implied by these results.
+
+Its main GPU costs are repeated predicate evaluation, warp-local selection, a CTA-local insertion
+lock, and the small shared-memory allocation.  The clearest optimization target is to carry the
+already computed pass/reject state from FAVOR distance scoring into accumulation rather than invoke
+the UDF again.  For default traversal, which does not otherwise classify every child, the tradeoff is
+fundamental unless candidate filtering can be made cheaper or selectively invoked.  Any optimization
+must preserve the exact =(raw_distance, id)= order and the passive-traversal invariant.
+
+* Artifacts and reproduction
+
+- YFCC sweep report: =benchmarks/favor/YFCC_FOUR_METHOD_SWEEP_REPORT.org=
+- YFCC GT-seen diagnostic: =benchmarks/favor/YFCC_RECALL_ROOT_CAUSE_REPORT.org=
+- arXiv sweep report: =benchmarks/favor/ARXIV_FOUR_METHOD_SWEEP_REPORT.org=
+- YFCC raw/CSV/plot root: =benchmarks/favor/yfcc_udf/results_four_method_20260808/=
+- arXiv raw/CSV/plot root: =benchmarks/favor/arxiv_udf/results_four_method_20260808/=
+- CPU algorithmic report: =/home/ubuntu/FAVOR/YFCC_DEFAULT_CAGRA_CPU_REPORT.org=
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter
+
+YFCC_RESULT_ROOT=$PWD/benchmarks/favor/yfcc_udf/results_four_method_20260808 \
+  benchmarks/favor/yfcc_udf/run_experiment.sh accumulator_comparison
+python benchmarks/favor/yfcc_udf/analyze.py --sweep-only \
+  --result-root benchmarks/favor/yfcc_udf/results_four_method_20260808 \
+  --data-root datasets \
+  --report benchmarks/favor/YFCC_FOUR_METHOD_SWEEP_REPORT.org
+
+ARXIV_RESULT_ROOT=$PWD/benchmarks/favor/arxiv_udf/results_four_method_20260808 \
+  benchmarks/favor/arxiv_udf/run_experiment.sh throughput
+python benchmarks/favor/arxiv_udf/analyze.py \
+  --result-root benchmarks/favor/arxiv_udf/results_four_method_20260808 \
+  --report benchmarks/favor/ARXIV_FOUR_METHOD_SWEEP_REPORT.org
+#+end_src

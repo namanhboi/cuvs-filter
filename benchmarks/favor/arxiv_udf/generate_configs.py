@@ -9,6 +9,9 @@ from pathlib import Path
 
 SWEEP_CELLS = [(l, w) for l in (64, 128, 256, 512) for w in (1, 2, 4)]
 MAX_ITERATIONS = (0, 522, 1044, 2088, 4176, 7569)
+# Correctness is a compact gate; performance coverage belongs to the full
+# throughput Cartesian sweep below.
+CORRECTNESS_CELLS = ((64, 1, 0), (512, 2, 0), (512, 2, 7569))
 MAX_QUERIES = 512
 GRAPH_DEGREE = 32
 MAX_HASH_SLOTS = 1 << 20
@@ -135,6 +138,7 @@ def main() -> None:
   predicates = ("em", "emis", "r")
   # Use 10k-query workloads prepared by arxiv_udf/prepare_workloads.py.
   query_count = 10_000
+  correctness_query_count = 1_000
 
   for predicate in predicates:
     # Single-query smoke runs against the full workload with batch_size=1.
@@ -163,23 +167,45 @@ def main() -> None:
     )
 
     correctness_searches: list[dict] = []
+    for itopk, width, max_iterations in CORRECTNESS_CELLS:
+      if not supported_search(itopk, width, max_iterations):
+        raise RuntimeError(
+          f"unsupported correctness cell: L={itopk}, W={width}, i={max_iterations}"
+        )
+      correctness_searches.append(
+        default_search(itopk, width, max_iterations=max_iterations)
+      )
+      correctness_searches.append(
+        default_search(itopk, width, accumulator=True, max_iterations=max_iterations)
+      )
+      correctness_searches.append(
+        favor_search(
+          itopk,
+          width,
+          accumulator=False,
+          max_iterations=max_iterations,
+          include_sampling=True,
+        )
+      )
+      correctness_searches.append(
+        favor_search(
+          itopk,
+          width,
+          accumulator=True,
+          max_iterations=max_iterations,
+          include_sampling=True,
+        )
+      )
+
     throughput_searches: list[dict] = []
     for itopk, width in SWEEP_CELLS:
       for max_iterations in MAX_ITERATIONS:
         if not supported_search(itopk, width, max_iterations):
           continue
-        correctness_searches.append(default_search(itopk, width, max_iterations=max_iterations))
-        correctness_searches.append(
-          favor_search(
-            itopk, width, accumulator=False, max_iterations=max_iterations, include_sampling=True
-          )
-        )
-        correctness_searches.append(
-          favor_search(
-            itopk, width, accumulator=True, max_iterations=max_iterations, include_sampling=True
-          )
-        )
         throughput_searches.append(default_search(itopk, width, max_iterations=max_iterations))
+        throughput_searches.append(
+          default_search(itopk, width, accumulator=True, max_iterations=max_iterations)
+        )
         throughput_searches.append(
           favor_search(
             itopk,
@@ -197,7 +223,7 @@ def main() -> None:
 
     write(
       args.output / f"{predicate}_correctness.json",
-      config(CORRECTNESS_WORKLOAD, predicate, query_count, correctness_searches),
+      config(CORRECTNESS_WORKLOAD, predicate, correctness_query_count, correctness_searches),
     )
     write(
       args.output / f"{predicate}_throughput.json",

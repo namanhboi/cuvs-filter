@@ -110,8 +110,7 @@ class favor_diagnostic_session {
         throw std::invalid_argument(
           "termination shadow record_start_iteration must not exceed start_iteration");
       }
-      const auto parent_span =
-        (configured_max_iterations - record_start_iteration) * search_width;
+      const auto parent_span = (configured_max_iterations - record_start_iteration) * search_width;
       // One periodic series plus independently forced B0 and terminal checkpoints.
       termination_checkpoint_stride =
         3 + raft::ceildiv(parent_span, config_.termination_parent_interval);
@@ -168,14 +167,13 @@ class favor_diagnostic_session {
       termination_checkpoint_stride == 0 ? nullptr : termination_checkpoint_counts.data();
     host_context.termination_checkpoint_stride = termination_checkpoint_stride;
     host_context.termination_record_start_iteration =
-      config_.termination_record_start_iteration == 0
-        ? config_.termination_start_iteration
-        : config_.termination_record_start_iteration;
-    host_context.termination_start_iteration   = config_.termination_start_iteration;
-    host_context.termination_parent_interval   = config_.termination_parent_interval;
-    host_context.num_queries                   = num_queries;
-    host_context.max_trace_iterations          = max_trace_iterations;
-    host_context.candidates_per_iteration      = candidates_per_iteration;
+      config_.termination_record_start_iteration == 0 ? config_.termination_start_iteration
+                                                      : config_.termination_record_start_iteration;
+    host_context.termination_start_iteration = config_.termination_start_iteration;
+    host_context.termination_parent_interval = config_.termination_parent_interval;
+    host_context.num_queries                 = num_queries;
+    host_context.max_trace_iterations        = max_trace_iterations;
+    host_context.candidates_per_iteration    = candidates_per_iteration;
     RAFT_CUDA_TRY(cudaMemcpyAsync(
       context.data(), &host_context, sizeof(host_context), cudaMemcpyHostToDevice, stream));
 
@@ -349,8 +347,10 @@ class favor_diagnostic_session {
            "expanded_pass_parents,expanded_reject_parents,candidate_attempts,"
            "candidate_evaluations,candidate_duplicate_or_full,candidate_duplicates,"
            "candidate_hash_full,passing_candidates,"
-           "rejected_candidates,penalized_candidates,gt_seen_mask,output_count,hash_bitlen,"
-           "small_hash_bitlen,small_hash_reset_interval,query_penalty,terminal_cutoff,"
+           "rejected_candidates,penalized_candidates,accumulator_observations,"
+           "accumulator_insertions,gt_seen_mask,output_count,hash_bitlen,"
+           "small_hash_bitlen,small_hash_reset_interval,resolved_filtering_rate,"
+           "reference_penalty,query_penalty,terminal_cutoff,"
            "best_unexpanded_distance,worst_retained_distance,kth_passing_raw_distance";
     for (std::uint32_t rank = 0; rank < favor_diag::ground_truth_k; ++rank) {
       csv << ",gt_first_iteration_" << rank;
@@ -364,10 +364,12 @@ class favor_diagnostic_session {
           << s.expanded_reject_parents << ',' << s.candidate_attempts << ','
           << s.candidate_evaluations << ',' << s.candidate_duplicate_or_full << ','
           << s.candidate_duplicates << ',' << s.candidate_hash_full << ',' << s.passing_candidates
-          << ',' << s.rejected_candidates << ',' << s.penalized_candidates << ',' << s.gt_seen_mask
+          << ',' << s.rejected_candidates << ',' << s.penalized_candidates << ','
+          << s.accumulator_observations << ',' << s.accumulator_insertions << ',' << s.gt_seen_mask
           << ',' << s.output_count << ',' << s.hash_bitlen << ',' << s.small_hash_bitlen << ','
-          << s.small_hash_reset_interval << ',' << s.query_penalty << ',' << s.terminal_cutoff
-          << ',' << s.best_unexpanded_distance << ',' << s.worst_retained_distance << ','
+          << s.small_hash_reset_interval << ',' << s.resolved_filtering_rate << ','
+          << s.reference_penalty << ',' << s.query_penalty << ',' << s.terminal_cutoff << ','
+          << s.best_unexpanded_distance << ',' << s.worst_retained_distance << ','
           << s.kth_passing_raw_distance;
       for (auto first : s.gt_first_iteration) {
         csv << ',' << first;
@@ -434,7 +436,7 @@ class favor_diagnostic_session {
   bool captured_ = false;
 };
 
-static_assert(sizeof(favor_diag::query_summary) == 164);
+static_assert(sizeof(favor_diag::query_summary) == 180);
 static_assert(sizeof(favor_diag::iteration_record) == 84);
 static_assert(sizeof(favor_diag::candidate_record) == 36);
 static_assert(sizeof(favor_diag::termination_checkpoint_record) == 136);

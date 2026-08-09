@@ -50,7 +50,47 @@ def required_float(row: dict, names: tuple[str, ...], context: str) -> float:
   raise RuntimeError(f"missing required metric {names} in {context}")
 
 
-def config_variant(search: dict, *, distinguish_default_accumulator: bool = False) -> str:
+SWEEP_METHODS = (
+  "default_cagra",
+  "default_accumulator",
+  "automatic_legacy",
+  "automatic_accumulator",
+)
+
+SWEEP_LABELS = {
+  "default_cagra": "default CAGRA",
+  "default_accumulator": "default + passing accumulator",
+  "automatic_legacy": "FAVOR",
+  "automatic_accumulator": "FAVOR + passing accumulator",
+}
+
+SWEEP_STYLES = {
+  "default_cagra": {
+    "color": "tab:blue",
+    "linestyle": ":",
+    "marker": "o",
+    "markerfacecolor": "none",
+  },
+  "default_accumulator": {
+    "color": "tab:orange",
+    "linestyle": "--",
+    "marker": "x",
+  },
+  "automatic_legacy": {
+    "color": "tab:green",
+    "linestyle": "-.",
+    "marker": "s",
+    "markerfacecolor": "none",
+  },
+  "automatic_accumulator": {
+    "color": "tab:red",
+    "linestyle": "-",
+    "marker": "o",
+  },
+}
+
+
+def config_variant(search: dict, *, distinguish_default_accumulator: bool = True) -> str:
   if search.get("filter_mode", "default") == "default":
     if distinguish_default_accumulator and search.get("favor_udf_passing_accumulator", False):
       return "default_accumulator"
@@ -131,15 +171,24 @@ def analyze_file(
       )
     if underfilled_queries < 0.0:
       raise RuntimeError(f"negative underfilled-query metric in {context}: {underfilled_queries}")
+    method = config_variant(
+      search, distinguish_default_accumulator=distinguish_default_accumulator
+    )
+    if safe_int(search.get("max_queries"), 0) != 512:
+      raise RuntimeError(f"uncontrolled max_queries in {context}")
+    if method.startswith("default_") and "favor_udf_include_sampling" in search:
+      raise RuntimeError(f"default CAGRA unexpectedly contains sampling control in {context}")
+    if source == "throughput" and method.startswith("automatic_") and not bool(
+      search.get("favor_udf_include_sampling", False)
+    ):
+      raise RuntimeError(f"FAVOR throughput excludes selectivity sampling in {context}")
     result_rows.append(
       {
         "predicate": predicate,
         "workload": workload,
         "metric": config["dataset"]["name"],
         "source": source,
-        "variant": config_variant(
-          search, distinguish_default_accumulator=distinguish_default_accumulator
-        ),
+        "variant": method,
         "itopk": safe_int(search.get("itopk")),
         "search_width": safe_int(search.get("search_width")),
         "max_iterations": safe_int(search.get("max_iterations")),
@@ -153,6 +202,43 @@ def analyze_file(
     )
 
   return result_rows
+
+
+def validate_matched_sweep(rows: list[dict], *, expected_cells: int) -> None:
+  predicates = sorted({str(row["predicate"]) for row in rows})
+  if predicates != ["em", "emis", "r"]:
+    raise RuntimeError(f"unexpected predicate set: {predicates}")
+
+  for predicate in predicates:
+    cells_by_method: dict[str, set[tuple[int, int, int]]] = {
+      method: set() for method in SWEEP_METHODS
+    }
+    for row in rows:
+      if str(row["predicate"]) != predicate:
+        continue
+      method = str(row["variant"])
+      if method not in cells_by_method:
+        raise RuntimeError(f"unexpected sweep method for {predicate}: {method}")
+      cell = (
+        safe_int(row["itopk"]),
+        safe_int(row["search_width"]),
+        safe_int(row["max_iterations"]),
+      )
+      if cell in cells_by_method[method]:
+        raise RuntimeError(f"duplicate {predicate}/{method} parameter cell: {cell}")
+      cells_by_method[method].add(cell)
+
+    reference = cells_by_method[SWEEP_METHODS[0]]
+    if len(reference) != expected_cells:
+      raise RuntimeError(
+        f"expected {expected_cells} cells per {predicate} method, found {len(reference)}"
+      )
+    for method, cells in cells_by_method.items():
+      if cells != reference:
+        raise RuntimeError(
+          f"asymmetric {predicate} sweep for {method}: "
+          f"missing={sorted(reference - cells)}, extra={sorted(cells - reference)}"
+        )
 
 
 def pareto_frontier(points: list[dict], maximize_y: bool = True) -> list[dict]:
@@ -220,7 +306,9 @@ def plot_sweep(rows: list[dict], output_root: Path, *, plot_name: str, title: st
       [r["recall"] for r in frontier],
       [r["qps"] for r in frontier],
       marker="o",
-      label=key,
+      label="::".join(
+        (key.split("::", 1)[0], SWEEP_LABELS.get(key.split("::", 1)[-1], key))
+      ),
     )
   recalls = [
     safe_float(row.get("recall"), 0.0)
@@ -306,15 +394,16 @@ def plot_sweep_by_predicate(
     x_min = max(0.0, min_recall - 0.02)
 
     fig, ax = plt.subplots(figsize=(7, 4.2))
-    for key, rows_ in sorted(points_by_key.items()):
+    for key in SWEEP_METHODS:
+      rows_ = points_by_key.get(key, [])
       frontier = pareto_frontier(rows_)
       if not frontier:
         continue
       ax.plot(
         [r["recall"] for r in frontier],
         [r["qps"] for r in frontier],
-        marker="o",
-        label=key,
+        label=SWEEP_LABELS.get(key, key),
+        **SWEEP_STYLES[key],
       )
     ax.set(
       xlabel="Recall@10",
@@ -348,16 +437,16 @@ def write_report(
 
   best_by_mode_text = []
   for predicate in ("em", "emis", "r"):
-    for variant in ("default_cagra", "automatic_legacy", "automatic_accumulator"):
+    for variant in SWEEP_METHODS:
       row = best_by_mode.get((predicate, variant))
       if row is not None:
         best_by_mode_text.append(
-          f"| {predicate} | {variant} | {row['itopk']} | {row['search_width']} | {row['max_iterations']} | {row['recall']:.4f} | {row['qps']:.1f} |"
+          f"| {predicate} | {SWEEP_LABELS[variant]} | {row['itopk']} | {row['search_width']} | {row['max_iterations']} | {row['recall']:.4f} | {row['qps']:.1f} |"
         )
 
   target_frontier_text = []
   for predicate in ("em", "emis", "r"):
-    for variant in ("default_cagra", "automatic_legacy", "automatic_accumulator"):
+    for variant in SWEEP_METHODS:
       eligible = [
         row
         for row in throughput_rows
@@ -367,10 +456,12 @@ def write_report(
       ]
       fastest = max(eligible, key=lambda row: row["qps"], default=None)
       if fastest is None:
-        target_frontier_text.append(f"| {predicate} | {variant} | not reached | | | |")
+        target_frontier_text.append(
+          f"| {predicate} | {SWEEP_LABELS[variant]} | not reached | | | |"
+        )
       else:
         target_frontier_text.append(
-          f"| {predicate} | {variant} | {fastest['itopk']} | {fastest['search_width']} | "
+          f"| {predicate} | {SWEEP_LABELS[variant]} | {fastest['itopk']} | {fastest['search_width']} | "
           f"{fastest['max_iterations']} | {fastest['recall']:.4f} | {fastest['qps']:.1f} |"
         )
 
@@ -421,6 +512,7 @@ Benchmarks are run with three UDF predicates: =em=, =emis=, =r=.
 * Data status
 
 Correctness: complete for all 3 predicates in `raw/*_correctness.json`.
+Each correctness gate uses the first 1,000 queries; the performance sweep uses all 10,000 queries.
 
 Throughput full sweep: {throughput_availability}.
 
@@ -436,12 +528,28 @@ The candidate matrix varies:
 All methods use =max_queries=512= so a 10,000-query invocation is tiled through a bounded search
 workspace.  The =W=4= rows at =max_iterations in {{4176,7569}}= are excluded before execution:
 their required visited set exceeds SINGLE_CTA CAGRA's hard 1M-slot hash-table limit at the default
-0.5 maximum fill rate.  This leaves 64 supported parameter points per method and 192 rows per
+0.5 maximum fill rate.  This leaves 64 supported parameter points per method and 256 rows per
 predicate/workload.
 
-For each (predicate, workload), =default_cagra= and both FAVOR variants use the same supported
-points and end-to-end timing.  Per-query selectivity sampling is included only when
-=filter_mode=favor=; default CAGRA never estimates selectivity.
+For each predicate, default CAGRA and FAVOR retention-safe traversal are each measured with and
+without the passing-result accumulator at exactly the same supported points.  Both FAVOR curves
+include per-query selectivity sampling end to end; neither default curve estimates selectivity.
+
+* Pareto frontiers
+
+** EM
+
+[[file:{result_root}/plots/qps_recall_sweep_em.png]]
+
+** EMIS
+
+[[file:{result_root}/plots/qps_recall_sweep_emis.png]]
+
+** R
+
+[[file:{result_root}/plots/qps_recall_sweep_r.png]]
+
+* Highest recall observed
 
 | Predicate | Variant | L | W | Max iterations | Recall@10 | QPS |
 |-
@@ -455,28 +563,19 @@ points and end-to-end timing.  Per-query selectivity sampling is included only w
 
 * Focused default-CAGRA accumulator gate
 
-This is a separate matched =L=512=, =W=2=, =max_iterations=0= gate, not a fourth full-sweep
-curve.  Both paths skip UDF selectivity sampling.  Enabling the passing accumulator on the
-default-CAGRA traversal changes recall by exactly zero on all three predicates and incurs less
-than 0.1% QPS loss in each run.  The accumulator is therefore not useful for the default path in
-this experiment.
+This matched =L=512=, =W=2=, =max_iterations=0= checkpoint is selected directly from the full
+sweep.  Both default paths are also present at every other supported parameter cell, and neither
+performs UDF selectivity sampling.
 
 | Predicate | Default recall | Accumulator recall | Default QPS | Accumulator QPS | QPS delta |
 |-
 {chr(10).join(default_accumulator_gate_text)}
 
-* Verdict
+* Interpretation
 
-- =em=: all methods exceed 0.905 at B0.  Automatic accumulation raises the maximum observed
-  recall from 0.99691 for default CAGRA to 0.99936.
-- =emis=: automatic accumulation is the only method to reach 0.905.  Its fastest qualifying
-  point reaches 0.93233 at 1146.6 QPS and its maximum is 0.96183; default CAGRA tops out at
-  0.85968 and legacy automatic retention at 0.62849.
-- =r=: all methods can exceed 0.905.  At the fastest B0 region, automatic accumulation reaches
-  0.94841 at 28579.2 QPS versus 0.91290 at 28734.0 QPS for default CAGRA.
-- The matched FAVOR pairs show that the accumulator changes final passing-result retention, not
-  traversal work: its runtime is nearly identical to legacy automatic retention while recall can
-  be substantially higher.
+The tables and Pareto plots above are generated directly from this run.  Cross-dataset accumulator
+mechanics and GT-seen evidence are documented separately in the accumulator design report so this
+report remains a measurement record rather than carrying hard-coded conclusions from older runs.
 
 * B0 frontier (recall and QPS)
 
@@ -500,7 +599,7 @@ this experiment.
 - {result_root}/plots/qps_recall_b0_r.png
 """
 
-  report_path.write_text(report_body + "\n")
+  report_path.write_text(report_body.rstrip() + "\n")
 
 
 def main() -> None:
@@ -525,7 +624,13 @@ def main() -> None:
 
     correctness_file = raw_root / f"{correctness_name}.json"
     if correctness_file.exists():
-      rows = analyze_file(correctness_name, raw_root, config_root, "correctness")
+      rows = analyze_file(
+        correctness_name,
+        raw_root,
+        config_root,
+        "correctness",
+        distinguish_default_accumulator=True,
+      )
       correctness_rows.extend(rows)
       all_results.extend(rows)
     else:
@@ -533,33 +638,35 @@ def main() -> None:
 
     throughput_file = raw_root / f"{throughput_name}.json"
     if throughput_file.exists():
-      rows = analyze_file(throughput_name, raw_root, config_root, "throughput")
+      rows = analyze_file(
+        throughput_name,
+        raw_root,
+        config_root,
+        "throughput",
+        distinguish_default_accumulator=True,
+      )
       throughput_rows.extend(rows)
       all_results.extend(rows)
     else:
       missing.append(throughput_file)
 
-    gate_name = f"{predicate}_accumulator_gate"
-    gate_file = raw_root / f"{gate_name}.json"
-    if gate_file.exists():
-      rows = analyze_file(
-        gate_name,
-        raw_root,
-        config_root,
-        "default_accumulator_gate",
-        distinguish_default_accumulator=True,
-      )
-      variants = {row["variant"] for row in rows}
-      if len(rows) != 2 or variants != {"default_cagra", "default_accumulator"}:
-        raise RuntimeError(f"invalid focused default accumulator gate: {gate_name}")
-      default_accumulator_gate_rows.extend(rows)
-    else:
-      missing.append(gate_file)
-
   if missing:
     raise RuntimeError("incomplete Arxiv result set; missing: " + ", ".join(map(str, missing)))
 
   b0_rows = [row for row in throughput_rows if safe_int(row["max_iterations"]) == 0]
+
+  validate_matched_sweep(correctness_rows, expected_cells=3)
+  validate_matched_sweep(throughput_rows, expected_cells=64)
+  default_accumulator_gate_rows = [
+    row
+    for row in throughput_rows
+    if row["variant"] in {"default_cagra", "default_accumulator"}
+    and safe_int(row["itopk"]) == 512
+    and safe_int(row["search_width"]) == 2
+    and safe_int(row["max_iterations"]) == 0
+  ]
+  if len(default_accumulator_gate_rows) != 6:
+    raise RuntimeError("missing matched default-accumulator checkpoints from full sweep")
 
   write_csv(args.result_root / "correctness_summary.csv", correctness_rows)
   write_csv(args.result_root / "throughput_summary.csv", throughput_rows)
@@ -589,7 +696,7 @@ def main() -> None:
   if b0_rows:
     b0_sorted = [r for r in b0_rows if safe_int(r["max_iterations"]) == 0]
     for predicate in ("em", "emis", "r"):
-      for variant in ("default_cagra", "automatic_legacy", "automatic_accumulator"):
+      for variant in SWEEP_METHODS:
         best = max(
           [r for r in b0_sorted if r["predicate"] == predicate and r["variant"] == variant],
           key=lambda r: (safe_float(r["recall"]), safe_float(r["qps"])),
@@ -597,7 +704,7 @@ def main() -> None:
         )
         if best is not None:
           b0_rows_by_pred_variant.append(
-            f"| {predicate} | {variant} | {best['itopk']} | {best['search_width']} | {best['max_iterations']} | {best['recall']:.4f} | {best['qps']:.1f} |"
+            f"| {predicate} | {SWEEP_LABELS[variant]} | {best['itopk']} | {best['search_width']} | {best['max_iterations']} | {best['recall']:.4f} | {best['qps']:.1f} |"
           )
   write_report(
     args.result_root,

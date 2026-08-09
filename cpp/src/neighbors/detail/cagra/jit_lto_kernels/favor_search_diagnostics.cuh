@@ -9,7 +9,7 @@
 
 namespace cuvs::neighbors::cagra::detail::favor_search_diagnostics {
 
-inline constexpr std::uint32_t schema_version    = 4;
+inline constexpr std::uint32_t schema_version    = 5;
 inline constexpr std::uint32_t ground_truth_k    = 10;
 inline constexpr std::uint32_t invalid_iteration = 0xffffffffu;
 
@@ -52,12 +52,16 @@ struct query_summary {
   std::uint32_t passing_candidates{};
   std::uint32_t rejected_candidates{};
   std::uint32_t penalized_candidates{};
+  std::uint32_t accumulator_observations{};
+  std::uint32_t accumulator_insertions{};
   std::uint32_t gt_seen_mask{};
   std::uint32_t gt_first_iteration[ground_truth_k]{};
   std::uint32_t output_count{};
   std::uint32_t hash_bitlen{};
   std::uint32_t small_hash_bitlen{};
   std::uint32_t small_hash_reset_interval{};
+  float resolved_filtering_rate{};
+  float reference_penalty{};
   float query_penalty{};
   float terminal_cutoff{};
   float best_unexpanded_distance{};

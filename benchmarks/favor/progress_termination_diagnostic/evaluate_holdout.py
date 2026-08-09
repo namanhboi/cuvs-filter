@@ -17,8 +17,8 @@ from generate_holdout_configs import B0, SEEDS
 def load_seed(seed: int, capture_root: Path, data_root: Path) -> analyze.Capture:
     directory = capture_root / f"seed{seed}"
     manifest = json.loads((directory / "manifest.json").read_text())
-    if int(manifest["schema_version"]) != 4:
-        raise ValueError(f"holdout capture is not schema 4: {directory}")
+    if int(manifest["schema_version"]) not in (4, 5):
+        raise ValueError(f"holdout capture is not schema 4 or 5: {directory}")
     if int(manifest["termination_checkpoint_record_size"]) != 136:
         raise ValueError(f"holdout checkpoint ABI mismatch: {directory}")
     num_queries = int(manifest["num_queries"])

@@ -27,6 +27,17 @@ RAFT_DEVICE_INLINE_FUNCTION float favor_penalty_coefficient_device(float filteri
   return filtering_rate * (ef - selectivity) / (2.0f * selectivity * ef);
 }
 
+RAFT_DEVICE_INLINE_FUNCTION float favor_reference_penalty_device(float filtering_rate,
+                                                                 std::uint32_t effective_itopk,
+                                                                 float delta_d)
+{
+  if (!(filtering_rate > 0.0f) || effective_itopk == 0 || delta_d == 0.0f) { return 0.0f; }
+  // Keep this expression aligned with host favor_reference_penalty().
+  const auto selectivity = 1.0f - filtering_rate;
+  const auto ef          = static_cast<float>(effective_itopk);
+  return filtering_rate * (ef - selectivity) * delta_d / (2.0f * selectivity * ef);
+}
+
 RAFT_DEVICE_INLINE_FUNCTION float favor_automatic_retention_fraction_device(
   float filtering_rate, std::uint32_t effective_itopk, std::uint32_t topk)
 {
@@ -409,7 +420,7 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_child_nodes_jit_impl(
   const bool favor_retention_safe                  = false,
   const DistanceT favor_retention_fraction         = static_cast<DistanceT>(0.5),
   const cuvs::neighbors::detail::bitset_filter_data_t<SourceIndexT> favor_bitset = {},
-  std::uint8_t* diagnostic_hash_outcomes = nullptr)
+  std::uint8_t* diagnostic_hash_outcomes                                         = nullptr)
 {
   constexpr IndexT index_msb_1_mask = utils::gen_index_msb_1_mask<IndexT>::value;
   constexpr IndexT invalid_index    = ~static_cast<IndexT>(0);
@@ -417,9 +428,7 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_child_nodes_jit_impl(
   // Read child indices of parents from knn graph and check if the distance computation is
   // necessary.
   for (uint32_t i = threadIdx.x; i < knn_k * search_width; i += blockDim.x) {
-    if constexpr (RECORD_HASH_OUTCOME) {
-      diagnostic_hash_outcomes[i] = 0;
-    }
+    if constexpr (RECORD_HASH_OUTCOME) { diagnostic_hash_outcomes[i] = 0; }
     const IndexT smem_parent_id = parent_indices[i / knn_k];
     IndexT child_id             = invalid_index;
     if (smem_parent_id != invalid_index) {
@@ -428,8 +437,8 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_child_nodes_jit_impl(
     }
     if (child_id != invalid_index) {
       if constexpr (RECORD_HASH_OUTCOME) {
-        const auto outcome = hashmap::insert_with_outcome(
-          visited_hashmap_ptr, visited_hash_bitlen, child_id);
+        const auto outcome =
+          hashmap::insert_with_outcome(visited_hashmap_ptr, visited_hash_bitlen, child_id);
         diagnostic_hash_outcomes[i] = static_cast<std::uint8_t>(outcome);
         if (outcome != hashmap::insert_outcome::inserted) {
           child_id = invalid_index;
@@ -521,7 +530,11 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_child_nodes_jit_impl(
   }
 }
 
-template <typename IndexT, typename DistanceT, typename DataT, int STATIC_RESULT_POSITION = 1>
+template <typename IndexT,
+          typename DistanceT,
+          typename DataT,
+          int STATIC_RESULT_POSITION = 1,
+          bool RECORD_HASH_OUTCOME   = false>
 RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_child_nodes_jit(
   IndexT* __restrict__ result_child_indices_ptr,
   DistanceT* __restrict__ result_child_distances_ptr,
@@ -535,28 +548,42 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_child_nodes_jit(
   const IndexT* __restrict__ parent_indices,
   const IndexT* __restrict__ internal_topk_list,
   const uint32_t search_width,
-  int* __restrict__ result_position = nullptr,
-  const int max_result_position     = 0)
+  int* __restrict__ result_position      = nullptr,
+  const int max_result_position          = 0,
+  std::uint8_t* diagnostic_hash_outcomes = nullptr)
 {
   compute_distance_to_child_nodes_jit_impl<false,
                                            IndexT,
                                            DistanceT,
                                            DataT,
                                            IndexT,
-                                           STATIC_RESULT_POSITION>(result_child_indices_ptr,
-                                                                   result_child_distances_ptr,
-                                                                   smem_desc,
-                                                                   knn_graph,
-                                                                   knn_k,
-                                                                   visited_hashmap_ptr,
-                                                                   visited_hash_bitlen,
-                                                                   traversed_hashmap_ptr,
-                                                                   traversed_hash_bitlen,
-                                                                   parent_indices,
-                                                                   internal_topk_list,
-                                                                   search_width,
-                                                                   result_position,
-                                                                   max_result_position);
+                                           STATIC_RESULT_POSITION,
+                                           false,
+                                           false,
+                                           false,
+                                           RECORD_HASH_OUTCOME>(result_child_indices_ptr,
+                                                                result_child_distances_ptr,
+                                                                smem_desc,
+                                                                knn_graph,
+                                                                knn_k,
+                                                                visited_hashmap_ptr,
+                                                                visited_hash_bitlen,
+                                                                traversed_hashmap_ptr,
+                                                                traversed_hash_bitlen,
+                                                                parent_indices,
+                                                                internal_topk_list,
+                                                                search_width,
+                                                                result_position,
+                                                                max_result_position,
+                                                                nullptr,
+                                                                0,
+                                                                {},
+                                                                DistanceT{0},
+                                                                raft::upper_bound<DistanceT>(),
+                                                                false,
+                                                                static_cast<DistanceT>(0.5),
+                                                                {},
+                                                                diagnostic_hash_outcomes);
 }
 
 template <typename IndexT,
@@ -663,28 +690,28 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_favor_retention_safe_distance_to_child_
                                            PACKED_BITSET,
                                            DIRECT_SOURCE_ID,
                                            RECORD_HASH_OUTCOME>(result_child_indices_ptr,
-                                                             result_child_distances_ptr,
-                                                             smem_desc,
-                                                             knn_graph,
-                                                             knn_k,
-                                                             visited_hashmap_ptr,
-                                                             visited_hash_bitlen,
-                                                             traversed_hashmap_ptr,
-                                                             traversed_hash_bitlen,
-                                                             parent_indices,
-                                                             internal_topk_list,
-                                                             search_width,
-                                                             result_position,
-                                                             max_result_position,
-                                                             source_indices_ptr,
-                                                             0,
-                                                             {},
-                                                             favor_penalty,
-                                                             favor_retention_cutoff,
-                                                             true,
-                                                             favor_retention_fraction,
-                                                             favor_bitset,
-                                                             diagnostic_hash_outcomes);
+                                                                result_child_distances_ptr,
+                                                                smem_desc,
+                                                                knn_graph,
+                                                                knn_k,
+                                                                visited_hashmap_ptr,
+                                                                visited_hash_bitlen,
+                                                                traversed_hashmap_ptr,
+                                                                traversed_hash_bitlen,
+                                                                parent_indices,
+                                                                internal_topk_list,
+                                                                search_width,
+                                                                result_position,
+                                                                max_result_position,
+                                                                source_indices_ptr,
+                                                                0,
+                                                                {},
+                                                                favor_penalty,
+                                                                favor_retention_cutoff,
+                                                                true,
+                                                                favor_retention_fraction,
+                                                                favor_bitset,
+                                                                diagnostic_hash_outcomes);
 }
 
 }  // namespace cuvs::neighbors::cagra::detail::device

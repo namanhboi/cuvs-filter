@@ -1,0 +1,129 @@
+#+title: ARXIV-For-FANNs MEDIUM Single-CTA UDF Report
+
+* Configurations
+
+Benchmarks are run with three UDF predicates: =em=, =emis=, =r=.
+
+* Data status
+
+Correctness: complete for all 3 predicates in `raw/*_correctness.json`.
+Each correctness gate uses the first 1,000 queries; the performance sweep uses all 10,000 queries.
+
+Throughput full sweep: available (full sweep completed).
+
+B0 throughput: derived from the =max_iterations=0 rows of the full throughput sweep.
+
+* Sweep summary
+
+The candidate matrix varies:
+- =itopk in {64,128,256,512}=
+- =search_width in {1,2,4}=
+- =max_iterations in {0,522,1044,2088,4176,7569}=
+
+All methods use =max_queries=512= so a 10,000-query invocation is tiled through a bounded search
+workspace.  The =W=4= rows at =max_iterations in {4176,7569}= are excluded before execution:
+their required visited set exceeds SINGLE_CTA CAGRA's hard 1M-slot hash-table limit at the default
+0.5 maximum fill rate.  This leaves 64 supported parameter points per method and 256 rows per
+predicate/workload.
+
+For each predicate, default CAGRA and FAVOR retention-safe traversal are each measured with and
+without the passing-result accumulator at exactly the same supported points.  Both FAVOR curves
+include per-query selectivity sampling end to end; neither default curve estimates selectivity.
+
+* Pareto frontiers
+
+** EM
+
+[[file:benchmarks/favor/arxiv_udf/results_four_method_20260808/plots/qps_recall_sweep_em.png]]
+
+** EMIS
+
+[[file:benchmarks/favor/arxiv_udf/results_four_method_20260808/plots/qps_recall_sweep_emis.png]]
+
+** R
+
+[[file:benchmarks/favor/arxiv_udf/results_four_method_20260808/plots/qps_recall_sweep_r.png]]
+
+* Highest recall observed
+
+| Predicate | Variant | L | W | Max iterations | Recall@10 | QPS |
+|-
+| em | default CAGRA | 512 | 4 | 2088 | 0.9969 | 797.9 |
+| em | default + passing accumulator | 512 | 2 | 4176 | 1.0000 | 767.1 |
+| em | FAVOR | 512 | 1 | 7569 | 0.9978 | 1547.3 |
+| em | FAVOR + passing accumulator | 512 | 4 | 2088 | 0.9994 | 1846.3 |
+| emis | default CAGRA | 512 | 2 | 7569 | 0.8597 | 270.4 |
+| emis | default + passing accumulator | 512 | 2 | 7569 | 0.9999 | 268.1 |
+| emis | FAVOR | 64 | 1 | 7569 | 0.6611 | 734.6 |
+| emis | FAVOR + passing accumulator | 64 | 4 | 2088 | 0.9616 | 699.7 |
+| r | default CAGRA | 512 | 4 | 2088 | 0.9966 | 811.9 |
+| r | default + passing accumulator | 512 | 4 | 2088 | 1.0000 | 808.4 |
+| r | FAVOR | 512 | 1 | 4176 | 0.9896 | 2357.0 |
+| r | FAVOR + passing accumulator | 512 | 4 | 2088 | 0.9979 | 2054.1 |
+
+* Fastest point reaching 0.905 recall
+
+| Predicate | Variant | L | W | Max iterations | Recall@10 | QPS |
+|-
+| em | default CAGRA | 64 | 1 | 0 | 0.9427 | 28822.6 |
+| em | default + passing accumulator | 64 | 1 | 0 | 0.9651 | 28318.3 |
+| em | FAVOR | 64 | 1 | 0 | 0.9554 | 28123.5 |
+| em | FAVOR + passing accumulator | 64 | 1 | 0 | 0.9647 | 28029.9 |
+| emis | default CAGRA | not reached | | | |
+| emis | default + passing accumulator | 64 | 1 | 1044 | 0.9114 | 1744.6 |
+| emis | FAVOR | not reached | | | |
+| emis | FAVOR + passing accumulator | 64 | 2 | 1044 | 0.9375 | 1184.6 |
+| r | default CAGRA | 64 | 1 | 0 | 0.9129 | 28760.0 |
+| r | default + passing accumulator | 64 | 1 | 0 | 0.9494 | 28461.2 |
+| r | FAVOR | 128 | 4 | 0 | 0.9419 | 14819.9 |
+| r | FAVOR + passing accumulator | 64 | 4 | 0 | 0.9528 | 28467.9 |
+
+* Focused default-CAGRA accumulator gate
+
+This matched =L=512=, =W=2=, =max_iterations=0= checkpoint is selected directly from the full
+sweep.  Both default paths are also present at every other supported parameter cell, and neither
+performs UDF selectivity sampling.
+
+| Predicate | Default recall | Accumulator recall | Default QPS | Accumulator QPS | QPS delta |
+|-
+| em | 0.99516 | 0.99774 | 3784.4 | 3754.4 | -0.791% |
+| emis | 0.69117 | 0.78755 | 3783.5 | 3752.0 | -0.834% |
+| r | 0.99427 | 0.99741 | 3787.3 | 3775.4 | -0.312% |
+
+* Interpretation
+
+The tables and Pareto plots above are generated directly from this run.  Cross-dataset accumulator
+mechanics and GT-seen evidence are documented separately in the accumulator design report so this
+report remains a measurement record rather than carrying hard-coded conclusions from older runs.
+
+* B0 frontier (recall and QPS)
+
+| Predicate | Variant | itopk | width | max_iter | Recall@10 | QPS |
+|-
+| em | default CAGRA | 512 | 4 | 0 | 0.9952 | 3826.6 |
+| em | default + passing accumulator | 512 | 4 | 0 | 0.9978 | 3800.7 |
+| em | FAVOR | 512 | 1 | 0 | 0.9964 | 3775.8 |
+| em | FAVOR + passing accumulator | 512 | 4 | 0 | 0.9979 | 3887.7 |
+| emis | default CAGRA | 512 | 4 | 0 | 0.6926 | 3826.0 |
+| emis | default + passing accumulator | 512 | 4 | 0 | 0.7891 | 3805.9 |
+| emis | FAVOR | 512 | 1 | 0 | 0.6195 | 3765.1 |
+| emis | FAVOR + passing accumulator | 512 | 4 | 0 | 0.7877 | 3878.9 |
+| r | default CAGRA | 512 | 4 | 0 | 0.9943 | 3827.3 |
+| r | default + passing accumulator | 512 | 4 | 0 | 0.9974 | 3818.2 |
+| r | FAVOR | 512 | 1 | 0 | 0.9892 | 3802.7 |
+| r | FAVOR + passing accumulator | 512 | 4 | 0 | 0.9974 | 3916.0 |
+
+* Outputs
+
+- benchmarks/favor/arxiv_udf/results_four_method_20260808/correctness_summary.csv
+- benchmarks/favor/arxiv_udf/results_four_method_20260808/throughput_summary.csv
+- benchmarks/favor/arxiv_udf/results_four_method_20260808/b0_summary.csv
+- benchmarks/favor/arxiv_udf/results_four_method_20260808/default_accumulator_gate_summary.csv
+- benchmarks/favor/arxiv_udf/results_four_method_20260808/plots/qps_recall_sweep.png
+- benchmarks/favor/arxiv_udf/results_four_method_20260808/plots/qps_recall_b0.png
+- benchmarks/favor/arxiv_udf/results_four_method_20260808/plots/qps_recall_sweep_em.png
+- benchmarks/favor/arxiv_udf/results_four_method_20260808/plots/qps_recall_sweep_emis.png
+- benchmarks/favor/arxiv_udf/results_four_method_20260808/plots/qps_recall_sweep_r.png
+- benchmarks/favor/arxiv_udf/results_four_method_20260808/plots/qps_recall_b0_em.png
+- benchmarks/favor/arxiv_udf/results_four_method_20260808/plots/qps_recall_b0_emis.png
+- benchmarks/favor/arxiv_udf/results_four_method_20260808/plots/qps_recall_b0_r.png

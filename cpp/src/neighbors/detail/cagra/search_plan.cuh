@@ -135,6 +135,7 @@ struct search_plan_impl_base : public search_params {
   size_t configured_max_iterations;
   std::uint32_t favor_adaptive_start_iteration = 0;
   std::uint32_t favor_adaptive_prefix_size     = 0;
+  float favor_raw_delta_d                      = 0.0f;
   float favor_penalty_distance                 = 0.0f;
   search_plan_impl_base(
     search_params params, int64_t dim, int64_t dataset_size, int64_t graph_degree, uint32_t topk)
@@ -144,7 +145,8 @@ struct search_plan_impl_base : public search_params {
       graph_degree(graph_degree),
       topk(topk),
       configured_itopk_size(params.itopk_size),
-      configured_max_iterations(params.max_iterations)
+      configured_max_iterations(params.max_iterations),
+      favor_raw_delta_d(params.favor_delta_d)
   {
     if (filter_mode == filtering_mode::FAVOR && algo == search_algo::AUTO) {
       algo = search_algo::SINGLE_CTA;
@@ -239,6 +241,7 @@ struct search_plan_impl : public search_plan_impl_base {
     // delta-d slot for the reference upper bound. Query-local modes derive their final CTA scalar
     // from this upper bound after the initial local candidate ordering.
     favor_delta_d = favor_penalty_distance;
+    RAFT_LOG_DEBUG("# FAVOR raw delta-d: %g", favor_raw_delta_d);
     RAFT_LOG_DEBUG("# FAVOR reference penalty distance: %g", favor_penalty_distance);
   }
 

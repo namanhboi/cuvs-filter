@@ -1,0 +1,156 @@
+#+title: YFCC SINGLE_CTA UDF Recall Root-Cause Report
+#+date: 2026-08-08
+
+* Verdict
+
+Low YFCC recall has two independent causes.
+
+1. The normal fused result buffer loses passing neighbors that traversal already evaluated.  At the
+   deep budget, default CAGRA sees 0.9323 of exact GT but returns only 0.6447.  A bounded raw-distance
+   passing accumulator changes only output retention and returns 0.9324 at the same traversal work.
+2. B0 is too shallow for this workload.  Even with correct output accumulation, default CAGRA reaches
+   only 0.6647 at B0.  Deep continuous traversal raises it to 0.9324.
+
+The previously discovered UDF penalty initialization bug was real but secondary.  Repairing the
+query-local penalty raises automatic-retention B0 recall from 0.6645 to 0.6714.  It does not explain
+the remaining gap to 0.9.
+
+This is not graph-limited: the existing CAGRA graph exposes enough exact neighbors to exceed the
+0.905 target when traversal state is preserved, the budget is deep, and passing results are retained.
+
+* Experiment
+
+- Dataset: YFCC-10M, 1,000-query correctness workload, subset/contains-all UDF predicate.
+- Graph: CAGRA degree 32, intermediate graph degree 64.
+- Search: SINGLE_CTA, =L=512=, =W=2=, =k=10=.
+- B0: public =max_iterations=0=, resolved by CAGRA to 262 iterations.
+- Deep control: =max_iterations=7569=.
+- Hardware: NVIDIA L4.
+- Every row below had zero filter violations, zero invalid-sentinel errors, and zero visited-hash-full
+  events.
+- These are diagnostic runs.  Their wall times include diagnostic instrumentation and JIT/setup
+  effects and must not be interpreted as production QPS.
+
+The four matched variants are:
+
+- =default=: raw-distance default CAGRA with the normal fused result buffer.
+- =default + accumulator=: identical traversal plus the bounded passing-result accumulator.
+- =automatic, zero penalty=: automatic-retention lifecycle plus accumulator, with delta-d set to
+  zero as an exact no-penalty control.
+- =automatic, repaired=: sampled query-local automatic retention plus accumulator and the repaired
+  delta-d/reference-penalty path.
+
+* Results
+
+#+name: yfcc-root-cause-results
+| budget | variant                    | recall@10 | GT seen | selection loss | mean iterations | exact distance work/query | passing discoveries/query | underfilled queries | accumulator observations/query |
+|--------+----------------------------+-----------+---------+----------------+-----------------+---------------------------+---------------------------+---------------------+--------------------------------|
+| B0     | default                    |    0.5414 |  0.6647 |         0.1233 |           262.0 |                    8418.2 |                     220.5 |              0.5540 |                            0.0 |
+| B0     | default + accumulator      |    0.6647 |  0.6647 |         0.0000 |           262.0 |                    8418.2 |                     220.5 |              0.3630 |                          228.8 |
+| B0     | automatic, zero penalty    |    0.6645 |  0.6645 |         0.0000 |           261.5 |                    8404.4 |                     219.3 |              0.3630 |                          227.6 |
+| B0     | automatic, repaired        |    0.6714 |  0.6714 |         0.0000 |           261.5 |                   10662.0 |                     274.6 |              0.3160 |                          282.9 |
+| Deep   | default                    |    0.6447 |  0.9323 |         0.2876 |          6788.6 |                  189611.5 |                    1995.6 |              0.3210 |                            0.0 |
+| Deep   | default + accumulator      |    0.9324 |  0.9324 |         0.0000 |          6787.1 |                  189566.9 |                    1993.5 |              0.0770 |                         2001.8 |
+| Deep   | automatic, zero penalty    |    0.9287 |  0.9287 |         0.0000 |          5979.1 |                  167007.1 |                     775.0 |              0.0770 |                          783.2 |
+| Deep   | automatic, repaired        |    0.9312 |  0.9312 |         0.0000 |          5791.4 |                  171560.3 |                     726.4 |              0.0690 |                          734.7 |
+
+=GT seen= is the fraction of the exact top-10 IDs that appeared among evaluated candidates.
+=Selection loss= is =GT seen - recall@10=.  A zero selection loss means the passing accumulator
+returned every exact GT neighbor that traversal exposed.
+
+* Interpretation
+
+** The accumulator is necessary on YFCC
+
+Default and default-plus-accumulator perform the same traversal: their B0 distance work is identical,
+and deep work differs by less than 0.03%.  Their recall differs sharply because the fused queue ranks
+both passing and rejected candidates by raw distance.  Passing candidates can be observed and later
+evicted before final filtering.  Deeper search makes this worse: the default selection loss grows from
+0.1233 at B0 to 0.2876 at the deep budget.
+
+The accumulator is bounded to =k= entries, stores only passing candidates, and orders them by raw
+distance with graph ID as the deterministic tie break.  It therefore fixes output retention without
+creating an unbounded per-query data structure or changing traversal order.
+
+** B0 remains traversal-limited
+
+After selection loss is removed, B0 recall is still only 0.6647.  In the default B0 diagnostic, 995 of
+1,000 queries reach the iteration cap with an unexpanded frontier.  The accumulator cannot return a GT
+node that was never evaluated, so no output-policy change alone can reach 0.9 at this budget.
+
+Deep preserved-state traversal crosses the target: default-plus-accumulator reaches 0.9324.  This is
+direct evidence for a budget opportunity, not a graph-reachability or visited-hash-capacity failure.
+
+** What the repaired penalty contributes
+
+The repaired automatic path resolves a sampled filtering rate per query, preserves raw delta-d until
+the CTA has that rate, and then computes the query-local reference ceiling on device.  Across the 1,000
+queries, all query penalties are positive; the mean query penalty is 4.0895 and the mean reference
+ceiling is 1.406e6.  The device reference ceiling agrees with the host formula to a maximum relative
+error of 4.12e-6.
+
+At B0 the repaired penalty gains 0.0069 recall over the exact zero-penalty control while increasing
+distance work by 26.9%.  At the deep cap it gains 0.0025 recall for 2.7% more distance work.  Compared
+with deep default-plus-accumulator, repaired automatic retention retains nearly the same recall
+(-0.0012) with 9.5% less exact distance work.  That diagnostic work reduction does not translate
+into a production-QPS advantage once the automatic path's scoring and query-local selectivity
+sampling are included end to end.
+
+** Production end-to-end sweep
+
+The follow-up production sweep evaluates four methods over the same 64 valid
+=(L, W, max_iterations)= cells and 10,000 queries: default CAGRA and automatic retention, each with
+and without the accumulator.  Automatic-retention timing includes per-query selectivity sampling;
+both default paths do not sample because they do not use selectivity.  All 256 measurements have zero
+filter violations and zero invalid-sentinel errors.
+
+| Method                             | fastest QPS at recall >= 0.905 | recall | L | W | max iterations | highest recall |
+|------------------------------------+--------------------------------+--------+---+---+----------------+----------------|
+| default CAGRA                      | not reached                    |        |   |   |                |         0.6921 |
+| default + passing accumulator      |                         2271.4 | 0.9120 | 64 | 4 |           2088 |         0.9393 |
+| automatic retention                | not reached                    |        |   |   |                |         0.8648 |
+| automatic retention + accumulator |                         1791.8 | 0.9089 | 64 | 4 |           2088 |         0.9373 |
+
+At exactly matched cells, automatic retention plus accumulation has higher recall than
+default-plus-accumulator in only 9 of 64 cases and higher QPS in none.  Its mean recall delta is
+-0.004527 and its mean QPS delta is -26.98%.  At the target, default-plus-accumulator supplies 26.8%
+higher QPS.
+
+The production verdict is therefore that the repaired penalty is functioning, but it is not the best
+YFCC scheduling policy in this search space.  Raw-distance default traversal plus the passing-result
+accumulator supplies both the strongest target-recall Pareto frontier and the highest observed recall.
+See =YFCC_FOUR_METHOD_SWEEP_REPORT.org= for the plot and complete sweep summary.
+
+* Implementation and validation notes
+
+- Query-local UDF automatic retention now carries raw delta-d privately through the single-CTA plan;
+  scalar bitset filtering retains the historical host-precomputed reference scalar.
+- The default diagnostic fragment executes the same default search core and adds counters only; it
+  does not enable FAVOR scoring or selectivity sampling.
+- Accumulator observations and insertions are emitted only by diagnostic instantiations.
+- The diagnostic schema is version 5.
+- No public search parameter or filter API was added or changed.
+- The routine YFCC and arXiv correctness matrices were reduced from 192 parameter points to 9: a
+  smallest-launch gate, the primary B0 comparison, and the deepest high-recall comparison.  The full
+  192-point Cartesian matrix remains reserved for throughput/Pareto measurement.
+
+One build-system trap was exposed during validation: the existing CUDA benchmark target did not notice
+the parser-header change in an already-built tree, leaving the executable with a stale
+=favor_udf_passing_accumulator_is_set= parser.  Recompiling =cuvs_benchmark.cu= made the requested and
+effective policies agree.  A clean benchmark build also avoids this stale-object condition.
+
+* Reproduction
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter
+
+# Generate configs and run the matched B0/deep diagnostics.
+YFCC_RESULT_ROOT=$PWD/benchmarks/favor/yfcc_udf/results_root_cause_20260808 \
+  ./benchmarks/favor/yfcc_udf/run_experiment.sh root_cause_b0_diagnostic
+YFCC_RESULT_ROOT=$PWD/benchmarks/favor/yfcc_udf/results_root_cause_20260808 \
+  ./benchmarks/favor/yfcc_udf/run_experiment.sh root_cause_deep_diagnostic
+#+end_src
+
+Raw benchmark JSON and schema-v5 per-query summaries are under
+=benchmarks/favor/yfcc_udf/results_root_cause_20260808/=.  The generated directory is experimental
+output rather than source-of-truth code; this report records the checked aggregate results.

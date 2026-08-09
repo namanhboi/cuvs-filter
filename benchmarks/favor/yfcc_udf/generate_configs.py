@@ -10,6 +10,10 @@ from pathlib import Path
 SWEEP_CELLS = [(l, w) for l in (64, 128, 256, 512) for w in (1, 2, 4)]
 DEEP_ITERATIONS = (522, 1044, 2088, 4176, 7569)
 MAX_ITERATIONS = (0, *DEEP_ITERATIONS)
+# Correctness is a gate, not a second performance sweep.  These cells cover the
+# smallest launch, the principal B0 comparison point, and the deepest supported
+# high-recall point while the throughput config retains the full Cartesian grid.
+CORRECTNESS_CELLS = ((64, 1, 0), (512, 2, 0), (512, 2, 7569))
 MAX_QUERIES = 512
 GRAPH_DEGREE = 32
 MAX_HASH_SLOTS = 1 << 20
@@ -49,6 +53,9 @@ def default_search(
     *,
     accumulator: bool = False,
     max_iterations: int = 0,
+    diagnostic_output: Path | None = None,
+    diagnostic_gt: Path | None = None,
+    diagnostic_variant: str | None = None,
 ) -> dict:
     out = {
         "algo": "single_cta",
@@ -59,6 +66,16 @@ def default_search(
         "max_iterations": max_iterations,
         "favor_udf_passing_accumulator": accumulator,
     }
+    if diagnostic_output is not None:
+        out.update(
+            {
+                "favor_diagnostics_output": str(diagnostic_output),
+                "favor_diagnostics_groundtruth": str(diagnostic_gt),
+                "favor_diagnostics_dataset": "yfcc10m",
+                "favor_diagnostics_variant": diagnostic_variant
+                or f"default_L{itopk}_W{width}_i{max_iterations}",
+            }
+        )
     return out
 
 
@@ -70,6 +87,7 @@ def favor_search(
     include_sampling: bool = False,
     sample_offset: int = 0,
     max_iterations: int = 0,
+    penalty_enabled: bool = True,
     diagnostic_output: Path | None = None,
     diagnostic_gt: Path | None = None,
     diagnostic_variant: str | None = None,
@@ -94,6 +112,12 @@ def favor_search(
         "favor_udf_passing_accumulator": accumulator,
         "favor_udf_sample_offset": sample_offset,
     }
+    if not penalty_enabled:
+        out.pop("favor_delta_d_file")
+        out.pop("favor_delta_d_alpha")
+        out.pop("favor_delta_d_beta")
+        out.pop("favor_delta_d_bfs_depth")
+        out["favor_delta_d"] = 0.0
     if diagnostic_output is not None:
         out.update(
             {
@@ -171,20 +195,29 @@ def main() -> None:
     )
 
     correctness = []
-    for l, w in SWEEP_CELLS:
-        for max_iterations in MAX_ITERATIONS:
-            if not supported_search(l, w, max_iterations):
-                continue
-            correctness.append(default_search(l, w, accumulator=False, max_iterations=max_iterations))
-            correctness.append(default_search(l, w, accumulator=True, max_iterations=max_iterations))
-            correctness.append(
-                favor_search(
-                    l,
-                    w,
-                    accumulator=True,
-                    max_iterations=max_iterations,
-                )
+    for l, w, max_iterations in CORRECTNESS_CELLS:
+        if not supported_search(l, w, max_iterations):
+            raise RuntimeError(
+                f"unsupported correctness cell: L={l}, W={w}, i={max_iterations}"
             )
+        correctness.append(default_search(l, w, accumulator=False, max_iterations=max_iterations))
+        correctness.append(default_search(l, w, accumulator=True, max_iterations=max_iterations))
+        correctness.append(
+            favor_search(
+                l,
+                w,
+                accumulator=False,
+                max_iterations=max_iterations,
+            )
+        )
+        correctness.append(
+            favor_search(
+                l,
+                w,
+                accumulator=True,
+                max_iterations=max_iterations,
+            )
+        )
     write(args.output / "correctness.json", config("correctness_1000", 1000, correctness))
 
     throughput = []
@@ -194,6 +227,15 @@ def main() -> None:
                 continue
             throughput.append(default_search(l, w, accumulator=False, max_iterations=max_iterations))
             throughput.append(default_search(l, w, accumulator=True, max_iterations=max_iterations))
+            throughput.append(
+                favor_search(
+                    l,
+                    w,
+                    accumulator=False,
+                    include_sampling=True,
+                    max_iterations=max_iterations,
+                )
+            )
             throughput.append(
                 favor_search(
                     l,
@@ -300,6 +342,79 @@ def main() -> None:
     write(
         args.output / "diagnostic.json",
         config("correctness_1000", 1000, diagnostic_searches),
+    )
+
+    root_cause_searches = []
+    for iterations, suffix in ((0, "b0"), (7569, "deep")):
+        root_cause_searches.extend(
+            [
+                default_search(
+                    512,
+                    2,
+                    accumulator=False,
+                    max_iterations=iterations,
+                    diagnostic_output=(
+                        args.result_root / "diagnostics" / "root_cause" / f"default_{suffix}"
+                    ).resolve(),
+                    diagnostic_gt=diagnostic_gt,
+                    diagnostic_variant=f"default_{suffix}",
+                ),
+                default_search(
+                    512,
+                    2,
+                    accumulator=True,
+                    max_iterations=iterations,
+                    diagnostic_output=(
+                        args.result_root
+                        / "diagnostics"
+                        / "root_cause"
+                        / f"default_accumulator_{suffix}"
+                    ).resolve(),
+                    diagnostic_gt=diagnostic_gt,
+                    diagnostic_variant=f"default_accumulator_{suffix}",
+                ),
+                favor_search(
+                    512,
+                    2,
+                    accumulator=True,
+                    max_iterations=iterations,
+                    penalty_enabled=False,
+                    diagnostic_output=(
+                        args.result_root
+                        / "diagnostics"
+                        / "root_cause"
+                        / f"automatic_zero_penalty_{suffix}"
+                    ).resolve(),
+                    diagnostic_gt=diagnostic_gt,
+                    diagnostic_variant=f"automatic_zero_penalty_{suffix}",
+                ),
+                favor_search(
+                    512,
+                    2,
+                    accumulator=True,
+                    max_iterations=iterations,
+                    diagnostic_output=(
+                        args.result_root
+                        / "diagnostics"
+                        / "root_cause"
+                        / f"automatic_repaired_{suffix}"
+                    ).resolve(),
+                    diagnostic_gt=diagnostic_gt,
+                    diagnostic_variant=f"automatic_repaired_{suffix}",
+                ),
+            ]
+        )
+    write(
+        args.output / "root_cause_diagnostic.json",
+        config("correctness_1000", 1000, root_cause_searches),
+    )
+    write(
+        args.output / "root_cause_b0_diagnostic.json",
+        config("correctness_1000", 1000, root_cause_searches[:4]),
+    )
+    write(
+        args.output / "root_cause_deep_diagnostic.json",
+        config("correctness_1000", 1000, root_cause_searches[4:]),
     )
 
 

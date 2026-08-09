@@ -81,6 +81,9 @@ std::shared_ptr<AlgorithmLauncher> build_single_cta_launcher(
     planner.add_favor_search_kernel_fragment(topk_by_bitonic_sort,
                                              bitonic_sort_and_merge_multi_warps,
                                              diagnostics);
+  } else if (diagnostics) {
+    planner.add_default_diagnostic_kernel_fragment(topk_by_bitonic_sort,
+                                                   bitonic_sort_and_merge_multi_warps);
   } else {
     planner.add_search_kernel_fragment(
       topk_by_bitonic_sort, bitonic_sort_and_merge_multi_warps, persistent);

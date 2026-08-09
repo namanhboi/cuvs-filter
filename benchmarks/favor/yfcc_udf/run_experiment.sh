@@ -49,6 +49,9 @@ case "${stage}" in
     done
     ;;
   diagnostic) run_one diagnostic throughput 0.001s 0 ;;
+  root_cause_diagnostic) run_one root_cause_diagnostic throughput 0.001s 0 ;;
+  root_cause_b0_diagnostic) run_one root_cause_b0_diagnostic throughput 0.001s 0 ;;
+  root_cause_deep_diagnostic) run_one root_cause_deep_diagnostic throughput 0.001s 0 ;;
   diagnostic_groups)
     for arity in 1 2; do
       for decile in $(seq 1 10); do
@@ -73,5 +76,5 @@ case "${stage}" in
       done
     done
     ;;
-  *) echo "usage: $0 {smoke|correctness|throughput|accumulator_comparison|throughput_sampling|latency|diagnostic|diagnostic_groups|all}" >&2; exit 2 ;;
+  *) echo "usage: $0 {smoke|correctness|throughput|accumulator_comparison|throughput_sampling|latency|diagnostic|root_cause_diagnostic|root_cause_b0_diagnostic|root_cause_deep_diagnostic|diagnostic_groups|all}" >&2; exit 2 ;;
 esac

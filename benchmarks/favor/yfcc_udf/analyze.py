@@ -488,7 +488,19 @@ def plot_results(
     plt.close(fig)
 
 
-SWEEP_METHODS = ("default_cagra", "default_accumulator", "automatic_accumulator")
+SWEEP_METHODS = (
+    "default_cagra",
+    "default_accumulator",
+    "automatic_legacy",
+    "automatic_accumulator",
+)
+
+SWEEP_LABELS = {
+    "default_cagra": "default CAGRA",
+    "default_accumulator": "default + passing accumulator",
+    "automatic_legacy": "FAVOR",
+    "automatic_accumulator": "FAVOR + passing accumulator",
+}
 
 
 def validate_accumulator_sweep(rows: list[dict], *, throughput: bool) -> None:
@@ -507,14 +519,16 @@ def validate_accumulator_sweep(rows: list[dict], *, throughput: bool) -> None:
             raise RuntimeError(f"uncontrolled max_queries for {method} at {cell}")
         if method.startswith("default_") and "favor_udf_include_sampling" in search:
             raise RuntimeError(f"default CAGRA unexpectedly contains a sampling control at {cell}")
-        if throughput and method == "automatic_accumulator" and not bool(
+        if throughput and method.startswith("automatic_") and not bool(
             search.get("favor_udf_include_sampling", False)
         ):
             raise RuntimeError(f"FAVOR throughput excludes selectivity sampling at {cell}")
 
     reference = by_method[SWEEP_METHODS[0]]
-    if len(reference) != 64:
+    if throughput and len(reference) != 64:
         raise RuntimeError(f"expected 64 supported parameter cells per method, found {len(reference)}")
+    if not reference:
+        raise RuntimeError("correctness gate contains no parameter cells")
     for method, cells in by_method.items():
         if cells != reference:
             missing = sorted(reference - cells)
@@ -527,12 +541,7 @@ def plot_accumulator_sweep(result_root: Path, throughput_rows: list[dict], batch
 
     plot_dir = result_root / "plots"
     plot_dir.mkdir(parents=True, exist_ok=True)
-    output = plot_dir / "qps_recall_accumulator_comparison.png"
-    labels = {
-        "default_cagra": "default CAGRA",
-        "default_accumulator": "default + passing accumulator",
-        "automatic_accumulator": "automatic retention + accumulator",
-    }
+    output = plot_dir / "qps_recall_four_method_sweep.png"
     styles = {
         "default_cagra": {
             "color": "tab:blue",
@@ -549,12 +558,20 @@ def plot_accumulator_sweep(result_root: Path, throughput_rows: list[dict], batch
             "markersize": 6,
             "zorder": 3,
         },
-        "automatic_accumulator": {
+        "automatic_legacy": {
             "color": "tab:green",
+            "linestyle": "-.",
+            "marker": "s",
+            "markerfacecolor": "none",
+            "markersize": 6,
+            "zorder": 2,
+        },
+        "automatic_accumulator": {
+            "color": "tab:red",
             "linestyle": "-",
             "marker": "o",
             "markersize": 6,
-            "zorder": 2,
+            "zorder": 1,
         },
     }
 
@@ -571,7 +588,7 @@ def plot_accumulator_sweep(result_root: Path, throughput_rows: list[dict], batch
         ax.plot(
             [row["recall"] for row in frontier],
             [row["qps"] for row in frontier],
-            label=labels[method],
+            label=SWEEP_LABELS[method],
             **styles[method],
         )
 
@@ -584,6 +601,7 @@ def plot_accumulator_sweep(result_root: Path, throughput_rows: list[dict], batch
         xlim=(max(0.0, min_recall - 0.02), 1.0),
         ylim=(0.0, max_qps * 1.05),
     )
+    ax.set_ylim(bottom=0.0)
     ax.grid(alpha=0.25)
     ax.legend(fontsize=8)
     fig.tight_layout()
@@ -627,6 +645,14 @@ def write_accumulator_sweep_report(
         (row["itopk"], row["search_width"], row["max_iterations"]): row
         for row in rows_by_method["default_accumulator"]
     }
+    favor_by_cell = {
+        (row["itopk"], row["search_width"], row["max_iterations"]): row
+        for row in rows_by_method["automatic_legacy"]
+    }
+    favor_accumulator_by_cell = {
+        (row["itopk"], row["search_width"], row["max_iterations"]): row
+        for row in rows_by_method["automatic_accumulator"]
+    }
     paired_recall_deltas = []
     paired_qps_deltas = []
     recall_wins = 0
@@ -639,34 +665,66 @@ def write_accumulator_sweep_report(
         )
         recall_wins += recall_delta > 0.0
 
+    def paired_effect(
+        baseline: dict[tuple[int, int, int], dict],
+        treatment: dict[tuple[int, int, int], dict],
+    ) -> tuple[int, int, float, float]:
+        recall_deltas = []
+        qps_deltas = []
+        recall_wins = 0
+        qps_wins = 0
+        for cell, baseline_row in baseline.items():
+            treatment_row = treatment[cell]
+            recall_delta = float(treatment_row["recall"]) - float(baseline_row["recall"])
+            qps_delta = (
+                float(treatment_row["qps"]) / float(baseline_row["qps"]) - 1.0
+            ) * 100.0
+            recall_deltas.append(recall_delta)
+            qps_deltas.append(qps_delta)
+            recall_wins += recall_delta > 0.0
+            qps_wins += qps_delta > 0.0
+        return (
+            recall_wins,
+            qps_wins,
+            statistics.fmean(recall_deltas),
+            statistics.fmean(qps_deltas),
+        )
+
+    favor_accumulator_effect = paired_effect(favor_by_cell, favor_accumulator_by_cell)
+    favor_vs_default_effect = paired_effect(default_by_cell, favor_by_cell)
+    favor_accumulator_vs_default_effect = paired_effect(
+        accumulator_by_cell, favor_accumulator_by_cell
+    )
+
     best_lines = []
     target_lines = []
     for method in SWEEP_METHODS:
         row = best_recall[method]
         best_lines.append(
-            f"| {method} | {row['itopk']} | {row['search_width']} | "
+            f"| {SWEEP_LABELS[method]} | {row['itopk']} | {row['search_width']} | "
             f"{row['max_iterations']} | {row['recall']:.4f} | {row['qps']:.1f} |"
         )
         target = target_rows[method]
         if target is None:
-            target_lines.append(f"| {method} | not reached | | | |")
+            target_lines.append(f"| {SWEEP_LABELS[method]} | not reached | | | |")
         else:
             target_lines.append(
-                f"| {method} | {target['qps']:.1f} | {target['recall']:.4f} | "
+                f"| {SWEEP_LABELS[method]} | {target['qps']:.1f} | {target['recall']:.4f} | "
                 f"{target['itopk']} | {target['search_width']} | {target['max_iterations']} |"
             )
 
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text(
-        f"""#+title: YFCC-10M Default Accumulator Comparison
+        f"""#+title: YFCC-10M Four-Method Filtered Search Sweep
 
 * Scope
 
-This report compares exactly three SINGLE_CTA methods over the same 64 supported =(L, W,
-max_iterations)= cells: =default_cagra=, =default_accumulator=, and
-=automatic_accumulator=.  The external benchmark batch contains {batch_size:,} queries and uses one
-repetition after warmup.  Every method uses =max_queries=512= internally.  FAVOR timing includes
-per-query selectivity sampling; both default methods perform no selectivity estimation.
+This report compares exactly four SINGLE_CTA methods over the same 64 supported =(L, W,
+max_iterations)= cells: default CAGRA and FAVOR retention-safe traversal, each with and without the
+bounded passing-result accumulator.  The external benchmark batch contains {batch_size:,} queries
+and uses one repetition after warmup.  Every method uses =max_queries=512= internally.  Both FAVOR
+curves include per-query selectivity sampling end to end; both default methods perform no selectivity
+estimation.
 
 The two =W=4= cells at =max_iterations in {{4176,7569}}= are excluded for every method because
 their required visited set exceeds CAGRA's hard 1M-slot hash table at the default 0.5 fill limit.
@@ -693,6 +751,20 @@ All included rows have zero filter violations and zero invalid-sentinel errors.
 Across the 64 exactly matched cells, the accumulator improves recall in {recall_wins} cells.  Its
 mean recall delta is {statistics.fmean(paired_recall_deltas):+.6f}; its mean paired QPS delta is
 {statistics.fmean(paired_qps_deltas):+.2f}% relative to default CAGRA.
+
+* Matched four-method effects
+
+Adding the accumulator to FAVOR improves recall in {favor_accumulator_effect[0]} of 64 cells and
+QPS in {favor_accumulator_effect[1]}; its mean recall delta is
+{favor_accumulator_effect[2]:+.6f} and mean QPS delta is {favor_accumulator_effect[3]:+.2f}%.
+
+Without accumulators, FAVOR beats default recall in {favor_vs_default_effect[0]} cells and QPS in
+{favor_vs_default_effect[1]}; its mean deltas are {favor_vs_default_effect[2]:+.6f} recall and
+{favor_vs_default_effect[3]:+.2f}% QPS.  With accumulators enabled on both sides, FAVOR beats default
+recall in {favor_accumulator_vs_default_effect[0]} cells and QPS in
+{favor_accumulator_vs_default_effect[1]}; its mean deltas are
+{favor_accumulator_vs_default_effect[2]:+.6f} recall and
+{favor_accumulator_vs_default_effect[3]:+.2f}% QPS.
 
 * Artifacts
 

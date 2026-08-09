@@ -63,7 +63,7 @@ CANDIDATE_DTYPE = np.dtype(
 def load_manifest(run: Path) -> dict:
     with (run / "manifest.json").open() as f:
         manifest = json.load(f)
-    if manifest.get("schema_version") not in (2, 3, 4):
+    if manifest.get("schema_version") not in (2, 3, 4, 5):
         raise ValueError(f"unsupported schema version: {manifest.get('schema_version')}")
     return manifest
 

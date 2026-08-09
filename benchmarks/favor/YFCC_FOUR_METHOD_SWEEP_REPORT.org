@@ -1,0 +1,69 @@
+#+title: YFCC-10M Four-Method Filtered Search Sweep
+
+* Scope
+
+This report compares exactly four SINGLE_CTA methods over the same 64 supported =(L, W,
+max_iterations)= cells: default CAGRA and FAVOR retention-safe traversal, each with and without the
+bounded passing-result accumulator.  The external benchmark batch contains 10,000 queries
+and uses one repetition after warmup.  Every method uses =max_queries=512= internally.  Both FAVOR
+curves include per-query selectivity sampling end to end; both default methods perform no selectivity
+estimation.
+
+The two =W=4= cells at =max_iterations in {4176,7569}= are excluded for every method because
+their required visited set exceeds CAGRA's hard 1M-slot hash table at the default 0.5 fill limit.
+All included rows have zero filter violations and zero invalid-sentinel errors.
+
+* Pareto frontier
+
+[[file:benchmarks/favor/yfcc_udf/results_four_method_20260808/plots/qps_recall_four_method_sweep.png]]
+
+* Highest recall observed
+
+| Method | L | W | Max iterations | Recall@10 | QPS |
+|-
+| default CAGRA | 512 | 2 | 7569 | 0.6921 | 1505.2 |
+| default + passing accumulator | 256 | 2 | 7569 | 0.9393 | 1165.4 |
+| FAVOR | 512 | 2 | 7569 | 0.8648 | 990.7 |
+| FAVOR + passing accumulator | 512 | 2 | 7569 | 0.9373 | 889.3 |
+
+* Fastest point at recall >= 0.905
+
+| Method | QPS | Recall@10 | L | W | Max iterations |
+|-
+| default CAGRA | not reached | | | |
+| default + passing accumulator | 2271.4 | 0.9120 | 64 | 4 | 2088 |
+| FAVOR | not reached | | | |
+| FAVOR + passing accumulator | 1791.8 | 0.9089 | 64 | 4 | 2088 |
+
+* Paired default-accumulator effect
+
+Across the 64 exactly matched cells, the accumulator improves recall in 64 cells.  Its
+mean recall delta is +0.236442; its mean paired QPS delta is
+-37.79% relative to default CAGRA.
+
+* Matched four-method effects
+
+Adding the accumulator to FAVOR improves recall in 63 of 64 cells and
+QPS in 0; its mean recall delta is
++0.059949 and mean QPS delta is -13.63%.
+
+Without accumulators, FAVOR beats default recall in 64 cells and QPS in
+0; its mean deltas are +0.171966 recall and
+-47.18% QPS.  With accumulators enabled on both sides, FAVOR beats default
+recall in 9 cells and QPS in
+0; its mean deltas are
+-0.004527 recall and
+-26.98% QPS.
+
+* Artifacts
+
+- =benchmarks/favor/yfcc_udf/results_four_method_20260808/correctness_summary.csv=
+- =benchmarks/favor/yfcc_udf/results_four_method_20260808/throughput_summary.csv=
+- =benchmarks/favor/yfcc_udf/results_four_method_20260808/plots/qps_recall_four_method_sweep.png=
+
+* Reproduction
+
+#+begin_src sh
+YFCC_RESULT_ROOT=benchmarks/favor/yfcc_udf/results_four_method_20260808 benchmarks/favor/yfcc_udf/run_experiment.sh accumulator_comparison
+python benchmarks/favor/yfcc_udf/analyze.py --sweep-only --result-root benchmarks/favor/yfcc_udf/results_four_method_20260808 --data-root datasets --report benchmarks/favor/YFCC_FOUR_METHOD_SWEEP_REPORT.org
+#+end_src

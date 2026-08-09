@@ -58,7 +58,7 @@ using cuvs::neighbors::cagra::detail::device::
  * lock.  Candidates are ordered exactly like the CPU diagnostic accumulator: raw distance first,
  * then internal graph id.
  */
-template <typename IndexT, typename DistanceT, typename SourceIndexT>
+template <typename IndexT, typename DistanceT, typename SourceIndexT, bool DIAGNOSTICS = false>
 RAFT_DEVICE_INLINE_FUNCTION void favor_observe_passing_candidates(
   IndexT* const accumulator_indices,
   DistanceT* const accumulator_distances,
@@ -71,7 +71,9 @@ RAFT_DEVICE_INLINE_FUNCTION void favor_observe_passing_candidates(
   const SourceIndexT* const source_indices_ptr,
   const std::uint32_t filter_query_id,
   cagra_sample_filter<SourceIndexT> filter_payload,
-  std::uint32_t* const accumulator_lock)
+  std::uint32_t* const accumulator_lock,
+  std::uint32_t* const diagnostic_observations = nullptr,
+  std::uint32_t* const diagnostic_insertions   = nullptr)
 {
   if (accumulator_capacity == 0) { return; }
 
@@ -100,6 +102,9 @@ RAFT_DEVICE_INLINE_FUNCTION void favor_observe_passing_candidates(
         // FAVOR adds penalties only to rejected candidates, so a passing candidate's stored
         // distance is its raw distance in every supported mode.
         distance = candidate_distances[candidate_pos];
+        if constexpr (DIAGNOSTICS) {
+          if (diagnostic_observations != nullptr) { atomicAdd(diagnostic_observations, 1u); }
+        }
       }
     }
 
@@ -159,6 +164,9 @@ RAFT_DEVICE_INLINE_FUNCTION void favor_observe_passing_candidates(
             }
             accumulator_indices[insertion_pos]   = best_node;
             accumulator_distances[insertion_pos] = best_distance;
+            if constexpr (DIAGNOSTICS) {
+              if (diagnostic_insertions != nullptr) { ++(*diagnostic_insertions); }
+            }
           }
           __threadfence_block();
           atomicExch(accumulator_lock, 0u);
@@ -237,6 +245,11 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   const auto resolved_local_gap_multiplier =
     device::favor_penalty_coefficient_device(resolved_filtering_rate, internal_topk) *
     favor_penalty_lambda;
+  const auto resolved_reference_penalty =
+    per_query_automatic_retention
+      ? device::favor_reference_penalty_device(
+          resolved_filtering_rate, internal_topk, favor_penalty_distance)
+      : favor_penalty_distance;
   const auto resolved_retention_fraction = per_query_automatic_retention
                                              ? device::favor_automatic_retention_fraction_device(
                                                  resolved_filtering_rate, internal_topk, top_k)
@@ -282,9 +295,12 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
         diagnostic_summary->hash_bitlen               = hash_bitlen;
         diagnostic_summary->small_hash_bitlen         = small_hash_bitlen;
         diagnostic_summary->small_hash_reset_interval = small_hash_reset_interval;
-        diagnostic_summary->best_unexpanded_distance  = raft::upper_bound<float>();
-        diagnostic_summary->worst_retained_distance   = raft::upper_bound<float>();
-        diagnostic_summary->kth_passing_raw_distance  = raft::upper_bound<float>();
+        diagnostic_summary->resolved_filtering_rate   = resolved_filtering_rate;
+        diagnostic_summary->reference_penalty =
+          FAVOR ? static_cast<float>(resolved_reference_penalty) : 0.0f;
+        diagnostic_summary->best_unexpanded_distance = raft::upper_bound<float>();
+        diagnostic_summary->worst_retained_distance  = raft::upper_bound<float>();
+        diagnostic_summary->kth_passing_raw_distance = raft::upper_bound<float>();
         for (std::uint32_t rank = 0; rank < favor_search_diagnostics::ground_truth_k; ++rank) {
           diagnostic_summary->gt_first_iteration[rank] =
             favor_search_diagnostics::invalid_iteration;
@@ -341,20 +357,19 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   DistanceT* passing_accumulator_distances = nullptr;
   std::uint32_t* smem_work_ptr;
   if constexpr (FAVOR) {
-    favor_penalty = reinterpret_cast<DistanceT*>(terminate_flag + 1);
-    favor_cutoff  = favor_penalty + 1;
+    favor_penalty          = reinterpret_cast<DistanceT*>(terminate_flag + 1);
+    favor_cutoff           = favor_penalty + 1;
     auto* favor_extra_smem = reinterpret_cast<std::uint8_t*>(favor_cutoff + 1);
-    smem_work_ptr = reinterpret_cast<std::uint32_t*>(favor_extra_smem);
+    smem_work_ptr          = reinterpret_cast<std::uint32_t*>(favor_extra_smem);
   } else {
     smem_work_ptr = reinterpret_cast<std::uint32_t*>(terminate_flag + 1);
   }
   if (filter_payload.uses_passing_accumulator()) {
-    passing_accumulator_lock = smem_work_ptr;
+    passing_accumulator_lock    = smem_work_ptr;
     passing_accumulator_indices = reinterpret_cast<IndexT*>(passing_accumulator_lock + 1);
     passing_accumulator_distances =
       reinterpret_cast<DistanceT*>(passing_accumulator_indices + top_k);
-    smem_work_ptr =
-      reinterpret_cast<std::uint32_t*>(passing_accumulator_distances + top_k);
+    smem_work_ptr = reinterpret_cast<std::uint32_t*>(passing_accumulator_distances + top_k);
   }
 
   // A flag for filtering.
@@ -450,18 +465,21 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   _CLK_REC(clk_compute_1st_distance);
 
   if (filter_payload.uses_passing_accumulator()) {
-    favor_observe_passing_candidates(passing_accumulator_indices,
-                                     passing_accumulator_distances,
-                                     top_k,
-                                     result_indices_buffer,
-                                     result_distances_buffer,
-                                     result_buffer_size,
-                                     index_msb_1_mask,
-                                     invalid_index,
-                                     source_indices_ptr,
-                                     query_id + query_id_offset,
-                                     filter_payload,
-                                     passing_accumulator_lock);
+    favor_observe_passing_candidates<IndexT, DistanceT, SourceIndexT, DIAGNOSTICS>(
+      passing_accumulator_indices,
+      passing_accumulator_distances,
+      top_k,
+      result_indices_buffer,
+      result_distances_buffer,
+      result_buffer_size,
+      index_msb_1_mask,
+      invalid_index,
+      source_indices_ptr,
+      query_id + query_id_offset,
+      filter_payload,
+      passing_accumulator_lock,
+      diagnostic_summary == nullptr ? nullptr : &diagnostic_summary->accumulator_observations,
+      diagnostic_summary == nullptr ? nullptr : &diagnostic_summary->accumulator_insertions);
   }
   __syncthreads();
 
@@ -578,7 +596,7 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
           favor_penalty[0] = device::favor_query_local_penalty<TOPK_BY_BITONIC_SORT>(
             result_distances_buffer,
             finite_count,
-            static_cast<DistanceT>(favor_penalty_distance),
+            static_cast<DistanceT>(resolved_reference_penalty),
             static_cast<DistanceT>(resolved_local_gap_multiplier));
         }
         if (favor_penalty_mode == 2) {
@@ -632,9 +650,14 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
         diagnostic_summary->terminal_reject            = rejected;
         diagnostic_summary->terminal_unexpanded_pass   = unexpanded_passing;
         diagnostic_summary->terminal_unexpanded_reject = unexpanded_rejected;
-        diagnostic_summary->query_penalty              = static_cast<float>(favor_penalty[0]);
-        diagnostic_summary->terminal_cutoff            = static_cast<float>(favor_cutoff[0]);
-        diagnostic_summary->best_unexpanded_distance   = best_unexpanded;
+        if constexpr (FAVOR) {
+          diagnostic_summary->query_penalty   = static_cast<float>(favor_penalty[0]);
+          diagnostic_summary->terminal_cutoff = static_cast<float>(favor_cutoff[0]);
+        } else {
+          diagnostic_summary->query_penalty   = 0.0f;
+          diagnostic_summary->terminal_cutoff = raft::upper_bound<float>();
+        }
+        diagnostic_summary->best_unexpanded_distance = best_unexpanded;
         diagnostic_summary->worst_retained_distance =
           valid ? worst_retained : raft::upper_bound<float>();
 
@@ -652,18 +675,17 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
             diagnostic_context->termination_record_start_iteration == 0
               ? diagnostic_context->termination_start_iteration
               : diagnostic_context->termination_record_start_iteration;
-          const auto* previous =
-            *checkpoint_count == 0
-              ? nullptr
-              : diagnostic_context->termination_checkpoints +
-                  static_cast<std::uint64_t>(diagnostic_query_id) *
-                    diagnostic_context->termination_checkpoint_stride +
-                  (*checkpoint_count - 1);
-          const bool periodic_due = completed_iterations >= record_start_iteration &&
-                                    (previous == nullptr ||
-                                     expanded_parents >= previous->expanded_parents +
-                                                           diagnostic_context
-                                                             ->termination_parent_interval);
+          const auto* previous = *checkpoint_count == 0
+                                   ? nullptr
+                                   : diagnostic_context->termination_checkpoints +
+                                       static_cast<std::uint64_t>(diagnostic_query_id) *
+                                         diagnostic_context->termination_checkpoint_stride +
+                                       (*checkpoint_count - 1);
+          const bool periodic_due =
+            completed_iterations >= record_start_iteration &&
+            (previous == nullptr ||
+             expanded_parents >=
+               previous->expanded_parents + diagnostic_context->termination_parent_interval);
           bool b0_due = completed_iterations == diagnostic_context->termination_start_iteration;
           bool terminal_due = completed_iterations == max_iteration;
           if (previous != nullptr && previous->iteration == completed_iterations) {
@@ -676,20 +698,18 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
                                static_cast<std::uint64_t>(diagnostic_query_id) *
                                  diagnostic_context->termination_checkpoint_stride +
                                *checkpoint_count;
-            *checkpoint                          = {};
-            checkpoint->query_id                 = diagnostic_query_id;
-            checkpoint->checkpoint               = *checkpoint_count;
-            checkpoint->iteration                = completed_iterations;
-            checkpoint->expanded_parents         = expanded_parents;
+            *checkpoint                  = {};
+            checkpoint->query_id         = diagnostic_query_id;
+            checkpoint->checkpoint       = *checkpoint_count;
+            checkpoint->iteration        = completed_iterations;
+            checkpoint->expanded_parents = expanded_parents;
             checkpoint->cumulative_candidate_evaluations =
               diagnostic_summary->candidate_evaluations;
-            checkpoint->cumulative_passing_candidates =
-              diagnostic_summary->passing_candidates;
-            checkpoint->cumulative_candidate_duplicates =
-              diagnostic_summary->candidate_duplicates;
-            checkpoint->frontier_best            = best_unexpanded;
-            checkpoint->prefix_boundary          = raft::upper_bound<float>();
-            checkpoint->kth_passing_raw_distance = raft::upper_bound<float>();
+            checkpoint->cumulative_passing_candidates   = diagnostic_summary->passing_candidates;
+            checkpoint->cumulative_candidate_duplicates = diagnostic_summary->candidate_duplicates;
+            checkpoint->frontier_best                   = best_unexpanded;
+            checkpoint->prefix_boundary                 = raft::upper_bound<float>();
+            checkpoint->kth_passing_raw_distance        = raft::upper_bound<float>();
             for (std::uint32_t rank = 0; rank < favor_search_diagnostics::ground_truth_k; ++rank) {
               checkpoint->top_ids[rank]       = 0xffffffffu;
               checkpoint->top_distances[rank] = raft::upper_bound<float>();
@@ -739,16 +759,21 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
                          static_cast<std::uint64_t>(diagnostic_trace_slot) *
                            diagnostic_context->max_trace_iterations +
                          iter;
-          *record                          = {};
-          record->query_id                 = diagnostic_query_id;
-          record->iteration                = iter;
-          record->valid                    = valid;
-          record->passing                  = passing;
-          record->rejected                 = rejected;
-          record->unexpanded_passing       = unexpanded_passing;
-          record->unexpanded_rejected      = unexpanded_rejected;
-          record->penalty                  = static_cast<float>(favor_penalty[0]);
-          record->cutoff                   = static_cast<float>(favor_cutoff[0]);
+          *record                     = {};
+          record->query_id            = diagnostic_query_id;
+          record->iteration           = iter;
+          record->valid               = valid;
+          record->passing             = passing;
+          record->rejected            = rejected;
+          record->unexpanded_passing  = unexpanded_passing;
+          record->unexpanded_rejected = unexpanded_rejected;
+          if constexpr (FAVOR) {
+            record->penalty = static_cast<float>(favor_penalty[0]);
+            record->cutoff  = static_cast<float>(favor_cutoff[0]);
+          } else {
+            record->penalty = 0.0f;
+            record->cutoff  = raft::upper_bound<float>();
+          }
           record->best_unexpanded_distance = best_unexpanded;
           record->worst_retained_distance  = diagnostic_summary->worst_retained_distance;
         }
@@ -901,7 +926,7 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
           favor_penalty[0] = device::favor_query_local_penalty<TOPK_BY_BITONIC_SORT>(
             result_distances_buffer,
             finite_count,
-            static_cast<DistanceT>(favor_penalty_distance),
+            static_cast<DistanceT>(resolved_reference_penalty),
             static_cast<DistanceT>(resolved_local_gap_multiplier));
         }
         if (favor_penalty_mode == 2) {
@@ -1037,7 +1062,7 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
           reinterpret_cast<std::uint8_t*>(smem_work_ptr));
       }
     } else {
-      compute_distance_to_child_nodes_jit<IndexT, DistanceT, DataT>(
+      compute_distance_to_child_nodes_jit<IndexT, DistanceT, DataT, 1, DIAGNOSTICS>(
         result_indices_buffer + internal_topk,
         result_distances_buffer + internal_topk,
         smem_desc,
@@ -1049,7 +1074,10 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
         0u,
         parent_list_buffer,
         result_indices_buffer,
-        search_width);
+        search_width,
+        nullptr,
+        0,
+        reinterpret_cast<std::uint8_t*>(smem_work_ptr));
     }
     // Critical: __syncthreads() must be reached by ALL threads
     // If any thread is stuck in compute_distance_to_child_nodes_jit, this will hang
@@ -1057,18 +1085,21 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
     _CLK_REC(clk_compute_distance);
 
     if (filter_payload.uses_passing_accumulator()) {
-      favor_observe_passing_candidates(passing_accumulator_indices,
-                                       passing_accumulator_distances,
-                                       top_k,
-                                       result_indices_buffer + internal_topk,
-                                       result_distances_buffer + internal_topk,
-                                       search_width * graph_degree,
-                                       index_msb_1_mask,
-                                       invalid_index,
-                                       source_indices_ptr,
-                                       query_id + query_id_offset,
-                                       filter_payload,
-                                       passing_accumulator_lock);
+      favor_observe_passing_candidates<IndexT, DistanceT, SourceIndexT, DIAGNOSTICS>(
+        passing_accumulator_indices,
+        passing_accumulator_distances,
+        top_k,
+        result_indices_buffer + internal_topk,
+        result_distances_buffer + internal_topk,
+        search_width * graph_degree,
+        index_msb_1_mask,
+        invalid_index,
+        source_indices_ptr,
+        query_id + query_id_offset,
+        filter_payload,
+        passing_accumulator_lock,
+        diagnostic_summary == nullptr ? nullptr : &diagnostic_summary->accumulator_observations,
+        diagnostic_summary == nullptr ? nullptr : &diagnostic_summary->accumulator_insertions);
     }
     __syncthreads();
 
@@ -1138,20 +1169,22 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
             static_cast<float>(result_distances_buffer[internal_topk + j]);
           float raw_distance      = final_distance;
           float effective_penalty = 0.0f;
-          if (!pass && favor_penalty_mode == 2 && favor_penalty[0] > DistanceT{0} &&
-              final_distance < raft::upper_bound<float>()) {
-            const float penalty             = static_cast<float>(favor_penalty[0]);
-            const float cutoff              = static_cast<float>(favor_cutoff[0]);
-            const float rho                 = resolved_retention_fraction;
-            const float raw_if_full_penalty = final_distance - penalty;
-            if (raw_if_full_penalty < cutoff && penalty <= rho * (cutoff - raw_if_full_penalty)) {
-              raw_distance      = raw_if_full_penalty;
-              effective_penalty = penalty;
-            } else if (rho < 1.0f) {
-              raw_distance      = (final_distance - rho * cutoff) / (1.0f - rho);
-              effective_penalty = final_distance - raw_distance;
+          if constexpr (FAVOR) {
+            if (!pass && favor_penalty_mode == 2 && favor_penalty[0] > DistanceT{0} &&
+                final_distance < raft::upper_bound<float>()) {
+              const float penalty             = static_cast<float>(favor_penalty[0]);
+              const float cutoff              = static_cast<float>(favor_cutoff[0]);
+              const float rho                 = resolved_retention_fraction;
+              const float raw_if_full_penalty = final_distance - penalty;
+              if (raw_if_full_penalty < cutoff && penalty <= rho * (cutoff - raw_if_full_penalty)) {
+                raw_distance      = raw_if_full_penalty;
+                effective_penalty = penalty;
+              } else if (rho < 1.0f) {
+                raw_distance      = (final_distance - rho * cutoff) / (1.0f - rho);
+                effective_penalty = final_distance - raw_distance;
+              }
+              penalized += effective_penalty > 0.0f;
             }
-            penalized += effective_penalty > 0.0f;
           }
 
           if (candidate != nullptr) {
@@ -1500,6 +1533,84 @@ __device__ void search_kernel_jit(
                             0.0f,
                             0.5f,
                             graph_size);
+}
+
+/** Diagnostic default-filter entry used only by the bench-only scoped attachment. */
+template <bool TOPK_BY_BITONIC_SORT,
+          bool BITONIC_SORT_AND_MERGE_MULTI_WARPS,
+          typename DataT,
+          typename IndexT,
+          typename DistanceT,
+          typename SourceIndexT>
+__device__ void search_default_diagnostic_kernel_jit(
+  uintptr_t result_indices_ptr,
+  DistanceT* const result_distances_ptr,
+  const std::uint32_t top_k,
+  const DataT* const queries_ptr,
+  const IndexT* const knn_graph,
+  const std::uint32_t graph_degree,
+  const SourceIndexT* source_indices_ptr,
+  const unsigned num_distilation,
+  const uint64_t rand_xor_mask,
+  const IndexT* seed_ptr,
+  const uint32_t num_seeds,
+  IndexT* const visited_hashmap_ptr,
+  const std::uint32_t max_candidates,
+  const std::uint32_t max_itopk,
+  const std::uint32_t internal_topk,
+  const std::uint32_t search_width,
+  const std::uint32_t min_iteration,
+  const std::uint32_t max_iteration,
+  std::uint32_t* const diagnostic_context_ptr,
+  const std::uint32_t hash_bitlen,
+  const std::uint32_t small_hash_bitlen,
+  const std::uint32_t small_hash_reset_interval,
+  const std::uint32_t query_id_offset,
+  const dataset_descriptor_base_t<DataT, IndexT, DistanceT>* dataset_desc,
+  const IndexT graph_size,
+  cagra_sample_filter<SourceIndexT> filter_payload)
+{
+  const auto query_id = blockIdx.y;
+  search_core<false,
+              TOPK_BY_BITONIC_SORT,
+              BITONIC_SORT_AND_MERGE_MULTI_WARPS,
+              DataT,
+              IndexT,
+              DistanceT,
+              SourceIndexT,
+              true>(result_indices_ptr,
+                    result_distances_ptr,
+                    top_k,
+                    queries_ptr,
+                    knn_graph,
+                    graph_degree,
+                    source_indices_ptr,
+                    num_distilation,
+                    rand_xor_mask,
+                    seed_ptr,
+                    num_seeds,
+                    visited_hashmap_ptr,
+                    max_candidates,
+                    max_itopk,
+                    internal_topk,
+                    search_width,
+                    min_iteration,
+                    max_iteration,
+                    nullptr,
+                    hash_bitlen,
+                    small_hash_bitlen,
+                    small_hash_reset_interval,
+                    query_id,
+                    query_id_offset,
+                    dataset_desc,
+                    filter_payload,
+                    0.0f,
+                    0.0f,
+                    0u,
+                    0.0f,
+                    0.5f,
+                    graph_size,
+                    reinterpret_cast<favor_search_diagnostics::context*>(diagnostic_context_ptr));
 }
 
 template <bool TOPK_BY_BITONIC_SORT,

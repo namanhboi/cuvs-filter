@@ -11,9 +11,9 @@
 #include <cuvs/detail/jit_lto/cagra/cagra_fragments.hpp>
 
 #include "compute_distance.hpp"  // For dataset_descriptor_host
+#include "favor_search_diagnostics.hpp"
 #include "hashmap.hpp"
 #include "jit_lto_kernels/cagra_jit_launcher_factory.hpp"
-#include "favor_search_diagnostics.hpp"
 #include "jit_lto_kernels/kernel_def.hpp"
 #include "sample_filter_utils.cuh"  // For CagraSampleFilterWithQueryIdOffset
 #include "search_plan.cuh"          // For search_params
@@ -793,6 +793,7 @@ void select_and_run(
   const IndexT* dev_seed_ptr,         // [num_queries, num_seeds]
   uint32_t* num_executed_iterations,  // [num_queries,]
   const search_params& ps,
+  float favor_raw_delta_d,
   uint32_t favor_adaptive_start_iteration,
   uint32_t favor_adaptive_prefix_size,
   uint32_t topk,
@@ -858,7 +859,10 @@ void select_and_run(
   } else {
     const bool favor       = ps.filter_mode == filtering_mode::FAVOR;
     const bool diagnostics = favor_search_diagnostics::get_active_context() != nullptr;
-    if (diagnostics) { RAFT_LOG_INFO("Selecting dedicated SINGLE_CTA FAVOR diagnostic fragment"); }
+    if (diagnostics) {
+      RAFT_LOG_INFO("Selecting dedicated SINGLE_CTA %s diagnostic fragment",
+                    favor ? "FAVOR" : "default-filter");
+    }
     std::shared_ptr<AlgorithmLauncher> launcher =
       make_cagra_single_cta_jit_launcher<DataT,
                                          IndexT,
@@ -889,7 +893,7 @@ void select_and_run(
     const uint32_t max_iterations_u32            = static_cast<uint32_t>(ps.max_iterations);
     const uint32_t favor_adaptive_start_iteration_u32 = favor_adaptive_start_iteration;
     const uint32_t favor_adaptive_prefix_size_u32     = favor_adaptive_prefix_size;
-    const unsigned num_random_samplings_u        = static_cast<unsigned>(ps.num_random_samplings);
+    const unsigned num_random_samplings_u = static_cast<unsigned>(ps.num_random_samplings);
 
     dim3 grid(1, num_queries, 1);
     dim3 block(block_size, 1, 1);
@@ -936,6 +940,13 @@ void select_and_run(
       if (ps.favor_retention_fraction == 0.0f && filter_payload.filtering_rates != nullptr) {
         favor_penalty_mode_value |= favor_automatic_retention_mask;
       }
+      // Scalar bitset modes retain the historical host-precomputed reference penalty. Query-local
+      // UDF mode instead needs raw delta-d so each CTA can derive its own reference ceiling from
+      // the sampled rate. The automatic-retention transport bit tells the kernel which value it
+      // received without changing the public search parameters or kernel signature.
+      const auto favor_penalty_distance =
+        (favor_penalty_mode_value & favor_automatic_retention_mask) != 0 ? favor_raw_delta_d
+                                                                         : ps.favor_delta_d;
       const auto favor_retention_fraction =
         ps.favor_retention_fraction == 0.0f
           ? favor_automatic_retention_fraction(ps.filtering_rate, ps.itopk_size, topk)
@@ -974,7 +985,7 @@ void select_and_run(
             static_cast<IndexT>(graph.extent(0)),
             filter_payload,
             ps.filtering_rate,
-            ps.favor_delta_d,
+            favor_penalty_distance,
             favor_penalty_mode_value,
             ps.favor_penalty_lambda,
             favor_retention_fraction,

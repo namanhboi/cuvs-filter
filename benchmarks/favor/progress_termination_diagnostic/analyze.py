@@ -79,8 +79,8 @@ def load_ibin(path: Path, rows: int) -> np.ndarray:
 def load_capture(slug: str, capture_root: Path, data_root: Path) -> Capture:
     directory = capture_root / slug
     manifest = json.loads((directory / "manifest.json").read_text())
-    if int(manifest["schema_version"]) != 4:
-        raise ValueError(f"expected diagnostic schema 4: {directory}")
+    if int(manifest["schema_version"]) not in (4, 5):
+        raise ValueError(f"expected diagnostic schema 4 or 5: {directory}")
     if int(manifest["termination_checkpoint_record_size"]) != CHECKPOINT_DTYPE.itemsize:
         raise ValueError(f"checkpoint ABI mismatch: {directory}")
     num_queries = int(manifest["num_queries"])
