@@ -11,9 +11,11 @@
 
 #include "naive_knn.cuh"
 
+#include <cuvs/core/bitmap.hpp>
 #include <cuvs/distance/distance.hpp>
 #include <cuvs/neighbors/cagra.hpp>
 #include <cuvs/neighbors/composite/index.hpp>
+#include <raft/core/bitset.cuh>
 #include <raft/core/device_mdarray.hpp>
 #include <raft/core/device_mdspan.hpp>
 #include <raft/core/device_resources.hpp>
@@ -826,8 +828,10 @@ class AnnCagraFilterTest : public ::testing::TestWithParam<AnnCagraInputs> {
 
     size_t queries_size = ps.n_queries * ps.k;
     std::vector<IdxT> indices_Cagra(queries_size);
+    std::vector<IdxT> indices_bitmap(queries_size);
     std::vector<IdxT> indices_naive(queries_size);
     std::vector<DistanceT> distances_Cagra(queries_size);
+    std::vector<DistanceT> distances_bitmap(queries_size);
     std::vector<DistanceT> distances_naive(queries_size);
 
     {
@@ -858,6 +862,8 @@ class AnnCagraFilterTest : public ::testing::TestWithParam<AnnCagraInputs> {
     {
       rmm::device_uvector<DistanceT> distances_dev(queries_size, stream_);
       rmm::device_uvector<IdxT> indices_dev(queries_size, stream_);
+      rmm::device_uvector<DistanceT> bitmap_distances_dev(queries_size, stream_);
+      rmm::device_uvector<IdxT> bitmap_indices_dev(queries_size, stream_);
 
       {
         cagra::index_params index_params;
@@ -943,6 +949,40 @@ class AnnCagraFilterTest : public ::testing::TestWithParam<AnnCagraInputs> {
                       indices_out_view,
                       dists_out_view,
                       bitset_filter_obj);
+
+        const auto bitmap_bits = static_cast<int64_t>(ps.n_queries) * ps.n_rows;
+        rmm::device_uvector<std::uint32_t> bitmap_storage(
+          raft::div_rounding_up_safe<int64_t>(bitmap_bits, 32), stream_);
+        removed_indices_bitset.view().repeat(handle_, ps.n_queries, bitmap_storage.data());
+        auto bitmap_view = cuvs::core::bitmap_view<std::uint32_t, int64_t>(
+          bitmap_storage.data(), ps.n_queries, ps.n_rows);
+        auto bitmap_filter_obj       = cuvs::neighbors::filtering::bitmap_filter(bitmap_view);
+        auto bitmap_indices_out_view = raft::make_device_matrix_view<IdxT, int64_t>(
+          bitmap_indices_dev.data(), ps.n_queries, ps.k);
+        auto bitmap_dists_out_view = raft::make_device_matrix_view<DistanceT, int64_t>(
+          bitmap_distances_dev.data(), ps.n_queries, ps.k);
+        if (ps.algo == cagra::search_algo::MULTI_KERNEL) {
+          EXPECT_THROW(cagra::search(handle_,
+                                     search_params,
+                                     index,
+                                     search_queries_view,
+                                     bitmap_indices_out_view,
+                                     bitmap_dists_out_view,
+                                     bitmap_filter_obj),
+                       std::exception);
+        } else {
+          cagra::search(handle_,
+                        search_params,
+                        index,
+                        search_queries_view,
+                        bitmap_indices_out_view,
+                        bitmap_dists_out_view,
+                        bitmap_filter_obj);
+          raft::update_host(
+            distances_bitmap.data(), bitmap_distances_dev.data(), queries_size, stream_);
+          raft::update_host(
+            indices_bitmap.data(), bitmap_indices_dev.data(), queries_size, stream_);
+        }
         raft::update_host(distances_Cagra.data(), distances_dev.data(), queries_size, stream_);
         raft::update_host(indices_Cagra.data(), indices_dev.data(), queries_size, stream_);
         raft::resource::sync_stream(handle_);
@@ -958,6 +998,17 @@ class AnnCagraFilterTest : public ::testing::TestWithParam<AnnCagraInputs> {
       }
       EXPECT_FALSE(unacceptable_node);
 
+      if (ps.algo != cagra::search_algo::MULTI_KERNEL) {
+        bool unacceptable_bitmap_node = false;
+        for (int q = 0; q < ps.n_queries; q++) {
+          for (int i = 0; i < ps.k; i++) {
+            const auto n             = indices_bitmap[q * ps.k + i];
+            unacceptable_bitmap_node = unacceptable_bitmap_node | !test_cagra_sample_filter()(q, n);
+          }
+        }
+        EXPECT_FALSE(unacceptable_bitmap_node);
+      }
+
       double min_recall = ps.min_recall;
       // TODO(mfoerster): re-enable uniqueness test
       EXPECT_TRUE(eval_neighbours(indices_naive,
@@ -969,6 +1020,17 @@ class AnnCagraFilterTest : public ::testing::TestWithParam<AnnCagraInputs> {
                                   0.003,
                                   min_recall,
                                   false));
+      if (ps.algo != cagra::search_algo::MULTI_KERNEL) {
+        EXPECT_TRUE(eval_neighbours(indices_naive,
+                                    indices_bitmap,
+                                    distances_naive,
+                                    distances_bitmap,
+                                    ps.n_queries,
+                                    ps.k,
+                                    0.003,
+                                    min_recall,
+                                    false));
+      }
       if (!ps.compression.has_value()) {
         // Don't evaluate distances for CAGRA-Q for now as the error can be somewhat large
         EXPECT_TRUE(eval_distances(handle_,
@@ -982,6 +1044,19 @@ class AnnCagraFilterTest : public ::testing::TestWithParam<AnnCagraInputs> {
                                    ps.k,
                                    ps.metric,
                                    1.0e-4));
+        if (ps.algo != cagra::search_algo::MULTI_KERNEL) {
+          EXPECT_TRUE(eval_distances(handle_,
+                                     database.data(),
+                                     search_queries.data(),
+                                     bitmap_indices_dev.data(),
+                                     bitmap_distances_dev.data(),
+                                     ps.n_rows,
+                                     ps.dim,
+                                     ps.n_queries,
+                                     ps.k,
+                                     ps.metric,
+                                     1.0e-4));
+        }
       }
     }
   }

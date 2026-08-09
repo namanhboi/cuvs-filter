@@ -140,6 +140,13 @@ struct is_bitset_filter<::cuvs::neighbors::filtering::bitset_filter<bitset_t, in
   : std::true_type {};
 
 template <typename T>
+struct is_bitmap_filter : std::false_type {};
+
+template <>
+struct is_bitmap_filter<::cuvs::neighbors::filtering::bitmap_filter<std::uint32_t, std::int64_t>>
+  : std::true_type {};
+
+template <typename T>
 struct is_udf_filter : std::false_type {};
 
 template <>
@@ -163,10 +170,28 @@ void* get_cagra_device_payload(PayloadT payload, cudaStream_t stream)
   return owner.dev_ptr(payload, stream);
 }
 
+template <typename FilterT>
+::cuvs::neighbors::detail::bitmap_filter_data_t make_cagra_bitmap_filter_storage(
+  const FilterT& filter)
+{
+  const auto bitmap_view = filter.view();
+  return ::cuvs::neighbors::detail::bitmap_filter_data_t{
+    const_cast<std::uint32_t*>(bitmap_view.data()),
+    static_cast<std::int64_t>(bitmap_view.get_n_rows()),
+    static_cast<std::int64_t>(bitmap_view.get_n_cols()),
+    static_cast<std::int64_t>(bitmap_view.get_original_nbits())};
+}
+
 template <typename SourceIndexT, typename FilterT>
 void* make_cagra_bitset_filter_payload(const FilterT& filter, cudaStream_t stream)
 {
   return get_cagra_device_payload(make_cagra_bitset_filter_storage<SourceIndexT>(filter), stream);
+}
+
+template <typename FilterT>
+void* make_cagra_bitmap_filter_payload(const FilterT& filter, cudaStream_t stream)
+{
+  return get_cagra_device_payload(make_cagra_bitmap_filter_storage(filter), stream);
 }
 
 template <typename SourceIndexT, typename FilterT>
@@ -178,6 +203,9 @@ void fill_cagra_sample_filter(cagra_sample_filter<SourceIndexT>& out,
   if constexpr (is_bitset_filter<DecayedFilter>::value) {
     out.filter_data = make_cagra_bitset_filter_payload<SourceIndexT>(filter, stream);
     out.filter_kind = cagra_sample_filter<SourceIndexT>::kind_bitset;
+  } else if constexpr (is_bitmap_filter<DecayedFilter>::value) {
+    out.filter_data = make_cagra_bitmap_filter_payload(filter, stream);
+    out.filter_kind = cagra_sample_filter<SourceIndexT>::kind_bitmap;
   } else if constexpr (is_udf_filter<DecayedFilter>::value) {
     out.filter_data = filter.filter_data;
     out.filter_kind = cagra_sample_filter<SourceIndexT>::kind_udf;
@@ -198,6 +226,8 @@ std::uint64_t cagra_filter_payload_hash(const FilterT& filter)
   using DecayedFilter = std::decay_t<FilterT>;
   if constexpr (is_bitset_filter<DecayedFilter>::value) {
     return cagra_payload_hash(make_cagra_bitset_filter_storage<SourceIndexT>(filter));
+  } else if constexpr (is_bitmap_filter<DecayedFilter>::value) {
+    return cagra_payload_hash(make_cagra_bitmap_filter_storage(filter));
   } else if constexpr (requires { filter.filter; }) {
     return cagra_filter_payload_hash<SourceIndexT>(filter.filter);
   } else {

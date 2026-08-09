@@ -13,6 +13,7 @@
 #include "detail/cagra/graph_core.cuh"
 
 #include "detail/ann_utils.cuh"
+#include <raft/core/bitmap.cuh>
 #include <raft/core/device_mdspan.hpp>
 #include <raft/core/host_device_accessor.hpp>
 #include <raft/core/mdspan.hpp>
@@ -40,6 +41,22 @@
 namespace cuvs::neighbors::cagra {
 
 namespace detail {
+
+template <typename BitmapViewT>
+float resolve_cagra_bitmap_filtering_rate(raft::resources const& res,
+                                          float requested_filtering_rate,
+                                          BitmapViewT bitmap)
+{
+  if (requested_filtering_rate >= 0.0f) { return requested_filtering_rate; }
+
+  const auto total_bits = static_cast<std::int64_t>(bitmap.size());
+  if (total_bits == 0) { return 0.0f; }
+
+  const auto passing_bits = static_cast<std::int64_t>(bitmap.count(res));
+  const auto filtering_rate =
+    static_cast<float>(total_bits - passing_bits) / static_cast<float>(total_bits);
+  return std::min(std::max(filtering_rate, 0.0f), 0.999f);
+}
 
 template <typename T, typename IdxT>
 std::uint64_t count_favor_bitset_matches(
@@ -401,8 +418,29 @@ void search_with_filtering(raft::resources const& res,
   RAFT_EXPECTS(queries.extent(1) == idx.dim(),
                "Number of query dimensions should equal number of dimensions in the index.");
 
+  search_params params_copy = params;
+  if constexpr (detail::is_bitmap_filter<std::decay_t<CagraSampleFilterT>>::value) {
+    const auto bitmap = sample_filter.view();
+    RAFT_EXPECTS(bitmap.get_n_rows() == queries.extent(0),
+                 "CAGRA bitmap filter row count must equal the number of queries.");
+    RAFT_EXPECTS(bitmap.get_n_cols() == static_cast<int64_t>(idx.size()),
+                 "CAGRA bitmap filter column count must equal the index source-domain size.");
+    RAFT_EXPECTS(bitmap.size() == 0 || bitmap.data() != nullptr,
+                 "CAGRA bitmap filter storage must be device-accessible and non-null.");
+    RAFT_EXPECTS(params.filter_mode == filtering_mode::DEFAULT,
+                 "CAGRA bitmap filtering currently supports only DEFAULT filter mode.");
+    RAFT_EXPECTS(params.algo != search_algo::MULTI_KERNEL,
+                 "CAGRA bitmap filtering does not support MULTI_KERNEL search.");
+    RAFT_EXPECTS(!params.persistent, "CAGRA bitmap filtering does not support persistent search.");
+    RAFT_EXPECTS(std::isfinite(params.filtering_rate) && params.filtering_rate < 1.0f,
+                 "CAGRA bitmap filtering_rate must be finite and less than 1.0.");
+
+    params_copy.filtering_rate =
+      detail::resolve_cagra_bitmap_filtering_rate(res, params.filtering_rate, bitmap);
+  }
+
   return cagra::detail::search_main<T, OutputIdxT, CagraSampleFilterT, IdxT>(
-    res, params, idx, queries, neighbors, distances, sample_filter);
+    res, params_copy, idx, queries, neighbors, distances, sample_filter);
 }
 
 template <typename T, typename IdxT, typename OutputIdxT = IdxT>
@@ -424,6 +462,16 @@ void search(raft::resources const& res,
     auto sample_filter_copy = sample_filter;
     return search_with_filtering<T, IdxT, none_filter_type, OutputIdxT>(
       res, params_copy, idx, queries, neighbors, distances, sample_filter_copy);
+  } catch (const std::bad_cast&) {
+  }
+
+  try {
+    auto& sample_filter =
+      dynamic_cast<const cuvs::neighbors::filtering::bitmap_filter<uint32_t, int64_t>&>(
+        sample_filter_ref);
+    auto sample_filter_copy = sample_filter;
+    return search_with_filtering<T, IdxT, decltype(sample_filter_copy), OutputIdxT>(
+      res, params, idx, queries, neighbors, distances, sample_filter_copy);
   } catch (const std::bad_cast&) {
   }
 

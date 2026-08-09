@@ -366,13 +366,18 @@ struct search_params : cuvs::neighbors::search_params {
    * A parameter indicating the rate of nodes to be filtered-out, when filtering is used.
    * The value must be equal to or greater than 0.0 and less than 1.0. Default value is
    * negative, in which case the filtering rate is automatically calculated when possible.
-   * For `filtering::udf_filter`, CAGRA uses `udf_filter::filtering_rate` when this value is
-   * negative. If both values are negative, CAGRA assumes 0.0 because a UDF's selectivity cannot be
-   * inferred from the source string.
+   * For `filtering::bitmap_filter<uint32_t, int64_t>`, CAGRA counts the passing bits across all
+   * query rows when this value is negative. For `filtering::udf_filter`, CAGRA uses
+   * `udf_filter::filtering_rate`; if both values are negative, CAGRA assumes 0.0 because a UDF's
+   * selectivity cannot be inferred from the source string.
    */
   float filtering_rate = -1.0;
 
-  /** Filtering implementation. FAVOR supports bitset filters with SINGLE_CTA and MULTI_CTA. */
+  /**
+   * Filtering implementation. FAVOR supports bitset filters with SINGLE_CTA and MULTI_CTA.
+   * Per-query `bitmap_filter<uint32_t, int64_t>` filters currently support DEFAULT mode with
+   * SINGLE_CTA, MULTI_CTA, or AUTO.
+   */
   filtering_mode filter_mode = filtering_mode::DEFAULT;
 
   /** Dataset/graph-specific FAVOR delta-d statistic. Required when filter_mode is FAVOR. */

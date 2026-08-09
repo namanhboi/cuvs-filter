@@ -106,6 +106,9 @@ struct sample_filter_jit_tag {
                            std::is_same_v<U, bitset_filter<uint32_t, int64_t>> ||
                            std::is_same_v<U, bitset_filter<uint32_t, uint32_t>>) {
         return cuvs::neighbors::detail::tag_filter_bitset{};
+      } else if constexpr (is_bitmap_filter<U>::value ||
+                           std::is_same_v<U, bitmap_filter<uint32_t, int64_t>>) {
+        return cuvs::neighbors::detail::tag_filter_bitmap{};
       } else if constexpr (requires { std::declval<U>().filter; }) {
         using InnerFilter = std::decay_t<decltype(std::declval<U>().filter)>;
         return f<InnerFilter>();
@@ -113,7 +116,7 @@ struct sample_filter_jit_tag {
         static_assert(
           cagra_jit_sample_filter_tag_type_always_false<U>,
           "CAGRA JIT: sample_filter_jit_tag: SAMPLE_FILTER_T must be cuvs::neighbors::filtering::"
-          "none_sample_filter, udf_filter, or "
+          "none_sample_filter, bitset_filter, bitmap_filter, udf_filter, or "
           "cuvs::neighbors::cagra::detail::CagraSampleFilterWithQueryIdOffset<supported filter>. "
           "Unknown wrapper type. "
           "(SAMPLE_FILTER_T in error; add a branch in sample_filter_jit_tag.)");

@@ -16,6 +16,9 @@ TEST_P(AnnCagraTestF16_U32, AnnCagra_I64) { this->testCagra<int64_t>(); }
 typedef AnnCagraAddNodesTest<float, half, std::uint32_t> AnnCagraAddNodesTestF16_U32;
 TEST_P(AnnCagraAddNodesTestF16_U32, AnnCagraAddNodes) { this->testCagra(); }
 
+typedef AnnCagraFilterTest<float, half, std::uint32_t> AnnCagraFilterTestF16_U32;
+TEST_P(AnnCagraFilterTestF16_U32, AnnCagra) { this->testCagra(); }
+
 typedef AnnCagraIndexMergeTest<float, half, std::uint32_t> AnnCagraIndexMergeTestF16_U32;
 TEST_P(AnnCagraIndexMergeTestF16_U32, AnnCagraIndexMerge_U32) { this->testCagra<uint32_t>(); }
 TEST_P(AnnCagraIndexMergeTestF16_U32, AnnCagraIndexMerge_I64) { this->testCagra<int64_t>(); }
@@ -24,6 +27,9 @@ INSTANTIATE_TEST_CASE_P(AnnCagraTest, AnnCagraTestF16_U32, ::testing::ValuesIn(i
 INSTANTIATE_TEST_CASE_P(AnnCagraAddNodesTest,
                         AnnCagraAddNodesTestF16_U32,
                         ::testing::ValuesIn(inputs_addnode));
+INSTANTIATE_TEST_CASE_P(AnnCagraFilterTest,
+                        AnnCagraFilterTestF16_U32,
+                        ::testing::ValuesIn(inputs_filtering));
 INSTANTIATE_TEST_CASE_P(AnnCagraIndexMergeTest,
                         AnnCagraIndexMergeTestF16_U32,
                         ::testing::ValuesIn(inputs));

@@ -230,7 +230,8 @@ std::shared_ptr<AlgorithmLauncher> build_sample_filter_only_launcher(
 
 /// Build a JIT AlgorithmLauncher for single-CTA CAGRA search (runtime VPQ / metric → tag
 /// dispatch). `SampleFilterJitTag` is `cuvs::neighbors::detail::tag_filter_none`,
-/// `tag_filter_bitset`, or use `sample_filter_jit_tag_t<SAMPLE_FILTER_T>`.
+/// `tag_filter_bitset`, `tag_filter_bitmap`, or use
+/// `sample_filter_jit_tag_t<SAMPLE_FILTER_T>`.
 template <typename DataT,
           typename IndexT,
           typename DistanceT,

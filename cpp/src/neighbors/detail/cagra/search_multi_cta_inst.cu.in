@@ -11,6 +11,8 @@ namespace {
 using data_t          = @data_type@;
 using bitset_filter_t = cuvs::neighbors::cagra::detail::CagraSampleFilterWithQueryIdOffset<
   cuvs::neighbors::filtering::bitset_filter<uint32_t, int64_t>>;
+using bitmap_filter_t = cuvs::neighbors::cagra::detail::CagraSampleFilterWithQueryIdOffset<
+  cuvs::neighbors::filtering::bitmap_filter<uint32_t, int64_t>>;
 using udf_filter_t = cuvs::neighbors::cagra::detail::CagraSampleFilterWithQueryIdOffset<
   cuvs::neighbors::filtering::udf_filter>;
 using favor_udf_accumulator_filter_t =
@@ -30,6 +32,7 @@ instantiate_kernel_selection(data_t,
                              float,
                              cuvs::neighbors::filtering::none_sample_filter);
 instantiate_kernel_selection(data_t, uint32_t, float, bitset_filter_t);
+instantiate_kernel_selection(data_t, uint32_t, float, bitmap_filter_t);
 instantiate_kernel_selection(data_t, uint32_t, float, udf_filter_t);
 instantiate_kernel_selection(data_t, uint32_t, float, favor_udf_accumulator_filter_t);
 instantiate_kernel_selection(data_t, uint32_t, float, favor_udf_legacy_filter_t);

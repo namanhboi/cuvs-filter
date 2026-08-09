@@ -5,7 +5,8 @@
 
 // Explicit specialization for the unified 3-arg sample_filter used by CAGRA JIT
 // (extern in extern_device_functions.cuh). Implementations in sample_filter_impl.cuh,
-// aligned with filtering::{none_sample_filter, bitset_filter} in neighbors/sample_filter.cuh.
+// aligned with filtering::{none_sample_filter, bitset_filter, bitmap_filter} in
+// neighbors/sample_filter.cuh.
 
 #include <cstdint>
 

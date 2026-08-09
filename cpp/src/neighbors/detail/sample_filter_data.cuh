@@ -21,4 +21,14 @@ struct bitset_filter_data_t {
   SourceIndexT original_nbits{};
 };
 
+/// Row-major per-query bitmap metadata for linked CAGRA sample filters. Dimensions use int64_t
+/// because the tightly packed linear bit index (`query_id * num_cols + node_id`) can exceed the
+/// 32-bit CAGRA source-index range even when each individual dimension does not.
+struct bitmap_filter_data_t {
+  std::uint32_t* bitmap_ptr{nullptr};
+  std::int64_t num_rows{};
+  std::int64_t num_cols{};
+  std::int64_t original_nbits{};
+};
+
 }  // namespace cuvs::neighbors::detail
