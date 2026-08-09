@@ -169,6 +169,14 @@ struct search
         additional_smem_size = std::max<std::uint32_t>(additional_smem_size, num_itopk_candidates);
       }
     }
+    if constexpr (cagra_filter_uses_navix<SAMPLE_FILTER_T>::value) {
+      // One transient bridge ID per existing W*D candidate slot plus three counters per parent.
+      // Grandchildren stay in warp registers; no D*D shared-memory allocation is made.
+      const auto navix_workspace = static_cast<std::uint32_t>(
+        num_itopk_candidates * sizeof(INDEX_T) +
+        3u * static_cast<std::uint32_t>(search_width) * sizeof(std::uint32_t));
+      additional_smem_size = std::max(additional_smem_size, navix_workspace);
+    }
 
     smem_size = base_smem_size + additional_smem_size;
     if (filter_mode == filtering_mode::FAVOR) { smem_size += 2 * sizeof(DISTANCE_T); }

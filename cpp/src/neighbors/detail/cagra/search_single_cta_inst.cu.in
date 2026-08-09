@@ -23,6 +23,9 @@ using favor_udf_legacy_filter_t =
   cuvs::neighbors::cagra::detail::CagraSampleFilterWithQueryIdOffset<
     cuvs::neighbors::cagra::detail::
       CagraSampleFilterWithRuntimeState<cuvs::neighbors::filtering::udf_filter, false>>;
+using navix_udf_filter_t = cuvs::neighbors::cagra::detail::CagraSampleFilterWithQueryIdOffset<
+  cuvs::neighbors::cagra::detail::CagraSampleFilterWithNavixRuntimeState<
+    cuvs::neighbors::filtering::udf_filter>>;
 
 }  // namespace
 
@@ -36,5 +39,6 @@ instantiate_kernel_selection(data_t, uint32_t, float, bitmap_filter_t);
 instantiate_kernel_selection(data_t, uint32_t, float, udf_filter_t);
 instantiate_kernel_selection(data_t, uint32_t, float, favor_udf_accumulator_filter_t);
 instantiate_kernel_selection(data_t, uint32_t, float, favor_udf_legacy_filter_t);
+instantiate_kernel_selection(data_t, uint32_t, float, navix_udf_filter_t);
 
 }  // namespace cuvs::neighbors::cagra::detail::single_cta_search

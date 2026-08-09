@@ -117,6 +117,9 @@ class favor_diagnostic_session {
     }
     const std::uint64_t termination_checkpoint_count =
       static_cast<std::uint64_t>(num_queries) * termination_checkpoint_stride;
+    const std::uint32_t navix_seed_stride = itopk + graph_degree * search_width;
+    const std::uint64_t navix_seed_count =
+      static_cast<std::uint64_t>(num_queries) * navix_seed_stride;
 
     rmm::device_uvector<favor_diag::query_summary> summaries(num_queries, stream);
     rmm::device_uvector<std::uint32_t> ground_truth(ground_truth_host.size(), stream);
@@ -128,6 +131,8 @@ class favor_diagnostic_session {
     rmm::device_uvector<std::uint32_t> termination_checkpoint_counts(
       termination_checkpoint_stride == 0 ? 0 : num_queries, stream);
     rmm::device_uvector<favor_diag::context> context(1, stream);
+    rmm::device_uvector<std::uint32_t> navix_seed_ids(navix_seed_count, stream);
+    rmm::device_uvector<float> navix_seed_distances(navix_seed_count, stream);
 
     RAFT_CUDA_TRY(cudaMemcpyAsync(ground_truth.data(),
                                   ground_truth_host.data(),
@@ -154,6 +159,12 @@ class favor_diagnostic_session {
       RAFT_CUDA_TRY(cudaMemsetAsync(
         termination_checkpoint_counts.data(), 0, num_queries * sizeof(std::uint32_t), stream));
     }
+    if (navix_seed_count != 0) {
+      RAFT_CUDA_TRY(cudaMemsetAsync(
+        navix_seed_ids.data(), 0xff, navix_seed_count * sizeof(std::uint32_t), stream));
+      RAFT_CUDA_TRY(
+        cudaMemsetAsync(navix_seed_distances.data(), 0, navix_seed_count * sizeof(float), stream));
+    }
 
     favor_diag::context host_context{};
     host_context.summaries           = summaries.data();
@@ -174,6 +185,9 @@ class favor_diagnostic_session {
     host_context.num_queries                 = num_queries;
     host_context.max_trace_iterations        = max_trace_iterations;
     host_context.candidates_per_iteration    = candidates_per_iteration;
+    host_context.navix_seed_ids              = navix_seed_ids.data();
+    host_context.navix_seed_distances        = navix_seed_distances.data();
+    host_context.navix_seed_stride           = navix_seed_stride;
     RAFT_CUDA_TRY(cudaMemcpyAsync(
       context.data(), &host_context, sizeof(host_context), cudaMemcpyHostToDevice, stream));
 
@@ -194,6 +208,8 @@ class favor_diagnostic_session {
     std::vector<std::uint32_t> termination_checkpoint_counts_host(
       termination_checkpoint_stride == 0 ? 0 : num_queries);
     std::vector<std::int64_t> result_indices_host(static_cast<std::uint64_t>(num_queries) * topk);
+    std::vector<std::uint32_t> navix_seed_ids_host(navix_seed_count);
+    std::vector<float> navix_seed_distances_host(navix_seed_count);
     if (device_telemetry) {
       RAFT_CUDA_TRY(cudaMemcpy(summaries_host.data(),
                                summaries.data(),
@@ -230,6 +246,16 @@ class favor_diagnostic_session {
                              result_indices,
                              result_indices_host.size() * sizeof(std::int64_t),
                              cudaMemcpyDeviceToHost));
+    if (navix_seed_count != 0) {
+      RAFT_CUDA_TRY(cudaMemcpy(navix_seed_ids_host.data(),
+                               navix_seed_ids.data(),
+                               navix_seed_count * sizeof(std::uint32_t),
+                               cudaMemcpyDeviceToHost));
+      RAFT_CUDA_TRY(cudaMemcpy(navix_seed_distances_host.data(),
+                               navix_seed_distances.data(),
+                               navix_seed_count * sizeof(float),
+                               cudaMemcpyDeviceToHost));
+    }
 
     for (std::uint32_t query = 0; query < num_queries; ++query) {
       std::uint32_t matches       = 0;
@@ -242,6 +268,7 @@ class favor_diagnostic_session {
               ground_truth_host[static_cast<std::uint64_t>(query) * favor_diag::ground_truth_k +
                                 gt_rank]) {
             ++matches;
+            summaries_host[query].navix_gt_output_mask |= std::uint32_t{1} << gt_rank;
             break;
           }
         }
@@ -268,7 +295,11 @@ class favor_diagnostic_session {
                   launch_metrics,
                   termination_checkpoints_host,
                   termination_checkpoint_counts_host,
-                  termination_checkpoint_stride);
+                  termination_checkpoint_stride,
+                  navix_seed_ids_host,
+                  navix_seed_distances_host,
+                  navix_seed_stride,
+                  result_indices_host);
     captured_ = true;
   }
 
@@ -303,8 +334,8 @@ class favor_diagnostic_session {
       if (query >= num_queries) { throw std::out_of_range("selected query is outside the batch"); }
       if (unique.insert(query).second) { selected.push_back(query); }
     }
-    if (selected.size() > 48) {
-      throw std::invalid_argument("at most 48 deep-trace queries are allowed");
+    if (selected.size() > 64) {
+      throw std::invalid_argument("at most 64 deep-trace queries are allowed");
     }
     return selected;
   }
@@ -335,7 +366,11 @@ class favor_diagnostic_session {
     favor_diag::launch_metrics launch_metrics,
     const std::vector<favor_diag::termination_checkpoint_record>& termination_checkpoints,
     const std::vector<std::uint32_t>& termination_checkpoint_counts,
-    std::uint32_t termination_checkpoint_stride) const
+    std::uint32_t termination_checkpoint_stride,
+    const std::vector<std::uint32_t>& navix_seed_ids,
+    const std::vector<float>& navix_seed_distances,
+    std::uint32_t navix_seed_stride,
+    const std::vector<std::int64_t>& result_indices) const
   {
     namespace fs = std::filesystem;
     const fs::path output_dir{config_.output_directory};
@@ -351,7 +386,18 @@ class favor_diagnostic_session {
            "accumulator_insertions,gt_seen_mask,output_count,hash_bitlen,"
            "small_hash_bitlen,small_hash_reset_interval,resolved_filtering_rate,"
            "reference_penalty,query_penalty,terminal_cutoff,"
-           "best_unexpanded_distance,worst_retained_distance,kth_passing_raw_distance";
+           "best_unexpanded_distance,worst_retained_distance,kth_passing_raw_distance,"
+           "navix_seed_found,navix_seed_iteration,navix_seed_count,"
+           "navix_post_seed_iterations,navix_terminal_phase,navix_one_hop_parents,"
+           "navix_directed_parents,navix_blind_parents,navix_first_hop_checks,"
+           "navix_first_hop_passing,navix_bridge_rows,navix_bridge_rows_loaded,"
+           "navix_bridge_rows_after_cap,navix_second_hop_checks,navix_second_hop_passing,"
+           "navix_admitted_candidates,navix_cap_blocked_unique,navix_gt_first_hop_mask,"
+           "navix_gt_second_hop_mask,navix_gt_admitted_mask,navix_gt_retained_mask,"
+           "navix_gt_cap_blocked_mask,navix_gt_hash_full_mask,navix_gt_output_mask";
+    for (std::uint32_t p = 0; p <= 32; ++p) {
+      csv << ",navix_local_p_" << p;
+    }
     for (std::uint32_t rank = 0; rank < favor_diag::ground_truth_k; ++rank) {
       csv << ",gt_first_iteration_" << rank;
     }
@@ -370,7 +416,22 @@ class favor_diagnostic_session {
           << s.small_hash_reset_interval << ',' << s.resolved_filtering_rate << ','
           << s.reference_penalty << ',' << s.query_penalty << ',' << s.terminal_cutoff << ','
           << s.best_unexpanded_distance << ',' << s.worst_retained_distance << ','
-          << s.kth_passing_raw_distance;
+          << s.kth_passing_raw_distance << ',' << s.navix_seed_found << ','
+          << s.navix_seed_iteration << ',' << s.navix_seed_count << ','
+          << s.navix_post_seed_iterations << ',' << s.navix_terminal_phase << ','
+          << s.navix_one_hop_parents << ',' << s.navix_directed_parents << ','
+          << s.navix_blind_parents << ',' << s.navix_first_hop_checks << ','
+          << s.navix_first_hop_passing << ',' << s.navix_bridge_rows << ','
+          << s.navix_bridge_rows_loaded << ',' << s.navix_bridge_rows_after_cap << ','
+          << s.navix_second_hop_checks << ',' << s.navix_second_hop_passing << ','
+          << s.navix_admitted_candidates << ',' << s.navix_cap_blocked_unique << ','
+          << s.navix_gt_first_hop_mask << ',' << s.navix_gt_second_hop_mask << ','
+          << s.navix_gt_admitted_mask << ',' << s.navix_gt_retained_mask << ','
+          << s.navix_gt_cap_blocked_mask << ',' << s.navix_gt_hash_full_mask << ','
+          << s.navix_gt_output_mask;
+      for (auto count : s.navix_local_p_histogram) {
+        csv << ',' << count;
+      }
       for (auto first : s.gt_first_iteration) {
         csv << ',' << first;
       }
@@ -386,6 +447,9 @@ class favor_diagnostic_session {
     write_binary(output_dir / "candidate_trace.bin", candidates);
     write_binary(output_dir / "termination_checkpoints.bin", termination_checkpoints);
     write_binary(output_dir / "termination_checkpoint_counts.bin", termination_checkpoint_counts);
+    write_binary(output_dir / "navix_seed_ids.bin", navix_seed_ids);
+    write_binary(output_dir / "navix_seed_distances.bin", navix_seed_distances);
+    write_binary(output_dir / "result_indices.i64bin", result_indices);
 
     std::ofstream manifest{output_dir / "manifest.json"};
     manifest << "{\n"
@@ -415,6 +479,8 @@ class favor_diagnostic_session {
              << ",\n"
              << "  \"iteration_record_size\": " << sizeof(favor_diag::iteration_record) << ",\n"
              << "  \"candidate_record_size\": " << sizeof(favor_diag::candidate_record) << ",\n"
+             << "  \"navix_seed_stride\": " << navix_seed_stride << ",\n"
+             << "  \"result_index_bytes\": " << sizeof(std::int64_t) << ",\n"
              << "  \"termination_record_start_iteration\": "
              << (config_.termination_record_start_iteration == 0
                    ? config_.termination_start_iteration
@@ -436,8 +502,8 @@ class favor_diagnostic_session {
   bool captured_ = false;
 };
 
-static_assert(sizeof(favor_diag::query_summary) == 180);
-static_assert(sizeof(favor_diag::iteration_record) == 84);
+static_assert(sizeof(favor_diag::query_summary) == 408);
+static_assert(sizeof(favor_diag::iteration_record) == 132);
 static_assert(sizeof(favor_diag::candidate_record) == 36);
 static_assert(sizeof(favor_diag::termination_checkpoint_record) == 136);
 

@@ -376,6 +376,8 @@ struct search_plan_impl : public search_plan_impl_base {
       }
       RAFT_EXPECTS(hash_bitlen <= 25, "hash_bitlen cannot be largen than 25 (32M)");
     } else {
+      constexpr std::uint32_t visit_multiplier =
+        cagra_filter_uses_navix<SAMPLE_FILTER_T>::value ? 2u : 1u;
       while (hashmap_mode == hash_mode::AUTO || hashmap_mode == hash_mode::SMALL) {
         //
         // The small-hash reduces hash table size by initializing the hash table
@@ -384,9 +386,10 @@ struct search_plan_impl : public search_plan_impl_base {
         // be determined based on the internal topk size and the number of nodes
         // visited per iteration.
         //
-        const auto max_visited_nodes = itopk_size + (search_width * graph_degree * 1);
-        unsigned min_bitlen          = 8;   // 256
-        unsigned max_bitlen          = 13;  // 8K
+        const auto max_visited_nodes =
+          itopk_size + (search_width * graph_degree * visit_multiplier);
+        unsigned min_bitlen = 8;   // 256
+        unsigned max_bitlen = 13;  // 8K
         if (min_bitlen < hashmap_min_bitlen) { min_bitlen = hashmap_min_bitlen; }
         hash_bitlen = min_bitlen;
         while (max_visited_nodes > hashmap::get_size(hash_bitlen) * max_fill_rate) {
@@ -413,7 +416,8 @@ struct search_plan_impl : public search_plan_impl_base {
         small_hash_reset_interval = 1;
         while (1) {
           const auto max_visited_nodes =
-            itopk_size + (search_width * graph_degree * (small_hash_reset_interval + 1));
+            itopk_size +
+            (search_width * graph_degree * visit_multiplier * (small_hash_reset_interval + 1));
           if (max_visited_nodes > hashmap::get_size(hash_bitlen) * max_fill_rate) { break; }
           small_hash_reset_interval += 1;
         }
@@ -425,8 +429,9 @@ struct search_plan_impl : public search_plan_impl_base {
         // nodes that may be visited before the search is completed and the
         // maximum fill rate of the hash table.
         //
-        uint32_t max_visited_nodes = itopk_size + (search_width * graph_degree * max_iterations);
-        unsigned min_bitlen        = 11;  // 2K
+        uint32_t max_visited_nodes =
+          itopk_size + (search_width * graph_degree * visit_multiplier * max_iterations);
+        unsigned min_bitlen = 11;  // 2K
         if (min_bitlen < hashmap_min_bitlen) { min_bitlen = hashmap_min_bitlen; }
         hash_bitlen = min_bitlen;
         while (max_visited_nodes > hashmap::get_size(hash_bitlen) * max_fill_rate) {

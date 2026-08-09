@@ -41,7 +41,8 @@ std::shared_ptr<AlgorithmLauncher> build_single_cta_launcher(
   bool persistent,
   std::unique_ptr<UDFFatbinFragment> sample_filter_udf_fragment,
   bool favor,
-  bool diagnostics)
+  bool diagnostics,
+  bool navix)
 {
   single_cta_search::CagraSingleCtaSearchPlanner<DataTag,
                                                  IndexTag,
@@ -60,6 +61,7 @@ std::shared_ptr<AlgorithmLauncher> build_single_cta_launcher(
             dataset_desc.pq_len,
             persistent,
             favor,
+            navix,
             diagnostics);
 
   if constexpr (std::is_same_v<CodebookTag, tag_codebook_half>) {
@@ -77,10 +79,12 @@ std::shared_ptr<AlgorithmLauncher> build_single_cta_launcher(
     planner.add_compute_distance_device_function(
       dataset_desc.metric, dataset_desc.team_size, dataset_desc.dataset_block_dim);
   }
-  if (favor) {
-    planner.add_favor_search_kernel_fragment(topk_by_bitonic_sort,
-                                             bitonic_sort_and_merge_multi_warps,
-                                             diagnostics);
+  if (navix) {
+    planner.add_navix_search_kernel_fragment(
+      topk_by_bitonic_sort, bitonic_sort_and_merge_multi_warps, diagnostics);
+  } else if (favor) {
+    planner.add_favor_search_kernel_fragment(
+      topk_by_bitonic_sort, bitonic_sort_and_merge_multi_warps, diagnostics);
   } else if (diagnostics) {
     planner.add_default_diagnostic_kernel_fragment(topk_by_bitonic_sort,
                                                    bitonic_sort_and_merge_multi_warps);
@@ -244,7 +248,8 @@ std::shared_ptr<AlgorithmLauncher> make_cagra_single_cta_jit_launcher(
   bool persistent,
   std::unique_ptr<UDFFatbinFragment> sample_filter_udf_fragment = nullptr,
   bool favor                                                    = false,
-  bool diagnostics                                              = false)
+  bool diagnostics                                              = false,
+  bool navix                                                    = false)
 {
   using DataTag   = decltype(get_data_type_tag<DataT>());
   using IndexTag  = decltype(get_index_type_tag<IndexT>());
@@ -271,7 +276,8 @@ std::shared_ptr<AlgorithmLauncher> make_cagra_single_cta_jit_launcher(
       persistent,
       std::move(sample_filter_udf_fragment),
       favor,
-      diagnostics);
+      diagnostics,
+      navix);
   }
   using CodebookTag = codebook_tag_standard_t;
   if (dataset_desc.metric == cuvs::distance::DistanceType::BitwiseHamming) {
@@ -294,7 +300,8 @@ std::shared_ptr<AlgorithmLauncher> make_cagra_single_cta_jit_launcher(
       persistent,
       std::move(sample_filter_udf_fragment),
       favor,
-      diagnostics);
+      diagnostics,
+      navix);
   }
   using QueryTag = query_type_tag_standard_t<DataTag, cuvs::distance::DistanceType::L2Expanded>;
   return cagra_jit_launcher_factory_detail::build_single_cta_launcher<DataTag,
@@ -314,7 +321,8 @@ std::shared_ptr<AlgorithmLauncher> make_cagra_single_cta_jit_launcher(
     persistent,
     std::move(sample_filter_udf_fragment),
     favor,
-    diagnostics);
+    diagnostics,
+    navix);
 }
 
 /// Build a JIT AlgorithmLauncher for multi-CTA CAGRA search.

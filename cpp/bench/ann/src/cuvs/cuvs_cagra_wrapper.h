@@ -133,6 +133,8 @@ class cuvs_cagra : public algo<T>, public algo_gpu {
     bool favor_udf_passing_accumulator        = true;
     bool favor_udf_passing_accumulator_is_set = false;
     std::uint32_t favor_udf_sample_offset{};
+    /** Benchmark-only NaviX traversal policy. Empty preserves the normal cuVS path. */
+    std::optional<std::uint32_t> navix_policy;
     float refine_ratio;
     AllocatorType graph_mem   = AllocatorType::kDevice;
     AllocatorType dataset_mem = AllocatorType::kDevice;
@@ -268,6 +270,7 @@ class cuvs_cagra : public algo<T>, public algo_gpu {
   bool favor_udf_include_sampling_{true};
   bool favor_udf_passing_accumulator_{true};
   std::uint32_t favor_udf_sample_offset_{};
+  std::optional<std::uint32_t> navix_policy_;
   mutable std::uint32_t udf_query_offset_{};
   bool filter_empty_{false};
   std::shared_ptr<detail::favor_diagnostic_session> favor_diagnostic_session_;
@@ -415,6 +418,7 @@ void cuvs_cagra<T, IdxT>::set_search_param(const search_param_base& param,
     favor_udf_passing_accumulator_ = sp.favor_udf_passing_accumulator;
   }
   favor_udf_sample_offset_ = sp.favor_udf_sample_offset;
+  navix_policy_            = sp.navix_policy;
   filter_empty_            = false;
   favor_udf_sampled_rates_.reset();
   favor_udf_sampled_passing_counts_.reset();
@@ -442,6 +446,29 @@ void cuvs_cagra<T, IdxT>::set_search_param(const search_param_base& param,
         favor_udf_sample_offset_);
       raft::resource::sync_stream(handle_);
     }
+  }
+  if (navix_policy_) {
+    RAFT_EXPECTS(udf_filter_runtime_ != nullptr,
+                 "The benchmark-only NaviX path requires a query-dependent UDF filter");
+    RAFT_EXPECTS(search_params_.filter_mode == cuvs::neighbors::cagra::filtering_mode::DEFAULT,
+                 "The benchmark-only NaviX path requires filter_mode=default");
+    RAFT_EXPECTS(search_params_.algo == cuvs::neighbors::cagra::search_algo::AUTO ||
+                   search_params_.algo == cuvs::neighbors::cagra::search_algo::SINGLE_CTA,
+                 "The benchmark-only NaviX path supports only AUTO or SINGLE_CTA");
+    RAFT_EXPECTS(!search_params_.persistent,
+                 "The benchmark-only NaviX path does not support persistent search");
+    RAFT_EXPECTS(!sp.dynamic_batching,
+                 "The benchmark-only NaviX path does not support dynamic batching");
+    RAFT_EXPECTS(sp.refine_ratio == 1.0f,
+                 "The benchmark-only NaviX path does not support refinement");
+    RAFT_EXPECTS(index_->graph().extent(1) == 32,
+                 "The benchmark-only NaviX path currently requires graph_degree=32");
+    RAFT_EXPECTS(!favor_udf_passing_accumulator_,
+                 "NaviX owns the passing frontier and cannot use the result accumulator");
+    RAFT_EXPECTS(!sp.favor_retry_diagnostics.enabled(),
+                 "The benchmark-only NaviX path does not support FAVOR retry diagnostics");
+    RAFT_EXPECTS(favor_seed_masks_.empty(),
+                 "The benchmark-only NaviX path does not support FAVOR retry seeds");
   }
   if (filter_bitset_ != nullptr && search_params_.filtering_rate < 0.0f) {
     const auto num_set_bits =
@@ -757,6 +784,36 @@ void cuvs_cagra<T, IdxT>::search_base(
     return;
   }
 
+  if (navix_policy_) {
+    auto run_navix = [&]() {
+      cuvs::neighbors::cagra::detail::benchmark_search_navix_udf<T>(handle_,
+                                                                    search_params_,
+                                                                    *index_,
+                                                                    queries_view,
+                                                                    neighbors_view,
+                                                                    distances_view,
+                                                                    *filter_,
+                                                                    *navix_policy_);
+    };
+    if (favor_diagnostic_session_) {
+      favor_diagnostic_session_->capture(handle_,
+                                         static_cast<std::uint32_t>(batch_size),
+                                         static_cast<std::uint32_t>(k),
+                                         static_cast<std::uint32_t>(index_->graph().extent(1)),
+                                         static_cast<std::uint32_t>(search_params_.search_width),
+                                         static_cast<std::int64_t>(index_->size()),
+                                         static_cast<std::uint32_t>(search_params_.itopk_size),
+                                         search_params_.max_iterations,
+                                         -1.0f,
+                                         true,
+                                         neighbors,
+                                         run_navix);
+    } else {
+      run_navix();
+    }
+    return;
+  }
+
   const bool run_udf_accumulator_path =
     udf_filter_runtime_ &&
     (search_params_.filter_mode == cuvs::neighbors::cagra::filtering_mode::FAVOR ||
@@ -948,19 +1005,18 @@ void cuvs_cagra<T, IdxT>::search_base(
           handle_, search_params_, *index_, queries_view, neighbors_view, distances_view, *filter_);
       };
       if (favor_diagnostic_session_) {
-        favor_diagnostic_session_->capture(
-          handle_,
-          static_cast<std::uint32_t>(batch_size),
-          static_cast<std::uint32_t>(k),
-          static_cast<std::uint32_t>(index_->graph().extent(1)),
-          static_cast<std::uint32_t>(search_params_.search_width),
-          static_cast<std::int64_t>(index_->size()),
-          static_cast<std::uint32_t>(search_params_.itopk_size),
-          search_params_.max_iterations,
-          search_params_.filtering_rate,
-          true,
-          neighbors,
-          run_search);
+        favor_diagnostic_session_->capture(handle_,
+                                           static_cast<std::uint32_t>(batch_size),
+                                           static_cast<std::uint32_t>(k),
+                                           static_cast<std::uint32_t>(index_->graph().extent(1)),
+                                           static_cast<std::uint32_t>(search_params_.search_width),
+                                           static_cast<std::int64_t>(index_->size()),
+                                           static_cast<std::uint32_t>(search_params_.itopk_size),
+                                           search_params_.max_iterations,
+                                           search_params_.filtering_rate,
+                                           true,
+                                           neighbors,
+                                           run_search);
       } else {
         run_search();
       }

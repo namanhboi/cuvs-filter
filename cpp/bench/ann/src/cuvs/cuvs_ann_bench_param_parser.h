@@ -525,11 +525,36 @@ void parse_search_param(const nlohmann::json& conf,
     param.favor_udf_include_sampling = conf.at("favor_udf_include_sampling");
   }
   if (conf.contains("favor_udf_passing_accumulator")) {
-    param.favor_udf_passing_accumulator = conf.at("favor_udf_passing_accumulator");
+    param.favor_udf_passing_accumulator        = conf.at("favor_udf_passing_accumulator");
     param.favor_udf_passing_accumulator_is_set = true;
   }
   if (conf.contains("favor_udf_sample_offset")) {
     param.favor_udf_sample_offset = conf.at("favor_udf_sample_offset");
+  }
+  if (conf.contains("navix_mode")) {
+    const std::string mode = conf.at("navix_mode");
+    if (mode == "adaptive_kuzu") {
+      param.navix_policy = 0;
+    } else if (mode == "one_hop") {
+      param.navix_policy = 1;
+    } else if (mode == "directed_capped") {
+      param.navix_policy = 2;
+    } else if (mode == "blind_capped") {
+      param.navix_policy = 3;
+    } else if (mode == "adaptive_paper") {
+      param.navix_policy = 4;
+    } else {
+      THROW("Invalid NaviX mode: %s", mode.c_str());
+    }
+  }
+  if (conf.contains("navix_scheduler")) {
+    if (!param.navix_policy) { THROW("navix_scheduler requires navix_mode"); }
+    const std::string scheduler = conf.at("navix_scheduler");
+    if (scheduler == "serial") {
+      *param.navix_policy |= std::uint32_t{1} << 8;
+    } else if (scheduler != "tiled") {
+      THROW("Invalid NaviX scheduler: %s", scheduler.c_str());
+    }
   }
   if (conf.contains("favor_delta_d_file")) {
     param.favor_delta_d_file = conf.at("favor_delta_d_file").get<std::string>();
@@ -560,6 +585,21 @@ void parse_search_param(const nlohmann::json& conf,
       conf.value("favor_termination_shadow_start_iteration", 0u);
     param.favor_diagnostics.termination_parent_interval =
       conf.value("favor_termination_shadow_parent_interval", 0u);
+  }
+  if (conf.contains("navix_diagnostics_output")) {
+    if (conf.contains("favor_diagnostics_output")) {
+      THROW("navix_diagnostics_output cannot be combined with favor_diagnostics_output");
+    }
+    param.favor_diagnostics.output_directory =
+      conf.at("navix_diagnostics_output").get<std::string>();
+    param.favor_diagnostics.ground_truth_file =
+      conf.value("navix_diagnostics_groundtruth", std::string{});
+    param.favor_diagnostics.selected_queries_file =
+      conf.value("navix_diagnostics_selected_queries", std::string{});
+    param.favor_diagnostics.dataset = conf.value("navix_diagnostics_dataset", std::string{});
+    param.favor_diagnostics.variant = conf.value("navix_diagnostics_variant", std::string{});
+    param.favor_diagnostics.max_trace_iterations =
+      conf.value("navix_diagnostics_max_trace_iterations", 0u);
   }
   if (conf.contains("favor_retry_diagnostics_output")) {
     param.favor_retry_diagnostics.output_directory =

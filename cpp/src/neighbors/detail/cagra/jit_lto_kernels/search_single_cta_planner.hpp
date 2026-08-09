@@ -33,14 +33,49 @@ struct CagraSingleCtaSearchPlanner
                               uint32_t /*pq_len*/,
                               bool persistent  = false,
                               bool favor       = false,
+                              bool navix       = false,
                               bool diagnostics = false)
     : CagraPlannerBase<DataTag, IndexTag, DistanceTag, QueryTag, CodebookTag, SampleFilterJitTag>(
-        persistent ? "search_single_cta_p"
-                   : (diagnostics ? (favor ? "search_single_cta_favor_diagnostic"
-                                           : "search_single_cta_default_diagnostic")
-                                  : (favor ? "search_single_cta_favor" : "search_single_cta")),
+        navix ? (diagnostics ? "search_single_cta_navix_diagnostic" : "search_single_cta_navix")
+        : persistent ? "search_single_cta_p"
+                     : (diagnostics ? (favor ? "search_single_cta_favor_diagnostic"
+                                             : "search_single_cta_default_diagnostic")
+                                    : (favor ? "search_single_cta_favor" : "search_single_cta")),
         launcher_jit_cache)
   {
+  }
+
+  void add_navix_search_kernel_fragment(bool topk_by_bitonic_sort,
+                                        bool bitonic_sort_and_merge_multi_warps,
+                                        bool diagnostics = false)
+  {
+    auto add = [&]<bool TopkByBitonic, bool MultiWarpMerge>() {
+      if (diagnostics) {
+        this->template add_static_fragment<
+          fragment_tag_search_single_cta_navix_diagnostic<DataTag,
+                                                          SourceIndexTag,
+                                                          IndexTag,
+                                                          DistanceTag,
+                                                          TopkByBitonic,
+                                                          MultiWarpMerge>>();
+      } else {
+        this->template add_static_fragment<fragment_tag_search_single_cta_navix<DataTag,
+                                                                                SourceIndexTag,
+                                                                                IndexTag,
+                                                                                DistanceTag,
+                                                                                TopkByBitonic,
+                                                                                MultiWarpMerge>>();
+      }
+    };
+    if (topk_by_bitonic_sort && bitonic_sort_and_merge_multi_warps) {
+      add.template operator()<true, true>();
+    } else if (topk_by_bitonic_sort) {
+      add.template operator()<true, false>();
+    } else if (bitonic_sort_and_merge_multi_warps) {
+      add.template operator()<false, true>();
+    } else {
+      add.template operator()<false, false>();
+    }
   }
 
   void add_default_diagnostic_kernel_fragment(bool topk_by_bitonic_sort,

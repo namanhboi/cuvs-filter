@@ -9,7 +9,7 @@
 
 namespace cuvs::neighbors::cagra::detail::favor_search_diagnostics {
 
-inline constexpr std::uint32_t schema_version    = 5;
+inline constexpr std::uint32_t schema_version    = 6;
 inline constexpr std::uint32_t ground_truth_k    = 10;
 inline constexpr std::uint32_t invalid_iteration = 0xffffffffu;
 
@@ -28,6 +28,12 @@ enum class hash_outcome : std::uint8_t {
   inserted,
   duplicate,
   full,
+};
+
+enum class navix_terminal_phase : std::uint32_t {
+  unknown = 0,
+  seed_discovery,
+  passing_traversal,
 };
 
 /** One fixed-size record per query. The diagnostic kernel is the only writer. */
@@ -68,6 +74,35 @@ struct query_summary {
   float worst_retained_distance{};
   float kth_passing_raw_distance{};
   float recall{};  // populated by the bench host after the kernel completes
+
+  // Benchmark-only NaviX-inspired traversal telemetry. These fields stay zero for the default and
+  // FAVOR diagnostic kernels. The local-yield histogram is indexed by the number P of passing
+  // first-hop neighbors; the current specialization has D=32, hence 33 bins.
+  std::uint32_t navix_seed_found{};
+  std::uint32_t navix_seed_iteration{};
+  std::uint32_t navix_seed_count{};
+  std::uint32_t navix_post_seed_iterations{};
+  std::uint32_t navix_terminal_phase{};
+  std::uint32_t navix_one_hop_parents{};
+  std::uint32_t navix_directed_parents{};
+  std::uint32_t navix_blind_parents{};
+  std::uint32_t navix_local_p_histogram[33]{};
+  std::uint32_t navix_first_hop_checks{};
+  std::uint32_t navix_first_hop_passing{};
+  std::uint32_t navix_bridge_rows{};
+  std::uint32_t navix_bridge_rows_loaded{};
+  std::uint32_t navix_bridge_rows_after_cap{};
+  std::uint32_t navix_second_hop_checks{};
+  std::uint32_t navix_second_hop_passing{};
+  std::uint32_t navix_admitted_candidates{};
+  std::uint32_t navix_cap_blocked_unique{};
+  std::uint32_t navix_gt_first_hop_mask{};
+  std::uint32_t navix_gt_second_hop_mask{};
+  std::uint32_t navix_gt_admitted_mask{};
+  std::uint32_t navix_gt_retained_mask{};
+  std::uint32_t navix_gt_cap_blocked_mask{};
+  std::uint32_t navix_gt_hash_full_mask{};
+  std::uint32_t navix_gt_output_mask{};  // populated by the bench host
 };
 
 /** One record for every retained-frontier snapshot of a selected query. */
@@ -93,6 +128,18 @@ struct iteration_record {
   float cutoff{};
   float best_unexpanded_distance{};
   float worst_retained_distance{};
+  std::uint32_t navix_one_hop_parents{};
+  std::uint32_t navix_directed_parents{};
+  std::uint32_t navix_blind_parents{};
+  std::uint32_t navix_first_hop_checks{};
+  std::uint32_t navix_first_hop_passing{};
+  std::uint32_t navix_bridge_rows{};
+  std::uint32_t navix_bridge_rows_loaded{};
+  std::uint32_t navix_bridge_rows_after_cap{};
+  std::uint32_t navix_second_hop_checks{};
+  std::uint32_t navix_second_hop_passing{};
+  std::uint32_t navix_admitted_candidates{};
+  std::uint32_t navix_cap_blocked_unique{};
 };
 
 /** Fixed-position child record. Empty/hash-rejected child slots remain explicitly visible. */
@@ -163,6 +210,11 @@ struct context {
   std::uint32_t num_queries{};
   std::uint32_t max_trace_iterations{};
   std::uint32_t candidates_per_iteration{};
+  // The successful handoff batch is copied verbatim (invalid slots included) so the offline oracle
+  // can start from the exact graph IDs used by the GPU traversal.
+  std::uint32_t* navix_seed_ids{};  // [num_queries, navix_seed_stride]
+  float* navix_seed_distances{};    // [num_queries, navix_seed_stride]
+  std::uint32_t navix_seed_stride{};
 };
 
 }  // namespace cuvs::neighbors::cagra::detail::favor_search_diagnostics

@@ -42,6 +42,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cuda/atomic>
 #include <cuda/std/atomic>
 #include <cuda_runtime.h>
@@ -815,6 +816,7 @@ void select_and_run(
 
   const auto filter_payload      = extract_cagra_sample_filter<SourceIndexT>(sample_filter, stream);
   const uint32_t query_id_offset = filter_payload.query_id_offset;
+  constexpr bool navix           = cagra_filter_uses_navix<SampleFilterT>::value;
 
   // Use common logic to compute launch config
   auto config             = compute_launch_config(num_itopk_candidates, ps.itopk_size, block_size);
@@ -822,6 +824,10 @@ void select_and_run(
   uint32_t max_itopk      = config.max_itopk;
   bool topk_by_bitonic_sort               = config.topk_by_bitonic_sort;
   bool bitonic_sort_and_merge_multi_warps = config.bitonic_sort_and_merge_multi_warps;
+  if constexpr (navix) {
+    RAFT_EXPECTS(!ps.persistent,
+                 "The private NaviX experiment does not support persistent kernels");
+  }
 
   // Handle persistent kernels
   if (ps.persistent) {
@@ -861,9 +867,15 @@ void select_and_run(
   } else {
     const bool favor       = ps.filter_mode == filtering_mode::FAVOR;
     const bool diagnostics = favor_search_diagnostics::get_active_context() != nullptr;
+    static_assert(!(navix && cagra_filter_uses_passing_accumulator<SampleFilterT>::value),
+                  "NaviX deliberately has no passing-result accumulator");
+    if constexpr (navix) {
+      RAFT_EXPECTS(!favor, "NaviX is a separate default-mode traversal specialization");
+      RAFT_EXPECTS(graph.extent(1) == 32, "NaviX SINGLE_CTA currently requires graph degree 32");
+    }
     if (diagnostics) {
       RAFT_LOG_INFO("Selecting dedicated SINGLE_CTA %s diagnostic fragment",
-                    favor ? "FAVOR" : "default-filter");
+                    navix ? "NaviX" : (favor ? "FAVOR" : "default-filter"));
     }
     std::shared_ptr<AlgorithmLauncher> launcher =
       make_cagra_single_cta_jit_launcher<DataT,
@@ -877,8 +889,30 @@ void select_and_run(
         false /* persistent */,
         make_cagra_sample_filter_udf_fragment<SourceIndexT>(sample_filter),
         favor,
-        diagnostics);
+        diagnostics,
+        navix);
     if (!launcher) { RAFT_FAIL("Failed to get JIT launcher for CAGRA search kernel"); }
+
+    if constexpr (navix) {
+      auto const* log_resources = std::getenv("CUVS_NAVIX_LOG_RESOURCES");
+      if (log_resources != nullptr && log_resources[0] == '1' && log_resources[1] == '\0') {
+        const auto requested_policy = cagra_filter_navix_policy(sample_filter);
+        cudaFuncAttributes attributes{};
+        RAFT_CUDA_TRY(cudaFuncGetAttributes(&attributes, launcher->get_kernel()));
+        int active_blocks = 0;
+        RAFT_CUDA_TRY(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+          &active_blocks, launcher->get_kernel(), static_cast<int>(block_size), smem_size));
+        std::fprintf(stderr,
+                     "NaviX kernel resources: policy=%u threads=%u dynamic_smem=%u "
+                     "static_smem=%zu registers=%d active_blocks_per_sm=%d\n",
+                     requested_policy,
+                     block_size,
+                     smem_size,
+                     attributes.sharedSizeBytes,
+                     attributes.numRegs,
+                     active_blocks);
+      }
+    }
 
     // Get the device descriptor pointer - dev_ptr() initializes it if needed
     const auto* dev_desc = dataset_desc.dev_ptr(stream);
@@ -921,7 +955,47 @@ void select_and_run(
          static_cast<std::uint32_t>(max_threads_per_sm)});
     }
 
-    if (favor) {
+    if constexpr (navix) {
+      const auto navix_policy = cagra_filter_navix_policy(sample_filter);
+      auto kernel_launcher    = [&]() -> void {
+        launcher
+          ->dispatch<search_single_cta_navix_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>(
+            stream,
+            grid,
+            block,
+            static_cast<std::size_t>(smem_size),
+            topk_indices_ptr,
+            topk_distances_ptr,
+            topk,
+            queries_ptr,
+            graph.data_handle(),
+            graph_degree_u32,
+            source_indices_ptr,
+            num_random_samplings_u,
+            ps.rand_xor_mask,
+            dev_seed_ptr,
+            num_seeds,
+            hashmap_ptr,
+            max_candidates,
+            max_itopk,
+            itopk_size_u32,
+            search_width_u32,
+            min_iterations_u32,
+            max_iterations_u32,
+            num_executed_iterations,
+            hash_bitlen_u32,
+            small_hash_bitlen_u32,
+            small_hash_reset_interval_u32,
+            query_id_offset,
+            dev_desc,
+            static_cast<IndexT>(graph.extent(0)),
+            filter_payload,
+            navix_policy);
+      };
+      cuvs::neighbors::detail::safely_launch_kernel_with_smem_size<
+        search_single_cta_navix_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>(
+        smem_size, kernel_launcher, launcher->get_kernel());
+    } else if (favor) {
       constexpr std::uint32_t favor_retire_rejected_parent_mask = std::uint32_t{1} << 31;
       constexpr std::uint32_t favor_automatic_retention_mask    = std::uint32_t{1} << 30;
       auto favor_penalty_mode_value = static_cast<std::uint32_t>(ps.favor_penalty);

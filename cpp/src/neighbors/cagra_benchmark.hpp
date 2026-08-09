@@ -60,4 +60,16 @@ CUVS_EXPORT void benchmark_search_favor_udf_with_sampled_rates(
   const float* filtering_rates,
   bool passing_accumulator);
 
+/** Run the private degree-32 SINGLE_CTA NaviX traversal with in-kernel seed discovery. */
+template <typename T>
+CUVS_EXPORT void benchmark_search_navix_udf(
+  raft::resources const& res,
+  cagra::search_params const& params,
+  cagra::index<T, std::uint32_t> const& index,
+  raft::device_matrix_view<const T, std::int64_t, raft::row_major> queries,
+  raft::device_matrix_view<std::int64_t, std::int64_t, raft::row_major> neighbors,
+  raft::device_matrix_view<float, std::int64_t, raft::row_major> distances,
+  cuvs::neighbors::filtering::base_filter const& sample_filter,
+  std::uint32_t navix_policy);
+
 }  // namespace cuvs::neighbors::cagra::detail

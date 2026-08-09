@@ -37,6 +37,12 @@ constexpr int64_t threshold                = 192;
 constexpr int64_t high_filtering_threshold = 704;
 constexpr float high_filtering_rate =
   static_cast<float>(high_filtering_threshold) / static_cast<float>(n_rows);
+constexpr std::uint32_t navix_adaptive_kuzu_policy   = 0;
+constexpr std::uint32_t navix_one_hop_policy         = 1;
+constexpr std::uint32_t navix_directed_capped_policy = 2;
+constexpr std::uint32_t navix_blind_capped_policy    = 3;
+constexpr std::uint32_t navix_adaptive_paper_policy  = 4;
+constexpr std::uint32_t navix_serial_scheduler_mask  = std::uint32_t{1} << 8;
 
 struct tenant_filter_context {
   const uint32_t* row_tenants;
@@ -202,6 +208,50 @@ class CagraUdfFilterTest : public ::testing::TestWithParam<cagra::search_algo> {
       filter,
       sampled_rates,
       passing_accumulator);
+
+    auto stream = raft::resource::get_cuda_stream(res);
+    std::vector<std::int64_t> host_neighbors(n_queries * result_k);
+    cagra_search_result result{std::vector<uint32_t>(n_queries * result_k),
+                               std::vector<float>(n_queries * result_k)};
+    raft::copy(host_neighbors.data(), neighbors.data_handle(), host_neighbors.size(), stream);
+    raft::copy(result.distances.data(), distances.data_handle(), result.distances.size(), stream);
+    raft::resource::sync_stream(res);
+    std::transform(host_neighbors.begin(),
+                   host_neighbors.end(),
+                   result.neighbors.begin(),
+                   [](std::int64_t source_id) {
+                     return source_id == std::numeric_limits<std::int64_t>::max()
+                              ? std::numeric_limits<std::uint32_t>::max()
+                              : static_cast<std::uint32_t>(source_id);
+                   });
+    return result;
+  }
+
+  cagra_search_result search_navix(cuvs::neighbors::filtering::base_filter const& filter,
+                                   std::uint32_t navix_policy,
+                                   std::uint32_t max_iterations = 0,
+                                   int64_t result_k             = k)
+  {
+    auto neighbors = raft::make_device_matrix<std::int64_t, int64_t>(res, n_queries, result_k);
+    auto distances = raft::make_device_matrix<float, int64_t>(res, n_queries, result_k);
+
+    cagra::search_params search_params;
+    search_params.algo              = cagra::search_algo::SINGLE_CTA;
+    search_params.filter_mode       = cagra::filtering_mode::DEFAULT;
+    search_params.itopk_size        = std::max<int64_t>(64, result_k);
+    search_params.search_width      = 1;
+    search_params.max_iterations    = max_iterations;
+    search_params.max_queries       = 2;
+    search_params.thread_block_size = 128;
+
+    cagra::detail::benchmark_search_navix_udf<float>(res,
+                                                     search_params,
+                                                     *index,
+                                                     raft::make_const_mdspan(queries->view()),
+                                                     neighbors.view(),
+                                                     distances.view(),
+                                                     filter,
+                                                     navix_policy);
 
     auto stream = raft::resource::get_cuda_stream(res);
     std::vector<std::int64_t> host_neighbors(n_queries * result_k);
@@ -555,6 +605,97 @@ TEST_P(CagraUdfFilterTest, FavorTenantContextHonorsTiledQueryIds)
   for (int64_t query = 0; query < n_queries; ++query) {
     for (int64_t rank = 0; rank < k; ++rank) {
       const auto source_id = result.neighbors[static_cast<std::size_t>(query * k + rank)];
+      ASSERT_LT(source_id, static_cast<std::uint32_t>(n_rows));
+      EXPECT_EQ(host_row_tenants[source_id], host_query_tenants[static_cast<std::size_t>(query)]);
+    }
+  }
+}
+
+TEST_P(CagraUdfFilterTest, NavixAcceptAllOneHopMatchesDefaultAcrossQueryBatches)
+{
+  if (GetParam() != cagra::search_algo::SINGLE_CTA) { GTEST_SKIP(); }
+
+  cuvs::neighbors::filtering::udf_filter udf_filter(accept_all_udf_source(), nullptr, 0.0f);
+  const auto expected = search(udf_filter, 0.0f);
+  const auto actual   = search_navix(udf_filter, navix_one_hop_policy);
+  expect_same_results(expected, actual);
+}
+
+TEST_P(CagraUdfFilterTest, NavixRejectAllReturnsInvalidSentinels)
+{
+  if (GetParam() != cagra::search_algo::SINGLE_CTA) { GTEST_SKIP(); }
+
+  cuvs::neighbors::filtering::udf_filter udf_filter(reject_all_udf_source(), nullptr, 1.0f);
+  const auto result = search_navix(udf_filter, navix_adaptive_kuzu_policy, 8);
+  for (std::size_t pos = 0; pos < result.neighbors.size(); ++pos) {
+    EXPECT_EQ(result.neighbors[pos], std::numeric_limits<std::uint32_t>::max());
+    EXPECT_EQ(result.distances[pos], std::numeric_limits<float>::max());
+  }
+}
+
+TEST_P(CagraUdfFilterTest, NavixPoliciesReturnOnlyPassingUniqueSortedRows)
+{
+  if (GetParam() != cagra::search_algo::SINGLE_CTA) { GTEST_SKIP(); }
+
+  cuvs::neighbors::filtering::udf_filter udf_filter(
+    threshold_udf_source(), nullptr, static_cast<float>(threshold) / static_cast<float>(n_rows));
+  for (const auto policy : {navix_adaptive_kuzu_policy,
+                            navix_one_hop_policy,
+                            navix_directed_capped_policy,
+                            navix_blind_capped_policy,
+                            navix_adaptive_paper_policy}) {
+    const auto result = search_navix(udf_filter, policy);
+    for (int64_t query = 0; query < n_queries; ++query) {
+      std::vector<std::uint32_t> seen;
+      float previous_distance = -std::numeric_limits<float>::infinity();
+      std::uint32_t previous_id{};
+      for (int64_t rank = 0; rank < k; ++rank) {
+        const auto pos       = static_cast<std::size_t>(query * k + rank);
+        const auto source_id = result.neighbors[pos];
+        ASSERT_LT(source_id, static_cast<std::uint32_t>(n_rows));
+        EXPECT_GE(source_id, static_cast<std::uint32_t>(threshold));
+        EXPECT_GE(result.distances[pos], previous_distance);
+        if (result.distances[pos] == previous_distance) { EXPECT_GT(source_id, previous_id); }
+        EXPECT_EQ(std::find(seen.begin(), seen.end(), source_id), seen.end());
+        seen.push_back(source_id);
+        previous_distance = result.distances[pos];
+        previous_id       = source_id;
+      }
+    }
+  }
+}
+
+TEST_P(CagraUdfFilterTest, NavixHonorsQueryOffsetsAndSchedulerOrdering)
+{
+  if (GetParam() != cagra::search_algo::SINGLE_CTA) { GTEST_SKIP(); }
+
+  std::vector<std::uint32_t> host_row_tenants(n_rows);
+  std::vector<std::uint32_t> host_query_tenants(n_queries);
+  for (int64_t row = 0; row < n_rows; ++row) {
+    host_row_tenants[static_cast<std::size_t>(row)] = static_cast<std::uint32_t>((row / 5) % 3);
+  }
+  for (int64_t query = 0; query < n_queries; ++query) {
+    host_query_tenants[static_cast<std::size_t>(query)] = static_cast<std::uint32_t>(query % 3);
+  }
+
+  auto row_tenants   = raft::make_device_vector<std::uint32_t, int64_t>(res, n_rows);
+  auto query_tenants = raft::make_device_vector<std::uint32_t, int64_t>(res, n_queries);
+  auto context       = raft::make_device_vector<tenant_filter_context, int64_t>(res, 1);
+  auto stream        = raft::resource::get_cuda_stream(res);
+  raft::copy(row_tenants.data_handle(), host_row_tenants.data(), host_row_tenants.size(), stream);
+  raft::copy(
+    query_tenants.data_handle(), host_query_tenants.data(), host_query_tenants.size(), stream);
+  tenant_filter_context host_context{row_tenants.data_handle(), query_tenants.data_handle()};
+  raft::copy(context.data_handle(), &host_context, 1, stream);
+
+  cuvs::neighbors::filtering::udf_filter udf_filter(tenant_udf_source(), context.data_handle());
+  const auto tiled = search_navix(udf_filter, navix_directed_capped_policy);
+  const auto serial =
+    search_navix(udf_filter, navix_directed_capped_policy | navix_serial_scheduler_mask);
+  expect_same_results(tiled, serial);
+  for (int64_t query = 0; query < n_queries; ++query) {
+    for (int64_t rank = 0; rank < k; ++rank) {
+      const auto source_id = tiled.neighbors[static_cast<std::size_t>(query * k + rank)];
       ASSERT_LT(source_id, static_cast<std::uint32_t>(n_rows));
       EXPECT_EQ(host_row_tenants[source_id], host_query_tenants[static_cast<std::size_t>(query)]);
     }

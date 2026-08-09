@@ -158,4 +158,32 @@ CUVS_EXPORT void benchmark_search_favor_udf_with_sampled_rates<data_t>(
   }
 }
 
+template <>
+CUVS_EXPORT void benchmark_search_navix_udf<data_t>(
+  raft::resources const& res,
+  cagra::search_params const& params,
+  cagra::index<data_t, std::uint32_t> const& index,
+  raft::device_matrix_view<const data_t, std::int64_t, raft::row_major> queries,
+  raft::device_matrix_view<std::int64_t, std::int64_t, raft::row_major> neighbors,
+  raft::device_matrix_view<float, std::int64_t, raft::row_major> distances,
+  cuvs::neighbors::filtering::base_filter const& sample_filter,
+  std::uint32_t navix_policy)
+{
+  auto const* udf_filter =
+    dynamic_cast<cuvs::neighbors::filtering::udf_filter const*>(&sample_filter);
+  RAFT_EXPECTS(udf_filter != nullptr, "benchmark_search_navix_udf requires a UDF filter");
+  RAFT_EXPECTS(index.graph().extent(1) == 32, "NaviX currently requires a degree-32 CAGRA graph");
+
+  auto params_copy           = params;
+  params_copy.algo           = search_algo::SINGLE_CTA;
+  params_copy.persistent     = false;
+  params_copy.filter_mode    = filtering_mode::DEFAULT;
+  params_copy.filtering_rate = 0.0f;
+  using runtime_filter_t =
+    CagraSampleFilterWithNavixRuntimeState<cuvs::neighbors::filtering::udf_filter>;
+  auto runtime_filter = runtime_filter_t{*udf_filter, navix_policy};
+  search_with_filtering<data_t, std::uint32_t, runtime_filter_t, std::int64_t>(
+    res, params_copy, index, queries, neighbors, distances, runtime_filter);
+}
+
 }  // namespace cuvs::neighbors::cagra::detail

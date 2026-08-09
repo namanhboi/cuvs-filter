@@ -33,6 +33,7 @@
 // Include shared JIT device functions
 #include "device_common_jit.cuh"
 #include "favor_search_diagnostics.cuh"
+#include "navix_device.cuh"
 
 namespace cuvs::neighbors::cagra::detail::single_cta_search {
 
@@ -200,6 +201,7 @@ RAFT_DEVICE_INLINE_FUNCTION void favor_observe_passing_candidates(
 
 // JIT search_core - setup_workspace/compute_distance via function pointers
 template <bool FAVOR,
+          bool NAVIX,
           bool TOPK_BY_BITONIC_SORT,
           bool BITONIC_SORT_AND_MERGE_MULTI_WARPS,
           typename DataT,
@@ -242,8 +244,10 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   const IndexT graph_size                                     = 0,
   favor_search_diagnostics::context* const diagnostic_context = nullptr,
   const std::uint32_t favor_adaptive_start_iteration          = 0,
-  const std::uint32_t favor_adaptive_prefix_size              = 0)
+  const std::uint32_t favor_adaptive_prefix_size              = 0,
+  const std::uint32_t navix_policy_value                      = 0)
 {
+  static_assert(!(FAVOR && NAVIX), "FAVOR and NaviX are separate traversal specializations");
   using LOAD_T = device::LOAD_128BIT_T;
 
   // The launcher privately uses the high bit to request the same rejected-parent retirement
@@ -259,7 +263,7 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   const bool per_query_automatic_retention =
     FAVOR && ((favor_penalty_mode_value & favor_automatic_retention_mask) != 0);
   const bool retire_rejected_parents =
-    !FAVOR || ((favor_penalty_mode_value & favor_retire_rejected_parent_mask) != 0) ||
+    (!FAVOR && !NAVIX) || ((favor_penalty_mode_value & favor_retire_rejected_parent_mask) != 0) ||
     (per_query_automatic_retention &&
      resolved_selectivity * static_cast<float>(internal_topk) < static_cast<float>(top_k));
   const auto resolved_local_gap_multiplier =
@@ -484,6 +488,37 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   __syncthreads();
   _CLK_REC(clk_compute_1st_distance);
 
+  // NaviX starts with ordinary default-CAGRA raw-distance sampling. If that initial candidate
+  // batch already contains passing nodes, retain all of them and begin the passing-only traversal
+  // immediately. Otherwise the normal CAGRA loop below remains in its seed-discovery phase.
+  bool navix_seeded = false;
+  if constexpr (NAVIX) {
+    device::retain_navix_passing_candidates<IndexT, DistanceT, SourceIndexT>(
+      result_indices_buffer,
+      result_distances_buffer,
+      result_buffer_size,
+      source_indices_ptr,
+      query_id + query_id_offset,
+      filter_payload,
+      smem_work_ptr);
+    navix_seeded = *smem_work_ptr != 0;
+    if (navix_seeded) {
+      device::reset_navix_visited_to_seed_batch(
+        local_visited_hashmap_ptr, hash_bitlen, result_indices_buffer, result_buffer_size);
+      if constexpr (DIAGNOSTICS) {
+        device::capture_navix_seed_batch(result_indices_buffer,
+                                         result_distances_buffer,
+                                         result_buffer_size,
+                                         *smem_work_ptr,
+                                         0u,
+                                         diagnostic_query_id,
+                                         source_indices_ptr,
+                                         diagnostic_summary,
+                                         diagnostic_context);
+      }
+    }
+  }
+
   if (filter_payload.uses_passing_accumulator()) {
     favor_observe_passing_candidates<IndexT, DistanceT, SourceIndexT, DIAGNOSTICS>(
       passing_accumulator_indices,
@@ -538,7 +573,8 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
       _CLK_START();
       // Default filtering and sparse automatic FAVOR retirement may invalidate expanded parents
       // between top-k updates. Restore the sorted internal-top-k invariant before merging.
-      if (retire_rejected_parents && *filter_flag != 0) {
+      const bool retire_rejected_now = retire_rejected_parents || (NAVIX && !navix_seeded);
+      if (retire_rejected_now && *filter_flag != 0) {
         compact_invalid_to_end_of_list<TOPK_BY_BITONIC_SORT>(
           result_indices_buffer, result_distances_buffer, internal_topk);
         if (threadIdx.x == 0) { *terminate_flag = 0; }
@@ -658,6 +694,7 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
             for (std::uint32_t rank = 0; rank < favor_search_diagnostics::ground_truth_k; ++rank) {
               if (source == gt[rank]) {
                 diagnostic_summary->gt_seen_mask |= (1u << rank);
+                if constexpr (NAVIX) { diagnostic_summary->navix_gt_retained_mask |= (1u << rank); }
                 if (diagnostic_summary->gt_first_iteration[rank] ==
                     favor_search_diagnostics::invalid_iteration) {
                   diagnostic_summary->gt_first_iteration[rank] = iter;
@@ -967,7 +1004,58 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
       FAVOR && filter_payload.uses_passing_accumulator()
         ? reinterpret_cast<std::uint8_t*>(smem_work_ptr) + (DIAGNOSTICS ? child_candidate_count : 0)
         : nullptr;
-    if constexpr (FAVOR) {
+    if constexpr (NAVIX) {
+      if (navix_seeded) {
+        favor_search_diagnostics::iteration_record* navix_diagnostic_record = nullptr;
+        if constexpr (DIAGNOSTICS) {
+          if (diagnostic_trace_slot >= 0 && iter < diagnostic_context->max_trace_iterations) {
+            navix_diagnostic_record = diagnostic_context->iteration_records +
+                                      static_cast<std::uint64_t>(diagnostic_trace_slot) *
+                                        diagnostic_context->max_trace_iterations +
+                                      iter;
+          }
+        }
+        device::compute_navix_candidates_jit<DIAGNOSTICS, IndexT, DistanceT, DataT, SourceIndexT>(
+          result_indices_buffer + internal_topk,
+          result_distances_buffer + internal_topk,
+          smem_desc,
+          knn_graph,
+          graph_degree,
+          local_visited_hashmap_ptr,
+          hash_bitlen,
+          parent_list_buffer,
+          result_indices_buffer,
+          search_width,
+          source_indices_ptr,
+          query_id + query_id_offset,
+          filter_payload,
+          smem_work_ptr,
+          navix_policy_value,
+          diagnostic_summary,
+          navix_diagnostic_record,
+          diagnostic_context);
+      } else {
+        // Seed discovery deliberately matches default CAGRA: raw-distance expansion, one fused
+        // frontier, and rejected-parent retirement after expansion. The UDF is evaluated only
+        // after the whole child batch is available.
+        compute_distance_to_child_nodes_jit<IndexT, DistanceT, DataT, 1, DIAGNOSTICS>(
+          result_indices_buffer + internal_topk,
+          result_distances_buffer + internal_topk,
+          smem_desc,
+          knn_graph,
+          graph_degree,
+          local_visited_hashmap_ptr,
+          hash_bitlen,
+          (IndexT*)nullptr,
+          0u,
+          parent_list_buffer,
+          result_indices_buffer,
+          search_width,
+          nullptr,
+          0,
+          child_hash_outcomes);
+      }
+    } else if constexpr (FAVOR) {
       if (favor_penalty_mode == 2) {
         if (favor_packed_bitset && source_indices_ptr == nullptr) {
           compute_favor_retention_safe_distance_to_child_nodes_jit<IndexT,
@@ -1128,6 +1216,51 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
     __syncthreads();
     _CLK_REC(clk_compute_distance);
 
+    // The first successful default-CAGRA child batch is the sole phase boundary. Keep every
+    // passing child in the existing W*D tail, discard the old rejected frontier, reset visited
+    // state, and let the next normal top-k merge choose up to L seeds by raw distance.
+    if constexpr (NAVIX) {
+      if (!navix_seeded) {
+        device::retain_navix_passing_candidates<IndexT, DistanceT, SourceIndexT>(
+          result_indices_buffer + internal_topk,
+          result_distances_buffer + internal_topk,
+          child_candidate_count,
+          source_indices_ptr,
+          query_id + query_id_offset,
+          filter_payload,
+          smem_work_ptr);
+        const bool found_seed_batch = *smem_work_ptr != 0;
+        if (found_seed_batch) {
+          for (std::uint32_t i = threadIdx.x; i < internal_topk; i += blockDim.x) {
+            result_indices_buffer[i]   = invalid_index;
+            result_distances_buffer[i] = utils::get_max_value<DistanceT>();
+          }
+          __syncthreads();
+          device::reset_navix_visited_to_seed_batch(local_visited_hashmap_ptr,
+                                                    hash_bitlen,
+                                                    result_indices_buffer + internal_topk,
+                                                    child_candidate_count);
+          if constexpr (DIAGNOSTICS) {
+            device::capture_navix_seed_batch(result_indices_buffer + internal_topk,
+                                             result_distances_buffer + internal_topk,
+                                             child_candidate_count,
+                                             *smem_work_ptr,
+                                             iter + 1,
+                                             diagnostic_query_id,
+                                             source_indices_ptr,
+                                             diagnostic_summary,
+                                             diagnostic_context);
+          }
+          if (threadIdx.x == 0) {
+            *terminate_flag = 0;
+            topk_ws[0]      = ~0u;
+          }
+          __syncthreads();
+          navix_seeded = true;
+        }
+      }
+    }
+
     if (filter_payload.uses_passing_accumulator()) {
       favor_observe_passing_candidates<IndexT, DistanceT, SourceIndexT, DIAGNOSTICS>(
         passing_accumulator_indices,
@@ -1148,7 +1281,7 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
     }
     __syncthreads();
 
-    if constexpr (DIAGNOSTICS) {
+    if constexpr (DIAGNOSTICS && !NAVIX) {
       if (threadIdx.x == 0 && diagnostic_summary != nullptr) {
         const auto num_children = search_width * graph_degree;
         std::uint32_t attempts = 0, evaluations = 0, duplicates = 0, hash_full = 0;
@@ -1266,7 +1399,28 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
       __syncthreads();
     }
 
-    if (retire_rejected_parents) {
+    if constexpr (DIAGNOSTICS && NAVIX) {
+      if (threadIdx.x == 0 && diagnostic_summary != nullptr) {
+        diagnostic_summary->candidate_duplicate_or_full =
+          diagnostic_summary->candidate_duplicates + diagnostic_summary->candidate_hash_full;
+        if (diagnostic_trace_slot >= 0 && iter < diagnostic_context->max_trace_iterations) {
+          auto& record = diagnostic_context
+                           ->iteration_records[static_cast<std::uint64_t>(diagnostic_trace_slot) *
+                                                 diagnostic_context->max_trace_iterations +
+                                               iter];
+          record.child_attempts    = record.navix_first_hop_checks + record.navix_second_hop_checks;
+          record.child_evaluations = record.child_attempts;
+          record.child_passing  = record.navix_first_hop_passing + record.navix_second_hop_passing;
+          record.child_rejected = record.child_evaluations - record.child_passing;
+          record.child_duplicates = 0;
+          record.child_hash_full  = 0;
+        }
+      }
+      __syncthreads();
+    }
+
+    const bool retire_rejected_now = retire_rejected_parents || (NAVIX && !navix_seeded);
+    if (retire_rejected_now) {
       // This is exactly the default filtered-CAGRA lifecycle: score a selected parent's children,
       // then retire the parent if it does not pass the filter. Sparse automatic FAVOR reuses it so
       // expanded rejected nodes do not permanently consume the fused frontier/result buffer.
@@ -1291,6 +1445,11 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
               passes_filter = sample_filter<SourceIndexT>(
                 query_id + query_id_offset, source_id, filter_payload.sample_filter_data());
             }
+          } else if constexpr (NAVIX) {
+            // While seed discovery is active, every retained batch has already been proven to
+            // contain zero passing nodes. Therefore every selected parent is known rejected and
+            // can be retired without repeating the UDF evaluation.
+            passes_filter = false;
           } else {
             passes_filter = sample_filter<SourceIndexT>(
               query_id + query_id_offset, source_id, filter_payload.sample_filter_data());
@@ -1351,7 +1510,14 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
       const auto node_id = result_indices_buffer[i] & ~index_msb_1_mask;
       bool passes_filter = true;
       if (node_id != (invalid_index & ~index_msb_1_mask)) {
-        if constexpr (FAVOR) {
+        if constexpr (NAVIX) {
+          // Before handoff this is ordinary default-filter output. After handoff the persistent
+          // NaviX frontier is predicate-clean by construction.
+          passes_filter =
+            navix_seeded || sample_filter<SourceIndexT>(query_id + query_id_offset,
+                                                        to_source_index(node_id),
+                                                        filter_payload.sample_filter_data());
+        } else if constexpr (FAVOR) {
           if (favor_penalty_mode == 2 && filter_payload.is_bitset()) {
             const auto source_id = to_source_index(node_id);
             passes_filter        = favor_packed_bitset
@@ -1385,18 +1551,39 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
       TOPK_BY_BITONIC_SORT ? device::swizzling(top_k - 1) : top_k - 1;
     if (top_k > internal_topk || (result_indices_buffer[topk_boundary_position] &
                                   ~index_msb_1_mask) == (invalid_index & ~index_msb_1_mask)) {
-      __syncthreads();
-      topk_by_bitonic_sort_and_merge<BITONIC_SORT_AND_MERGE_MULTI_WARPS>(
-        result_distances_buffer,
-        result_indices_buffer,
-        max_itopk,
-        internal_topk,
-        result_distances_buffer + internal_topk,
-        result_indices_buffer + internal_topk,
-        max_candidates,
-        search_width * graph_degree,
-        topk_ws,
-        (iter == 0));
+      // After a NaviX handoff, every valid tail candidate has already participated in the merge
+      // that produced the current passing-only internal top-k. If fewer than top_k entries are
+      // valid, replaying the unchanged tail can only duplicate one of those retained nodes; there
+      // is no additional predicate-clean candidate to recover. This occurs when a seed is found
+      // on the final allowed iteration. Ordinary default/FAVOR filtering still needs the refill
+      // because rejecting internal entries can expose previously unretained tail candidates.
+      if constexpr (!NAVIX) {
+        __syncthreads();
+        topk_by_bitonic_sort_and_merge<BITONIC_SORT_AND_MERGE_MULTI_WARPS>(
+          result_distances_buffer,
+          result_indices_buffer,
+          max_itopk,
+          internal_topk,
+          result_distances_buffer + internal_topk,
+          result_indices_buffer + internal_topk,
+          max_candidates,
+          search_width * graph_degree,
+          topk_ws,
+          (iter == 0));
+      } else if (!navix_seeded) {
+        __syncthreads();
+        topk_by_bitonic_sort_and_merge<BITONIC_SORT_AND_MERGE_MULTI_WARPS>(
+          result_distances_buffer,
+          result_indices_buffer,
+          max_itopk,
+          internal_topk,
+          result_distances_buffer + internal_topk,
+          result_indices_buffer + internal_topk,
+          max_candidates,
+          search_width * graph_degree,
+          topk_ws,
+          (iter == 0));
+      }
     }
   }
   __syncthreads();
@@ -1477,7 +1664,18 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   }
   if (threadIdx.x == 0) {
     if constexpr (DIAGNOSTICS) {
-      if (diagnostic_summary != nullptr) { diagnostic_summary->iterations = iter + 1; }
+      if (diagnostic_summary != nullptr) {
+        diagnostic_summary->iterations = iter + 1;
+        if constexpr (NAVIX) {
+          diagnostic_summary->navix_terminal_phase = static_cast<std::uint32_t>(
+            navix_seeded ? favor_search_diagnostics::navix_terminal_phase::passing_traversal
+                         : favor_search_diagnostics::navix_terminal_phase::seed_discovery);
+          diagnostic_summary->navix_post_seed_iterations =
+            navix_seeded && iter + 1 >= diagnostic_summary->navix_seed_iteration
+              ? iter + 1 - diagnostic_summary->navix_seed_iteration
+              : 0;
+        }
+      }
     } else if (num_executed_iterations != nullptr) {
       num_executed_iterations[query_id] = iter + 1;
     }
@@ -1547,6 +1745,7 @@ __device__ void search_kernel_jit(
 {
   const auto query_id = blockIdx.y;
   search_core<false,
+              false,
               TOPK_BY_BITONIC_SORT,
               BITONIC_SORT_AND_MERGE_MULTI_WARPS,
               DataT,
@@ -1586,6 +1785,171 @@ __device__ void search_kernel_jit(
                             graph_size);
 }
 
+/** Private benchmark-only NaviX SINGLE_CTA entry. */
+template <bool TOPK_BY_BITONIC_SORT,
+          bool BITONIC_SORT_AND_MERGE_MULTI_WARPS,
+          typename DataT,
+          typename IndexT,
+          typename DistanceT,
+          typename SourceIndexT>
+__device__ void search_navix_kernel_jit(
+  uintptr_t result_indices_ptr,
+  DistanceT* const result_distances_ptr,
+  const std::uint32_t top_k,
+  const DataT* const queries_ptr,
+  const IndexT* const knn_graph,
+  const std::uint32_t graph_degree,
+  const SourceIndexT* source_indices_ptr,
+  const unsigned num_distilation,
+  const uint64_t rand_xor_mask,
+  const IndexT* seed_ptr,
+  const uint32_t num_seeds,
+  IndexT* const visited_hashmap_ptr,
+  const std::uint32_t max_candidates,
+  const std::uint32_t max_itopk,
+  const std::uint32_t internal_topk,
+  const std::uint32_t search_width,
+  const std::uint32_t min_iteration,
+  const std::uint32_t max_iteration,
+  std::uint32_t* const num_executed_iterations,
+  const std::uint32_t hash_bitlen,
+  const std::uint32_t small_hash_bitlen,
+  const std::uint32_t small_hash_reset_interval,
+  const std::uint32_t query_id_offset,
+  const dataset_descriptor_base_t<DataT, IndexT, DistanceT>* dataset_desc,
+  const IndexT graph_size,
+  cagra_sample_filter<SourceIndexT> filter_payload,
+  const std::uint32_t navix_policy_value)
+{
+  const auto query_id = blockIdx.y;
+  search_core<false,
+              true,
+              TOPK_BY_BITONIC_SORT,
+              BITONIC_SORT_AND_MERGE_MULTI_WARPS,
+              DataT,
+              IndexT,
+              DistanceT,
+              SourceIndexT>(result_indices_ptr,
+                            result_distances_ptr,
+                            top_k,
+                            queries_ptr,
+                            knn_graph,
+                            graph_degree,
+                            source_indices_ptr,
+                            num_distilation,
+                            rand_xor_mask,
+                            seed_ptr,
+                            num_seeds,
+                            visited_hashmap_ptr,
+                            max_candidates,
+                            max_itopk,
+                            internal_topk,
+                            search_width,
+                            min_iteration,
+                            max_iteration,
+                            num_executed_iterations,
+                            hash_bitlen,
+                            small_hash_bitlen,
+                            small_hash_reset_interval,
+                            query_id,
+                            query_id_offset,
+                            dataset_desc,
+                            filter_payload,
+                            0.0f,
+                            0.0f,
+                            0u,
+                            0.0f,
+                            0.5f,
+                            graph_size,
+                            nullptr,
+                            0,
+                            0,
+                            navix_policy_value);
+}
+
+/** Dedicated benchmark-only NaviX diagnostic entry; the production NaviX fragment stays intact. */
+template <bool TOPK_BY_BITONIC_SORT,
+          bool BITONIC_SORT_AND_MERGE_MULTI_WARPS,
+          typename DataT,
+          typename IndexT,
+          typename DistanceT,
+          typename SourceIndexT>
+__device__ void search_navix_diagnostic_kernel_jit(
+  uintptr_t result_indices_ptr,
+  DistanceT* const result_distances_ptr,
+  const std::uint32_t top_k,
+  const DataT* const queries_ptr,
+  const IndexT* const knn_graph,
+  const std::uint32_t graph_degree,
+  const SourceIndexT* source_indices_ptr,
+  const unsigned num_distilation,
+  const uint64_t rand_xor_mask,
+  const IndexT* seed_ptr,
+  const uint32_t num_seeds,
+  IndexT* const visited_hashmap_ptr,
+  const std::uint32_t max_candidates,
+  const std::uint32_t max_itopk,
+  const std::uint32_t internal_topk,
+  const std::uint32_t search_width,
+  const std::uint32_t min_iteration,
+  const std::uint32_t max_iteration,
+  std::uint32_t* const diagnostic_context_ptr,
+  const std::uint32_t hash_bitlen,
+  const std::uint32_t small_hash_bitlen,
+  const std::uint32_t small_hash_reset_interval,
+  const std::uint32_t query_id_offset,
+  const dataset_descriptor_base_t<DataT, IndexT, DistanceT>* dataset_desc,
+  const IndexT graph_size,
+  cagra_sample_filter<SourceIndexT> filter_payload,
+  const std::uint32_t navix_policy_value)
+{
+  const auto query_id = blockIdx.y;
+  search_core<false,
+              true,
+              TOPK_BY_BITONIC_SORT,
+              BITONIC_SORT_AND_MERGE_MULTI_WARPS,
+              DataT,
+              IndexT,
+              DistanceT,
+              SourceIndexT,
+              true>(result_indices_ptr,
+                    result_distances_ptr,
+                    top_k,
+                    queries_ptr,
+                    knn_graph,
+                    graph_degree,
+                    source_indices_ptr,
+                    num_distilation,
+                    rand_xor_mask,
+                    seed_ptr,
+                    num_seeds,
+                    visited_hashmap_ptr,
+                    max_candidates,
+                    max_itopk,
+                    internal_topk,
+                    search_width,
+                    min_iteration,
+                    max_iteration,
+                    nullptr,
+                    hash_bitlen,
+                    small_hash_bitlen,
+                    small_hash_reset_interval,
+                    query_id,
+                    query_id_offset,
+                    dataset_desc,
+                    filter_payload,
+                    0.0f,
+                    0.0f,
+                    0u,
+                    0.0f,
+                    0.5f,
+                    graph_size,
+                    reinterpret_cast<favor_search_diagnostics::context*>(diagnostic_context_ptr),
+                    0,
+                    0,
+                    navix_policy_value);
+}
+
 /** Diagnostic default-filter entry used only by the bench-only scoped attachment. */
 template <bool TOPK_BY_BITONIC_SORT,
           bool BITONIC_SORT_AND_MERGE_MULTI_WARPS,
@@ -1623,6 +1987,7 @@ __device__ void search_default_diagnostic_kernel_jit(
 {
   const auto query_id = blockIdx.y;
   search_core<false,
+              false,
               TOPK_BY_BITONIC_SORT,
               BITONIC_SORT_AND_MERGE_MULTI_WARPS,
               DataT,
@@ -1707,6 +2072,7 @@ __device__ void search_favor_kernel_jit(
 {
   const auto query_id = blockIdx.y;
   search_core<true,
+              false,
               TOPK_BY_BITONIC_SORT,
               BITONIC_SORT_AND_MERGE_MULTI_WARPS,
               DataT,
@@ -1793,6 +2159,7 @@ __device__ void search_favor_diagnostic_kernel_jit(
 {
   const auto query_id = blockIdx.y;
   search_core<true,
+              false,
               TOPK_BY_BITONIC_SORT,
               BITONIC_SORT_AND_MERGE_MULTI_WARPS,
               DataT,
@@ -1912,6 +2279,7 @@ __device__ void search_single_cta_p_impl(
 
     // work phase - use JIT search_core
     search_core<false,
+                false,
                 TOPK_BY_BITONIC_SORT,
                 BITONIC_SORT_AND_MERGE_MULTI_WARPS,
                 DataT,
