@@ -128,6 +128,9 @@ Representative cells:
 | default + accumulator | L=64, W=4, max_iter=2088 | 2.27k | 2.57k | 0.9120 |
 | FAVOR + accumulator | L=64, W=4, max_iter=2088 | 1.79k | 2.15k | 0.9091 |
 
+** Full Pareto frontier
+
+#+caption: YFCC-10M end-to-end QPS versus Recall@10 for the four matched SINGLE_CTA methods.
 [[file:benchmarks/favor/yfcc_udf/results_accumulator_optimized_20260809/plots/qps_recall_four_method_sweep.png]]
 
 Detailed measurement record: =benchmarks/favor/YFCC_ACCUMULATOR_THROUGHPUT_OPTIMIZATION_REPORT.org=
@@ -162,11 +165,30 @@ for a QPS change from 28.63k to 28.34k.  FAVOR recall rises from 0.38558 to 0.55
 changes from 27.90k to 27.56k.  The accumulator fixes a major result-retention failure, but the
 remaining B0 gap is an exploration-depth problem.
 
+** Full Pareto frontiers
+
+#+caption: ArXiv EM end-to-end QPS versus Recall@10 over the full parameter sweep.
 [[file:benchmarks/favor/arxiv_udf/results_accumulator_optimized_20260809/plots/qps_recall_sweep_em.png]]
 
+#+caption: ArXiv EMIS end-to-end QPS versus Recall@10 over the full parameter sweep.
 [[file:benchmarks/favor/arxiv_udf/results_accumulator_optimized_20260809/plots/qps_recall_sweep_emis.png]]
 
+#+caption: ArXiv R end-to-end QPS versus Recall@10 over the full parameter sweep.
 [[file:benchmarks/favor/arxiv_udf/results_accumulator_optimized_20260809/plots/qps_recall_sweep_r.png]]
+
+** B0 cross-sections
+
+The B0 plots isolate =max_iterations=0= while still sweeping =L= and =W=.  They make the
+accumulator's immediate recall benefit visible without mixing it with explicit deep continuation.
+
+#+caption: ArXiv EM B0 end-to-end QPS versus Recall@10.
+[[file:benchmarks/favor/arxiv_udf/results_accumulator_optimized_20260809/plots/qps_recall_b0_em.png]]
+
+#+caption: ArXiv EMIS B0 end-to-end QPS versus Recall@10.
+[[file:benchmarks/favor/arxiv_udf/results_accumulator_optimized_20260809/plots/qps_recall_b0_emis.png]]
+
+#+caption: ArXiv R B0 end-to-end QPS versus Recall@10.
+[[file:benchmarks/favor/arxiv_udf/results_accumulator_optimized_20260809/plots/qps_recall_b0_r.png]]
 
 Detailed measurement record: =benchmarks/favor/ARXIV_ACCUMULATOR_THROUGHPUT_OPTIMIZATION_REPORT.org=
 
