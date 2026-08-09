@@ -1,0 +1,19 @@
+# Keep the reproducible harness and curated evidence; ignore generated run products.
+*
+!.gitignore
+!*.py
+!*.sh
+!*.org
+
+!results_in_kernel_seed_20260809/
+!results_in_kernel_seed_20260809/analysis/
+!results_in_kernel_seed_20260809/analysis/*.org
+!results_in_kernel_seed_20260809/analysis/*.csv
+!results_in_kernel_seed_20260809/analysis/*.png
+
+!results_yfcc_diagnosis_20260809/
+!results_yfcc_diagnosis_20260809/*.org
+!results_yfcc_diagnosis_20260809/*.csv
+!results_yfcc_diagnosis_20260809/*.json
+!results_yfcc_diagnosis_20260809/plots/
+!results_yfcc_diagnosis_20260809/plots/*.png

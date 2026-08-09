@@ -1,0 +1,107 @@
+workload,source,method,mode,scheduler,recall,qps,filter_violations,sentinel_errors,underfilled,itopk,width,iterations,threads
+em,em_b0.json,Default + accumulator,,,0.96508,28466.349678155075,0,0,0.0067,64,1,0,0
+em,em_b0.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.98913,11979.243435438311,0,0,0.001,64,1,0,0
+em,em_b0.json,Default + accumulator,,,0.98552,14562.748206178683,0,0,0.0032,128,1,0,0
+em,em_b0.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.99618,5821.5253941481005,0,0,0.001,128,1,0,0
+em,em_b0.json,Default + accumulator,,,0.98598,14408.667355182335,0,0,0.0032,128,2,0,0
+em,em_b0.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.99631,5812.271552185313,0,0,0.0009,128,2,0,0
+em,em_b0.json,Default + accumulator,,,0.99431,7366.341320423023,0,0,0.002,256,1,0,0
+em,em_b0.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.99828,2872.7285429836897,0,0,0.0009,256,1,0,0
+em,em_b0.json,Default + accumulator,,,0.99441,7383.45507991759,0,0,0.002,256,2,0,0
+em,em_b0.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.99838,2883.7381844560605,0,0,0.0008,256,2,0,0
+em,em_b0.json,Default + accumulator,,,0.99774,3783.386993197759,0,0,0.0011,512,2,0,0
+em,em_b0.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.99886,1470.0405744873353,0,0,0.0011,512,2,0,0
+emis,emis_correctness.json,Default + accumulator,,,0.5393,25720.82218680404,0,0,0.191,64,1,0,0
+emis,emis_correctness.json,NaviX (one_hop),one_hop,tiled,0.7888,29021.718769218336,0,0,0.029,64,1,0,0
+emis,emis_correctness.json,NaviX (directed_capped),directed_capped,tiled,0.9502,6335.189932928126,0,0,0.028,64,1,0,0
+emis,emis_correctness.json,NaviX (blind_capped),blind_capped,tiled,0.9448,12528.46043423965,0,0,0.028,64,1,0,0
+emis,emis_correctness.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.9396,11832.656233524156,0,0,0.028,64,1,0,0
+emis,emis_correctness.json,NaviX (adaptive_paper),adaptive_paper,tiled,0.9456,9650.639794345794,0,0,0.028,64,1,0,0
+emis,emis_scheduler_gate.json,NaviX (directed_capped),directed_capped,serial,0.978,3125.6910414075996,0,0,0.014,128,1,0,64
+emis,emis_scheduler_gate.json,NaviX (directed_capped),directed_capped,serial,0.978,3161.390429339515,0,0,0.014,128,1,0,128
+emis,emis_scheduler_gate.json,NaviX (directed_capped),directed_capped,tiled,0.978,3143.395415219472,0,0,0.014,128,1,0,64
+emis,emis_scheduler_gate.json,NaviX (directed_capped),directed_capped,tiled,0.978,3179.733841731757,0,0,0.014,128,1,0,128
+emis,emis_scheduler_gate.json,NaviX (blind_capped),blind_capped,serial,0.9767,6789.166310346913,0,0,0.014,128,1,0,64
+emis,emis_scheduler_gate.json,NaviX (blind_capped),blind_capped,serial,0.9767,6981.273522663777,0,0,0.014,128,1,0,128
+emis,emis_scheduler_gate.json,NaviX (blind_capped),blind_capped,tiled,0.9767,6876.68952099062,0,0,0.014,128,1,0,64
+emis,emis_scheduler_gate.json,NaviX (blind_capped),blind_capped,tiled,0.9767,7084.763047126002,0,0,0.014,128,1,0,128
+emis,emis_scheduler_resources.json,NaviX (directed_capped),directed_capped,serial,0.978,3130.012147112137,0,0,0.014,128,1,0,64
+emis,emis_scheduler_resources.json,NaviX (directed_capped),directed_capped,serial,0.978,3155.8734961538703,0,0,0.014,128,1,0,128
+emis,emis_scheduler_resources.json,NaviX (directed_capped),directed_capped,tiled,0.978,3128.942026928885,0,0,0.014,128,1,0,64
+emis,emis_scheduler_resources.json,NaviX (directed_capped),directed_capped,tiled,0.978,3177.8364365223815,0,0,0.014,128,1,0,128
+emis,emis_scheduler_resources.json,NaviX (blind_capped),blind_capped,serial,0.9767,6760.0675457635225,0,0,0.014,128,1,0,64
+emis,emis_scheduler_resources.json,NaviX (blind_capped),blind_capped,serial,0.9767,6975.835169813497,0,0,0.014,128,1,0,128
+emis,emis_scheduler_resources.json,NaviX (blind_capped),blind_capped,tiled,0.9767,6848.858681358378,0,0,0.014,128,1,0,64
+emis,emis_scheduler_resources.json,NaviX (blind_capped),blind_capped,tiled,0.9767,7070.337149070356,0,0,0.014,128,1,0,128
+emis,emis_sweep_i0.json,Default + accumulator,,,0.54956,28229.05019739188,0,0,0.1865,64,1,0,0
+emis,emis_sweep_i0.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.94276,12353.226544129957,0,0,0.0258,64,1,0,0
+emis,emis_sweep_i0.json,Default + accumulator,,,0.62936,14415.620858956496,0,0,0.1022,128,1,0,0
+emis,emis_sweep_i0.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.9755,6592.010191222831,0,0,0.0112,128,1,0,0
+emis,emis_sweep_i0.json,Default + accumulator,,,0.63219,14326.149638479188,0,0,0.0887,128,2,0,0
+emis,emis_sweep_i0.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.97562,6595.977909990504,0,0,0.0111,128,2,0,0
+emis,emis_sweep_i0.json,Default + accumulator,,,0.70696,7287.872027293768,0,0,0.0403,256,1,0,0
+emis,emis_sweep_i0.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.99329,3607.143680406334,0,0,0.0009,256,1,0,0
+emis,emis_sweep_i0.json,Default + accumulator,,,0.70829,7342.596133321041,0,0,0.0383,256,2,0,0
+emis,emis_sweep_i0.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.99337,3623.5551226982116,0,0,0.0009,256,2,0,0
+emis,emis_sweep_i0.json,Default + accumulator,,,0.78755,3761.9381863677168,0,0,0.0266,512,2,0,0
+emis,emis_sweep_i0.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.99661,2061.713072251995,0,0,0.0007,512,2,0,0
+r,r_b0.json,Default + accumulator,,,0.94937,28650.07187319237,0,0,0.0031,64,1,0,0
+r,r_b0.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.98897,14987.524519686853,0,0,0.0004,64,1,0,0
+r,r_b0.json,Default + accumulator,,,0.97499,14650.985412349271,0,0,0.0016,128,1,0,0
+r,r_b0.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.99689,7406.3509820225445,0,0,0.0001,128,1,0,0
+r,r_b0.json,Default + accumulator,,,0.97578,14512.479089754017,0,0,0.0016,128,2,0,0
+r,r_b0.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.99694,7373.203384552381,0,0,0.0001,128,2,0,0
+r,r_b0.json,Default + accumulator,,,0.99029,7400.499890418864,0,0,0.0005,256,1,0,0
+r,r_b0.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.99905,3674.3121770384164,0,0,0.0001,256,1,0,0
+r,r_b0.json,Default + accumulator,,,0.99044,7432.193287534758,0,0,0.0005,256,2,0,0
+r,r_b0.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.99904,3689.387068616661,0,0,0.0001,256,2,0,0
+r,r_b0.json,Default + accumulator,,,0.99741,3790.2736708646835,0,0,0.0002,512,2,0,0
+r,r_b0.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.99983,1870.5847969708784,0,0,0.0,512,2,0,0
+yfcc,yfcc_correctness.json,Default + accumulator,,,0.4511,109636.19369302288,0,0,0.522,64,1,0,0
+yfcc,yfcc_correctness.json,NaviX (one_hop),one_hop,tiled,0.2197,48347.085638984616,0,0,0.597,64,1,0,0
+yfcc,yfcc_correctness.json,NaviX (directed_capped),directed_capped,tiled,0.5805,8852.485658347785,0,0,0.364,64,1,0,0
+yfcc,yfcc_correctness.json,NaviX (blind_capped),blind_capped,tiled,0.58,9076.56481768292,0,0,0.364,64,1,0,0
+yfcc,yfcc_correctness.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.5785,9111.361281521302,0,0,0.364,64,1,0,0
+yfcc,yfcc_correctness.json,NaviX (adaptive_paper),adaptive_paper,tiled,0.5795,9045.16391373221,0,0,0.364,64,1,0,0
+yfcc_smoke,yfcc_smoke.json,Default + accumulator,,,0.24545454545454545,642.4327034091859,0,0,0.9090909090909091,64,1,0,0
+yfcc_smoke,yfcc_smoke.json,NaviX (one_hop),one_hop,tiled,0.08888888888888889,1035.471157859119,0,0,0.9444444444444444,64,1,0,0
+yfcc_smoke,yfcc_smoke.json,NaviX (directed_capped),directed_capped,tiled,0.26,313.0584669875538,0,0,0.8,64,1,0,0
+yfcc_smoke,yfcc_smoke.json,NaviX (blind_capped),blind_capped,tiled,0.26,315.2172913229702,0,0,0.8,64,1,0,0
+yfcc_smoke,yfcc_smoke.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.26,314.1667922966237,0,0,0.8,64,1,0,0
+yfcc_smoke,yfcc_smoke.json,NaviX (adaptive_paper),adaptive_paper,tiled,0.26,315.1503852131018,0,0,0.8,64,1,0,0
+yfcc,yfcc_sweep_i0.json,Default + accumulator,,,0.4862,123279.75583769054,0,0,0.4566,64,1,0,0
+yfcc,yfcc_sweep_i0.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.62656,8963.278402902431,0,0,0.3047,64,1,0,0
+yfcc,yfcc_sweep_i0.json,Default + accumulator,,,0.57558,74627.50613341205,0,0,0.392,128,1,0,0
+yfcc,yfcc_sweep_i0.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.66132,4584.7687078776025,0,0,0.2953,128,1,0,0
+yfcc,yfcc_sweep_i0.json,Default + accumulator,,,0.57837,85851.62181902121,0,0,0.3886,128,2,0,0
+yfcc,yfcc_sweep_i0.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.65947,4785.925932678729,0,0,0.2965,128,2,0,0
+yfcc,yfcc_sweep_i0.json,Default + accumulator,,,0.65234,42570.86437676965,0,0,0.3378,256,1,0,0
+yfcc,yfcc_sweep_i0.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.68368,2376.074162089791,0,0,0.2868,256,1,0,0
+yfcc,yfcc_sweep_i0.json,Default + accumulator,,,0.65382,49457.400879568806,0,0,0.3369,256,2,0,0
+yfcc,yfcc_sweep_i0.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.68148,2432.440895815384,0,0,0.2886,256,2,0,0
+yfcc,yfcc_sweep_i0.json,Default + accumulator,,,0.71795,27296.49112720464,0,0,0.2903,512,2,0,0
+yfcc,yfcc_sweep_i0.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.68931,1447.4631024322257,0,0,0.2846,512,2,0,0
+yfcc,yfcc_sweep_i1044.json,Default + accumulator,,,0.78147,13415.545783410316,0,0,0.2277,64,1,1044,0
+yfcc,yfcc_sweep_i1044.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.66037,7544.799235414026,0,0,0.2834,64,1,1044,0
+yfcc,yfcc_sweep_i1044.json,Default + accumulator,,,0.78108,12864.089312911472,0,0,0.2327,128,1,1044,0
+yfcc,yfcc_sweep_i1044.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.67999,4190.553121533068,0,0,0.2832,128,1,1044,0
+yfcc,yfcc_sweep_i1044.json,Default + accumulator,,,0.83249,8067.713786850902,0,0,0.1789,128,2,1044,0
+yfcc,yfcc_sweep_i1044.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.68124,4076.3176622649567,0,0,0.2831,128,2,1044,0
+yfcc,yfcc_sweep_i1044.json,Default + accumulator,,,0.77963,12295.162938965144,0,0,0.2376,256,1,1044,0
+yfcc,yfcc_sweep_i1044.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.69346,2244.14983570028,0,0,0.2819,256,1,1044,0
+yfcc,yfcc_sweep_i1044.json,Default + accumulator,,,0.83159,7621.891063488844,0,0,0.1835,256,2,1044,0
+yfcc,yfcc_sweep_i1044.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.69386,2239.5727958616462,0,0,0.2824,256,2,1044,0
+yfcc,yfcc_sweep_i1044.json,Default + accumulator,,,0.83068,7487.663821195492,0,0,0.1889,512,2,1044,0
+yfcc,yfcc_sweep_i1044.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.69617,1387.2010110944389,0,0,0.2816,512,2,1044,0
+yfcc,yfcc_sweep_i522.json,Default + accumulator,,,0.72349,25268.452354093282,0,0,0.2804,64,1,522,0
+yfcc,yfcc_sweep_i522.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.65658,7875.631281904311,0,0,0.2848,64,1,522,0
+yfcc,yfcc_sweep_i522.json,Default + accumulator,,,0.72323,24581.601477791486,0,0,0.2861,128,1,522,0
+yfcc,yfcc_sweep_i522.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.67633,4332.957911126425,0,0,0.2852,128,1,522,0
+yfcc,yfcc_sweep_i522.json,Default + accumulator,,,0.78101,15241.641448479295,0,0,0.2316,128,2,522,0
+yfcc,yfcc_sweep_i522.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.67829,4302.552713590489,0,0,0.2846,128,2,522,0
+yfcc,yfcc_sweep_i522.json,Default + accumulator,,,0.71995,24501.47095893486,0,0,0.2911,256,1,522,0
+yfcc,yfcc_sweep_i522.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.68996,2293.4386968130466,0,0,0.2834,256,1,522,0
+yfcc,yfcc_sweep_i522.json,Default + accumulator,,,0.77949,14882.63950106965,0,0,0.2375,256,2,522,0
+yfcc,yfcc_sweep_i522.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.6909,2318.0526068492068,0,0,0.2838,256,2,522,0
+yfcc,yfcc_sweep_i522.json,Default + accumulator,,,0.77578,14805.57034840384,0,0,0.2412,512,2,522,0
+yfcc,yfcc_sweep_i522.json,NaviX (adaptive_kuzu),adaptive_kuzu,tiled,0.69314,1420.1480472484109,0,0,0.2832,512,2,522,0

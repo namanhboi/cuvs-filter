@@ -1,0 +1,73 @@
+#+TITLE: NaviX-style filtered CAGRA SINGLE_CTA implementation plan
+
+* Scope
+
+- Keep the experiment benchmark-private: do not add fields to the public CAGRA search API.
+- Support non-persistent SINGLE_CTA on degree-32 CAGRA graphs first.
+- Compare only default CAGRA with its passing-result accumulator against NaviX traversal.
+- Include in-kernel query-local seed discovery in the same traversal budget and end-to-end
+  throughput.
+- Stop depth escalation after the NaviX frontier reaches approximately 0.95 recall.
+
+* GPU traversal design
+
+- Preserve CAGRA's fused internal top-k and its existing =search_width * graph_degree= candidate
+  tail.
+- Persist only passing nodes in the fused frontier. Rejected first-hop nodes are transient bridge
+  tasks and never occupy the persistent candidate/result queue.
+- Allocate one =W * D= bridge-ID array plus =3 * W= counters in shared memory. Do not allocate a
+  =D * D= grandchild array.
+- Assign one warp to a bridge row. Its 32 lanes hold the row's grandchildren in registers. Several
+  resident warps load and evaluate bridge rows concurrently, then commit passing grandchildren in
+  deterministic bridge order into the existing =W * D= candidate tail.
+- Cap each expanded parent at =D= admitted passing candidates, including passing first-hop nodes.
+- Use raw query distance for every persistent candidate. No FAVOR penalty and no passing-result
+  accumulator are used in the NaviX specialization.
+
+* Policies
+
+- =one_hop=: admit passing first-hop neighbors only.
+- =directed_capped=: rank rejected first-hop bridge rows by query distance, then expand until the
+  per-parent passing-candidate cap is filled.
+- =blind_capped=: expand rejected bridge rows in graph order until the cap is filled.
+- =adaptive_kuzu=: for degree 32, use one hop when =P >= 13=, blind when =P <= 4=, and directed
+  otherwise. This is the integer form of Kuzu's local-selectivity and work inequalities.
+- =adaptive_paper=: use the paper thresholds =P >= 16= and =P <= 2= as a sensitivity control.
+
+* In-kernel query-local seed phase
+
+- Start from CAGRA's ordinary raw-distance initialization and run its normal fused, default-filter
+  traversal until the first candidate batch containing at least one passing node.
+- Count this work against the same resolved =max_iterations=. With =max_iterations=0=, use the
+  existing automatic B0 formula; do not add a hidden seed budget.
+- If the first successful batch contains several passing nodes, retain all of them in the existing
+  candidate tail. The next ordinary top-k merge keeps the nearest =L= when necessary.
+- At handoff, discard the old rejected frontier, reset visited state, mark every retained pass
+  unexpanded, and continue with the adaptive passing-only NaviX traversal using only the remaining
+  iterations.
+- If no batch passes before frontier exhaustion or the iteration cap, return the normal
+  default-filtered seed-phase output. No external row scan, seed array, or seed accumulator is
+  used.
+- Evaluate UDF predicates using source IDs while retaining graph-row IDs internally, so reordered
+  CAGRA datasets remain correct.
+
+* Validation stages
+
+1. Compile the dedicated NaviX SINGLE_CTA JIT fragment without changing default/FAVOR fragment
+   selection or the public CAGRA API.
+2. Run one-query smoke tests and require zero filter violations and correct invalid sentinels.
+3. Compare serial and warp-tiled bridge schedulers at 64 and 128 threads. Require identical recall;
+   retain tiled scheduling only if bridge-heavy end-to-end performance improves without reducing
+   the active-block occupancy tier.
+4. Isolate all five traversal policies on 1,000-query YFCC and ARXIV-EMIS correctness workloads.
+5. Run the reduced =L/W/max_iterations= throughput sweep with actual 10,000-query batches for YFCC
+   and EMIS. Run EM and R at B0 only. Escalate depth only while NaviX remains below 0.95 recall.
+6. Plot the Pareto frontier for default+accumulator and =adaptive_kuzu= using end-to-end QPS.
+
+* Completion status
+
+The earlier external approximately-10,000-row seed-scan experiment remains local under
+=results_20260809= but is intentionally excluded from version control. The in-kernel seed-phase
+implementation, 1,000-query correctness gates, and 10,000-query staged throughput evaluation are
+complete on the =navix-single-cta= branch. Curated data, plots, and the generated report are
+isolated under =results_in_kernel_seed_20260809=.

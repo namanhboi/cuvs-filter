@@ -1,0 +1,31 @@
+{
+  "captures": {
+    "yfcc_navix_diag_b0_l64_w1": {
+      "queries": 1000,
+      "seed_slots": 2030,
+      "regular_recall": 0.5784,
+      "diagnostic_recall": 0.578399998847,
+      "regular_underfilled": 0.364,
+      "diagnostic_underfilled": 0.364
+    },
+    "yfcc_navix_diag_i1044_l64_w1": {
+      "queries": 1000,
+      "seed_slots": 2182,
+      "regular_recall": 0.6149,
+      "diagnostic_recall": 0.61489999882,
+      "regular_underfilled": 0.335,
+      "diagnostic_underfilled": 0.335
+    },
+    "yfcc_navix_diag_i1044_l512_w2": {
+      "queries": 1000,
+      "seed_slots": 9002,
+      "regular_recall": 0.6447,
+      "diagnostic_recall": 0.644699999773,
+      "regular_underfilled": 0.333,
+      "diagnostic_underfilled": 0.333
+    }
+  },
+  "predicate_checked_seed_slots": 13214,
+  "predicate_checked_output_slots": 21121,
+  "status": "pass"
+}
