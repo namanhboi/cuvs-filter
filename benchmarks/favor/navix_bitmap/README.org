@@ -1,0 +1,64 @@
+#+title: Bitmap-seeded NaviX benchmark data
+
+* Purpose
+
+This experiment compares four SINGLE_CTA paths with the same query-dependent bitmap:
+
+- default filtered CAGRA;
+- default filtered CAGRA with the bounded passing-result accumulator;
+- legacy NaviX, which discovers its first passing batch inside graph traversal; and
+- strict bitmap-seeded NaviX, which starts from the first =k= passing internal graph IDs.
+
+The NaviX paths use the existing =adaptive_kuzu= local policy after handoff.  The strict seed
+prepass and graph traversal are both inside measured search time.  Bitmap materialization, file
+loading, and the one-time host-to-device upload are setup costs and are not timed.  This is a
+benchmark-private implementation: it adds no public CAGRA search field or overload.
+
+* Bitmap format
+
+The bitmap format is little-endian and row-major.  Its 40-byte header is
+=<8sIIQQQ=: magic =CUVSBMAP=, version =1=, word width =32=, rows, columns, and payload word count.
+The payload packs =rows * columns= bits contiguously; bit =(q * columns + id)= is one exactly when
+source ID =id= passes query =q=.  Padding bits must be zero.
+
+=prepare_bitmaps.py= materializes this format from the same prepared metadata used by the UDF
+adapters and validates every non-sentinel ground-truth ID against the resulting bitmap.  It is
+vector-type agnostic; =--vector-dtype= is used only when slicing matching query-vector shards.
+
+YFCC's 10M-column throughput bitmap should use =--shard-size 2048=.  This produces four
+2,048-query shards and one 1,808-query shard for a 10,000-query workload, bounding device bitmap
+residency while preserving one end-to-end search call per resident shard.  ArXiv's 100K-column
+bitmaps fit as a single 10,000-query shard.
+
+* Predicates
+
+- YFCC: a base image contains every query tag.
+- ArXiv EM: exact subcategory equality.
+- ArXiv EMIS: the base item contains the query category.
+- ArXiv R: the base date is inside the inclusive query interval.
+
+Before accepting a shard, =prepare_bitmaps.py= checks every non-sentinel ground-truth ID against
+the materialized predicate.  Query vectors and ground truth are sliced in exactly the same order
+as the bitmap rows.
+
+* Running
+
+The default paths expect prepared inputs below =datasets/yfcc-10M= and
+=datasets/arxiv-for-fanns-medium=, including degree-32 CAGRA indexes.  Build the benchmark and test,
+then run:
+
+#+begin_src sh
+ninja -C cpp/build NEIGHBORS_ANN_CAGRA_FILTER_BITMAP_TEST CUVS_CAGRA_ANN_BENCH
+cpp/build/gtests/NEIGHBORS_ANN_CAGRA_FILTER_BITMAP_TEST
+benchmarks/favor/navix_bitmap/run_experiment.sh all
+#+end_src
+
+Individual stages are =prepare=, =configs=, =correctness=, =throughput=, and =analyze=.  Override
+the defaults with =NAVIX_BITMAP_DATA_ROOT=, =NAVIX_BITMAP_ROOT=,
+=NAVIX_BITMAP_RESULT_ROOT=, or =PYTHON=.  Set =NAVIX_BITMAP_FORCE_PREPARE=1= to regenerate existing
+bitmap manifests.
+
+The matched B0 sweep uses =L={64,128,256,512}=, =W={1,2}=, =max_iterations=0=, =k=10=, and
+=max_queries=512=.  Correctness runs use 1,000 queries; throughput covers 10,000 queries.  Raw
+configs/logs are intentionally ignored, while the aggregate CSV files, Pareto plots, and Org
+report are retained under the result directory.
