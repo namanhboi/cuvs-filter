@@ -72,4 +72,46 @@ CUVS_EXPORT void benchmark_search_navix_udf(
   cuvs::neighbors::filtering::base_filter const& sample_filter,
   std::uint32_t navix_policy);
 
+/** Run DEFAULT SINGLE_CTA with a benchmark bitmap whose first row is query_offset. */
+template <typename T>
+CUVS_EXPORT void benchmark_search_bitmap_with_query_offset(
+  raft::resources const& res,
+  cagra::search_params const& params,
+  cagra::index<T, std::uint32_t> const& index,
+  raft::device_matrix_view<const T, std::int64_t, raft::row_major> queries,
+  raft::device_matrix_view<std::int64_t, std::int64_t, raft::row_major> neighbors,
+  raft::device_matrix_view<float, std::int64_t, raft::row_major> distances,
+  cuvs::neighbors::filtering::base_filter const& sample_filter,
+  std::uint32_t query_offset,
+  bool passing_accumulator = false);
+
+/** Run legacy in-kernel-seeded NaviX against a per-query bitmap. */
+template <typename T>
+CUVS_EXPORT void benchmark_search_navix_bitmap(
+  raft::resources const& res,
+  cagra::search_params const& params,
+  cagra::index<T, std::uint32_t> const& index,
+  raft::device_matrix_view<const T, std::int64_t, raft::row_major> queries,
+  raft::device_matrix_view<std::int64_t, std::int64_t, raft::row_major> neighbors,
+  raft::device_matrix_view<float, std::int64_t, raft::row_major> distances,
+  cuvs::neighbors::filtering::base_filter const& sample_filter,
+  std::uint32_t query_offset,
+  std::uint32_t navix_policy);
+
+/** Select passing bitmap seeds, then run strict passing-only NaviX on the same stream. */
+template <typename T>
+CUVS_EXPORT void benchmark_search_navix_bitmap_seeded(
+  raft::resources const& res,
+  cagra::search_params const& params,
+  cagra::index<T, std::uint32_t> const& index,
+  raft::device_matrix_view<const T, std::int64_t, raft::row_major> queries,
+  raft::device_matrix_view<std::int64_t, std::int64_t, raft::row_major> neighbors,
+  raft::device_matrix_view<float, std::int64_t, raft::row_major> distances,
+  cuvs::neighbors::filtering::base_filter const& sample_filter,
+  std::uint32_t query_offset,
+  std::uint32_t* seed_ids,
+  std::uint32_t* seed_counts,
+  std::uint32_t* inspected_units,
+  std::uint32_t navix_policy);
+
 }  // namespace cuvs::neighbors::cagra::detail

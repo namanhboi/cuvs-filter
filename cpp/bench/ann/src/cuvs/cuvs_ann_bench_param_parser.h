@@ -556,6 +556,10 @@ void parse_search_param(const nlohmann::json& conf,
       THROW("Invalid NaviX scheduler: %s", scheduler.c_str());
     }
   }
+  if (conf.contains("navix_bitmap_seeds")) {
+    param.navix_bitmap_seeds = conf.at("navix_bitmap_seeds");
+  }
+  param.navix_seed_k = conf.value("k", 10u);
   if (conf.contains("favor_delta_d_file")) {
     param.favor_delta_d_file = conf.at("favor_delta_d_file").get<std::string>();
   }

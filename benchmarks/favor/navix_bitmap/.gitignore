@@ -1,0 +1,4 @@
+__pycache__/
+results_*/configs/
+results_*/raw/
+results_*/logs/

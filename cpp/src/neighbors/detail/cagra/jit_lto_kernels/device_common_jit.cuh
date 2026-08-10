@@ -341,6 +341,45 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_random_nodes_jit(
     graph_size);
 }
 
+/** Initialize a CAGRA candidate buffer from a variable-length, passing-only NaviX seed row. */
+template <typename IndexT, typename DistanceT, typename DataT>
+RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_navix_bitmap_seeds_jit(
+  IndexT* __restrict__ result_indices_ptr,
+  DistanceT* __restrict__ result_distances_ptr,
+  const dataset_descriptor_base_t<DataT, IndexT, DistanceT>* smem_desc,
+  const std::uint32_t num_pickup,
+  const IndexT* __restrict__ seed_ptr,
+  const std::uint32_t num_seeds,
+  IndexT* __restrict__ visited_hash_ptr,
+  const std::uint32_t visited_hash_bitlen)
+{
+  const auto team_size_bits = smem_desc->team_size_bitshift_from_smem();
+  const auto team_width     = 1u << team_size_bits;
+  const auto lane_id        = threadIdx.x & (team_width - 1u);
+  const auto max_i =
+    raft::round_up_safe<std::uint32_t>(num_pickup, device::warp_size >> team_size_bits);
+  const auto args_load = smem_desc->args.load();
+
+  for (std::uint32_t i = threadIdx.x >> team_size_bits; i < max_i;
+       i += blockDim.x >> team_size_bits) {
+    const bool in_output  = i < num_pickup;
+    const bool valid      = in_output && i < num_seeds;
+    IndexT seed           = valid ? seed_ptr[i] : raft::upper_bound<IndexT>();
+    const bool valid_seed = valid && seed < smem_desc->size;
+    auto distance = cuvs::neighbors::cagra::detail::compute_distance<DataT, IndexT, DistanceT>(
+      args_load, valid_seed ? seed : IndexT{0}, valid_seed, team_size_bits);
+
+    if (in_output && lane_id == 0) {
+      if (!valid_seed || hashmap::insert(visited_hash_ptr, visited_hash_bitlen, seed) == 0) {
+        seed     = raft::upper_bound<IndexT>();
+        distance = raft::upper_bound<DistanceT>();
+      }
+      result_indices_ptr[i]   = seed;
+      result_distances_ptr[i] = distance;
+    }
+  }
+}
+
 template <typename IndexT, typename DistanceT, typename DataT, typename SourceIndexT>
 RAFT_DEVICE_INLINE_FUNCTION void compute_favor_distance_to_random_nodes_jit(
   IndexT* __restrict__ result_indices_ptr,

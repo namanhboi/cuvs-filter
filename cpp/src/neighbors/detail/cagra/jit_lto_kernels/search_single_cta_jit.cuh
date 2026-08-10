@@ -44,6 +44,7 @@ using cuvs::neighbors::detail::sample_filter;
 // JIT versions of compute_distance_to_random_nodes and compute_distance_to_child_nodes
 // are now shared in device_common_jit.cuh - use fully qualified names
 using cuvs::neighbors::cagra::detail::device::compute_distance_to_child_nodes_jit;
+using cuvs::neighbors::cagra::detail::device::compute_distance_to_navix_bitmap_seeds_jit;
 using cuvs::neighbors::cagra::detail::device::compute_distance_to_random_nodes_jit;
 using cuvs::neighbors::cagra::detail::device::compute_favor_distance_to_child_nodes_jit;
 using cuvs::neighbors::cagra::detail::device::compute_favor_distance_to_random_nodes_jit;
@@ -428,10 +429,29 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
 
   // compute distance to randomly selecting nodes using JIT version
   _CLK_START();
-  const IndexT* const local_seed_ptr = seed_ptr ? seed_ptr + (num_seeds * query_id) : nullptr;
+  const bool navix_bitmap_seed_path = NAVIX && filter_payload.uses_navix_bitmap_seeds();
+  const auto navix_seed_query_id    = query_id + filter_payload.navix_seed_query_id_offset;
+  const auto navix_seed_count =
+    navix_bitmap_seed_path
+      ? min(filter_payload.navix_seed_counts[navix_seed_query_id], filter_payload.navix_seed_stride)
+      : 0u;
+  const IndexT* const local_seed_ptr =
+    navix_bitmap_seed_path
+      ? reinterpret_cast<const IndexT*>(filter_payload.navix_seed_ids) +
+          static_cast<std::uint64_t>(filter_payload.navix_seed_stride) * navix_seed_query_id
+      : (seed_ptr ? seed_ptr + (num_seeds * query_id) : nullptr);
   // Get dataset_size directly from base descriptor
   IndexT dataset_size = smem_desc->size;
-  if constexpr (FAVOR) {
+  if (navix_bitmap_seed_path) {
+    compute_distance_to_navix_bitmap_seeds_jit<IndexT, DistanceT, DataT>(result_indices_buffer,
+                                                                         result_distances_buffer,
+                                                                         smem_desc,
+                                                                         result_buffer_size,
+                                                                         local_seed_ptr,
+                                                                         navix_seed_count,
+                                                                         local_visited_hashmap_ptr,
+                                                                         hash_bitlen);
+  } else if constexpr (FAVOR) {
     if (favor_penalty_mode == 0) {
       compute_favor_distance_to_random_nodes_jit<IndexT, DistanceT, DataT, SourceIndexT>(
         result_indices_buffer,
@@ -493,28 +513,45 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   // immediately. Otherwise the normal CAGRA loop below remains in its seed-discovery phase.
   bool navix_seeded = false;
   if constexpr (NAVIX) {
-    device::retain_navix_passing_candidates<IndexT, DistanceT, SourceIndexT>(
-      result_indices_buffer,
-      result_distances_buffer,
-      result_buffer_size,
-      source_indices_ptr,
-      query_id + query_id_offset,
-      filter_payload,
-      smem_work_ptr);
-    navix_seeded = *smem_work_ptr != 0;
-    if (navix_seeded) {
-      device::reset_navix_visited_to_seed_batch(
-        local_visited_hashmap_ptr, hash_bitlen, result_indices_buffer, result_buffer_size);
+    if (navix_bitmap_seed_path) {
+      navix_seeded = navix_seed_count != 0;
       if constexpr (DIAGNOSTICS) {
-        device::capture_navix_seed_batch(result_indices_buffer,
-                                         result_distances_buffer,
-                                         result_buffer_size,
-                                         *smem_work_ptr,
-                                         0u,
-                                         diagnostic_query_id,
-                                         source_indices_ptr,
-                                         diagnostic_summary,
-                                         diagnostic_context);
+        if (navix_seeded) {
+          device::capture_navix_seed_batch(result_indices_buffer,
+                                           result_distances_buffer,
+                                           result_buffer_size,
+                                           navix_seed_count,
+                                           0u,
+                                           diagnostic_query_id,
+                                           source_indices_ptr,
+                                           diagnostic_summary,
+                                           diagnostic_context);
+        }
+      }
+    } else {
+      device::retain_navix_passing_candidates<IndexT, DistanceT, SourceIndexT>(
+        result_indices_buffer,
+        result_distances_buffer,
+        result_buffer_size,
+        source_indices_ptr,
+        query_id + query_id_offset,
+        filter_payload,
+        smem_work_ptr);
+      navix_seeded = *smem_work_ptr != 0;
+      if (navix_seeded) {
+        device::reset_navix_visited_to_seed_batch(
+          local_visited_hashmap_ptr, hash_bitlen, result_indices_buffer, result_buffer_size);
+        if constexpr (DIAGNOSTICS) {
+          device::capture_navix_seed_batch(result_indices_buffer,
+                                           result_distances_buffer,
+                                           result_buffer_size,
+                                           *smem_work_ptr,
+                                           0u,
+                                           diagnostic_query_id,
+                                           source_indices_ptr,
+                                           diagnostic_summary,
+                                           diagnostic_context);
+        }
       }
     }
   }
@@ -541,6 +578,9 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
 
   std::uint32_t iter = 0;
   while (1) {
+    // An empty bitmap row has no legal NaviX entrypoint. It is already represented by an
+    // all-invalid candidate buffer, so bypass graph work and preserve the normal sentinels.
+    if (navix_bitmap_seed_path && !navix_seeded) { break; }
     // sort
     if constexpr (TOPK_BY_BITONIC_SORT) {
       assert(blockDim.x >= 64);

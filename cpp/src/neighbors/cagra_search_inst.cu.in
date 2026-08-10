@@ -6,6 +6,7 @@
 #include <cuvs/neighbors/cagra.hpp>
 #include <neighbors/cagra.cuh>
 #include <neighbors/cagra_benchmark.hpp>
+#include <neighbors/detail/cagra/navix_bitmap_seeds.cuh>
 
 #include <algorithm>
 
@@ -184,6 +185,127 @@ CUVS_EXPORT void benchmark_search_navix_udf<data_t>(
   auto runtime_filter = runtime_filter_t{*udf_filter, navix_policy};
   search_with_filtering<data_t, std::uint32_t, runtime_filter_t, std::int64_t>(
     res, params_copy, index, queries, neighbors, distances, runtime_filter);
+}
+
+template <typename BitmapFilterT>
+auto validate_navix_bitmap(
+  cagra::index<data_t, std::uint32_t> const& index,
+  raft::device_matrix_view<const data_t, std::int64_t, raft::row_major> queries,
+  cuvs::neighbors::filtering::base_filter const& sample_filter,
+  std::uint32_t query_offset) -> BitmapFilterT const&
+{
+  auto const* bitmap = dynamic_cast<BitmapFilterT const*>(&sample_filter);
+  RAFT_EXPECTS(bitmap != nullptr, "benchmark bitmap search requires a uint32 bitmap filter");
+  RAFT_EXPECTS(index.graph().extent(1) == 32, "NaviX currently requires a degree-32 CAGRA graph");
+  RAFT_EXPECTS(query_offset + static_cast<std::uint64_t>(queries.extent(0)) <=
+                 static_cast<std::uint64_t>(bitmap->view().get_n_rows()),
+               "benchmark bitmap does not cover the requested query range");
+  RAFT_EXPECTS(bitmap->view().get_n_cols() >= static_cast<std::int64_t>(index.size()),
+               "benchmark bitmap has fewer source columns than CAGRA nodes");
+  return *bitmap;
+}
+
+template <>
+CUVS_EXPORT void benchmark_search_bitmap_with_query_offset<data_t>(
+  raft::resources const& res,
+  cagra::search_params const& params,
+  cagra::index<data_t, std::uint32_t> const& index,
+  raft::device_matrix_view<const data_t, std::int64_t, raft::row_major> queries,
+  raft::device_matrix_view<std::int64_t, std::int64_t, raft::row_major> neighbors,
+  raft::device_matrix_view<float, std::int64_t, raft::row_major> distances,
+  cuvs::neighbors::filtering::base_filter const& sample_filter,
+  std::uint32_t query_offset,
+  bool passing_accumulator)
+{
+  using bitmap_t     = cuvs::neighbors::filtering::bitmap_filter<std::uint32_t, std::int64_t>;
+  auto const& bitmap = validate_navix_bitmap<bitmap_t>(index, queries, sample_filter, query_offset);
+  auto params_copy   = params;
+  params_copy.algo   = search_algo::SINGLE_CTA;
+  params_copy.persistent     = false;
+  params_copy.filter_mode    = filtering_mode::DEFAULT;
+  params_copy.filtering_rate = 0.0f;
+  if (passing_accumulator) {
+    using accumulator_t = CagraSampleFilterWithRuntimeState<bitmap_t, true>;
+    using runtime_t     = CagraSampleFilterWithBaseQueryIdOffset<accumulator_t>;
+    auto runtime        = runtime_t{accumulator_t{bitmap, nullptr}, query_offset};
+    search_with_filtering<data_t, std::uint32_t, runtime_t, std::int64_t>(
+      res, params_copy, index, queries, neighbors, distances, runtime);
+  } else {
+    using runtime_t = CagraSampleFilterWithBaseQueryIdOffset<bitmap_t>;
+    auto runtime    = runtime_t{bitmap, query_offset};
+    search_with_filtering<data_t, std::uint32_t, runtime_t, std::int64_t>(
+      res, params_copy, index, queries, neighbors, distances, runtime);
+  }
+}
+
+template <>
+CUVS_EXPORT void benchmark_search_navix_bitmap<data_t>(
+  raft::resources const& res,
+  cagra::search_params const& params,
+  cagra::index<data_t, std::uint32_t> const& index,
+  raft::device_matrix_view<const data_t, std::int64_t, raft::row_major> queries,
+  raft::device_matrix_view<std::int64_t, std::int64_t, raft::row_major> neighbors,
+  raft::device_matrix_view<float, std::int64_t, raft::row_major> distances,
+  cuvs::neighbors::filtering::base_filter const& sample_filter,
+  std::uint32_t query_offset,
+  std::uint32_t navix_policy)
+{
+  using bitmap_t     = cuvs::neighbors::filtering::bitmap_filter<std::uint32_t, std::int64_t>;
+  auto const& bitmap = validate_navix_bitmap<bitmap_t>(index, queries, sample_filter, query_offset);
+  auto params_copy   = params;
+  params_copy.algo   = search_algo::SINGLE_CTA;
+  params_copy.persistent     = false;
+  params_copy.filter_mode    = filtering_mode::DEFAULT;
+  params_copy.filtering_rate = 0.0f;
+  using navix_t              = CagraSampleFilterWithNavixRuntimeState<bitmap_t>;
+  using runtime_t            = CagraSampleFilterWithBaseQueryIdOffset<navix_t>;
+  auto runtime               = runtime_t{navix_t{bitmap, navix_policy}, query_offset};
+  search_with_filtering<data_t, std::uint32_t, runtime_t, std::int64_t>(
+    res, params_copy, index, queries, neighbors, distances, runtime);
+}
+
+template <>
+CUVS_EXPORT void benchmark_search_navix_bitmap_seeded<data_t>(
+  raft::resources const& res,
+  cagra::search_params const& params,
+  cagra::index<data_t, std::uint32_t> const& index,
+  raft::device_matrix_view<const data_t, std::int64_t, raft::row_major> queries,
+  raft::device_matrix_view<std::int64_t, std::int64_t, raft::row_major> neighbors,
+  raft::device_matrix_view<float, std::int64_t, raft::row_major> distances,
+  cuvs::neighbors::filtering::base_filter const& sample_filter,
+  std::uint32_t query_offset,
+  std::uint32_t* seed_ids,
+  std::uint32_t* seed_counts,
+  std::uint32_t* inspected_units,
+  std::uint32_t navix_policy)
+{
+  using bitmap_t     = cuvs::neighbors::filtering::bitmap_filter<std::uint32_t, std::int64_t>;
+  auto const& bitmap = validate_navix_bitmap<bitmap_t>(index, queries, sample_filter, query_offset);
+  const auto num_queries    = static_cast<std::uint32_t>(queries.extent(0));
+  const auto seed_stride    = static_cast<std::uint32_t>(neighbors.extent(1));
+  const auto source_indices = index.source_indices();
+  select_navix_bitmap_seeds(res,
+                            bitmap,
+                            source_indices ? source_indices->data_handle() : nullptr,
+                            query_offset,
+                            num_queries,
+                            static_cast<std::uint32_t>(index.size()),
+                            seed_stride,
+                            seed_ids,
+                            seed_counts,
+                            inspected_units);
+
+  auto params_copy           = params;
+  params_copy.algo           = search_algo::SINGLE_CTA;
+  params_copy.persistent     = false;
+  params_copy.filter_mode    = filtering_mode::DEFAULT;
+  params_copy.filtering_rate = 0.0f;
+  using navix_t              = CagraSampleFilterWithNavixRuntimeState<bitmap_t>;
+  using runtime_t            = CagraSampleFilterWithBaseQueryIdOffset<navix_t>;
+  auto runtime =
+    runtime_t{navix_t{bitmap, navix_policy, seed_ids, seed_counts, seed_stride}, query_offset};
+  search_with_filtering<data_t, std::uint32_t, runtime_t, std::int64_t>(
+    res, params_copy, index, queries, neighbors, distances, runtime);
 }
 
 }  // namespace cuvs::neighbors::cagra::detail

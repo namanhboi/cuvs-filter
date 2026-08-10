@@ -17,8 +17,11 @@
 #include <rmm/device_uvector.hpp>
 
 #include <algorithm>
+#include <array>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <fstream>
 #include <limits>
 #include <memory>
@@ -27,7 +30,146 @@
 #include <utility>
 #include <vector>
 
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 namespace cuvs::bench::detail {
+
+/** Memory-mapped, versioned row-major query bitmap used by filtered benchmark datasets. */
+class bitmap_filter_adapter {
+ public:
+  explicit bitmap_filter_adapter(raft::resources const& res,
+                                 configuration::dataset_conf::bitmap_filter_conf const& conf)
+    : file_(conf.file), device_words_(open_and_validate(), raft::resource::get_cuda_stream(res))
+  {
+    static_assert(std::endian::native == std::endian::little,
+                  "The benchmark bitmap format is little-endian");
+    auto stream = raft::resource::get_cuda_stream(res);
+    RAFT_CUDA_TRY(cudaMemcpyAsync(device_words_.data(),
+                                  payload_,
+                                  device_words_.size() * sizeof(std::uint32_t),
+                                  cudaMemcpyHostToDevice,
+                                  stream));
+    raft::resource::sync_stream(res);
+  }
+
+  bitmap_filter_adapter(bitmap_filter_adapter const&)            = delete;
+  bitmap_filter_adapter& operator=(bitmap_filter_adapter const&) = delete;
+
+  ~bitmap_filter_adapter()
+  {
+    if (mapping_ != MAP_FAILED) { ::munmap(mapping_, mapped_bytes_); }
+    if (fd_ >= 0) { ::close(fd_); }
+  }
+
+  [[nodiscard]] auto base_rows() const -> std::uint32_t
+  {
+    return static_cast<std::uint32_t>(cols_);
+  }
+  [[nodiscard]] auto query_rows() const -> std::uint32_t
+  {
+    return static_cast<std::uint32_t>(rows_);
+  }
+  [[nodiscard]] auto passes(std::uint32_t query_id, std::uint32_t candidate_id) const -> bool
+  {
+    if (query_id >= rows_ || candidate_id >= cols_) { return false; }
+    const auto bit = static_cast<std::uint64_t>(query_id) * cols_ + candidate_id;
+    return (payload_[bit / 32] & (std::uint32_t{1} << (bit % 32))) != 0;
+  }
+  [[nodiscard]] auto filter() const
+    -> cuvs::neighbors::filtering::bitmap_filter<std::uint32_t, std::int64_t>
+  {
+    auto view = cuvs::core::bitmap_view<std::uint32_t, std::int64_t>(
+      const_cast<std::uint32_t*>(device_words_.data()),
+      static_cast<std::int64_t>(rows_),
+      static_cast<std::int64_t>(cols_));
+    return cuvs::neighbors::filtering::bitmap_filter<std::uint32_t, std::int64_t>(view);
+  }
+
+ private:
+  static constexpr std::array<char, 8> magic_ = {'C', 'U', 'V', 'S', 'B', 'M', 'A', 'P'};
+  static constexpr std::size_t header_bytes_  = 40;
+
+  template <typename T>
+  [[nodiscard]] auto read_header(std::size_t offset) const -> T
+  {
+    T value{};
+    std::memcpy(&value, static_cast<const std::byte*>(mapping_) + offset, sizeof(value));
+    return value;
+  }
+
+  [[noreturn]] void fail_open(std::string const& message)
+  {
+    if (mapping_ != MAP_FAILED) {
+      ::munmap(mapping_, mapped_bytes_);
+      mapping_ = MAP_FAILED;
+    }
+    if (fd_ >= 0) {
+      ::close(fd_);
+      fd_ = -1;
+    }
+    throw std::runtime_error(message + file_);
+  }
+
+  [[nodiscard]] auto open_and_validate() -> std::size_t
+  {
+    fd_ = ::open(file_.c_str(), O_RDONLY);
+    if (fd_ < 0) { fail_open("Cannot open query bitmap: "); }
+    struct stat stat_buffer{};
+    if (::fstat(fd_, &stat_buffer) != 0 || stat_buffer.st_size < 0) {
+      fail_open("Cannot stat query bitmap: ");
+    }
+    mapped_bytes_ = static_cast<std::size_t>(stat_buffer.st_size);
+    if (mapped_bytes_ < header_bytes_) { fail_open("Query bitmap is smaller than its header: "); }
+    mapping_ = ::mmap(nullptr, mapped_bytes_, PROT_READ, MAP_PRIVATE, fd_, 0);
+    if (mapping_ == MAP_FAILED) { fail_open("Cannot mmap query bitmap: "); }
+
+    if (std::memcmp(mapping_, magic_.data(), magic_.size()) != 0 ||
+        read_header<std::uint32_t>(8) != 1 || read_header<std::uint32_t>(12) != 32) {
+      fail_open("Unsupported query bitmap header: ");
+    }
+    rows_            = read_header<std::uint64_t>(16);
+    cols_            = read_header<std::uint64_t>(24);
+    const auto words = read_header<std::uint64_t>(32);
+    if (rows_ == 0 || cols_ == 0 || rows_ > std::numeric_limits<std::uint32_t>::max() ||
+        cols_ > std::numeric_limits<std::uint32_t>::max() ||
+        rows_ > std::numeric_limits<std::uint64_t>::max() / cols_) {
+      fail_open("Invalid query bitmap dimensions: ");
+    }
+    const auto bits           = rows_ * cols_;
+    const auto expected_words = (bits + 31) / 32;
+    if (words != expected_words ||
+        words > (std::numeric_limits<std::size_t>::max() - header_bytes_) / sizeof(std::uint32_t) ||
+        mapped_bytes_ != header_bytes_ + words * sizeof(std::uint32_t)) {
+      fail_open("Query bitmap size does not match its header: ");
+    }
+    payload_ = reinterpret_cast<const std::uint32_t*>(static_cast<const std::byte*>(mapping_) +
+                                                      header_bytes_);
+    const auto used_last_bits = static_cast<unsigned>(bits % 32);
+    if (used_last_bits != 0 && (payload_[words - 1] & (~std::uint32_t{0} << used_last_bits)) != 0) {
+      fail_open("Query bitmap has nonzero padding bits: ");
+    }
+    return static_cast<std::size_t>(words);
+  }
+
+  std::string file_;
+  int fd_{-1};
+  void* mapping_{MAP_FAILED};
+  std::size_t mapped_bytes_{};
+  std::uint64_t rows_{};
+  std::uint64_t cols_{};
+  const std::uint32_t* payload_{};
+  rmm::device_uvector<std::uint32_t> device_words_;
+};
+
+inline auto make_bitmap_filter_adapter(raft::resources const& res,
+                                       configuration::dataset_conf::bitmap_filter_conf const& conf)
+  -> std::shared_ptr<bitmap_filter_adapter>
+{
+  return std::make_shared<bitmap_filter_adapter>(res, conf);
+}
 
 /** Runtime state is deliberately per benchmark algo copy so concurrent query offsets cannot race.
  */

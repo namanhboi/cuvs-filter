@@ -26,6 +26,19 @@ using favor_udf_legacy_filter_t =
 using navix_udf_filter_t = cuvs::neighbors::cagra::detail::CagraSampleFilterWithQueryIdOffset<
   cuvs::neighbors::cagra::detail::CagraSampleFilterWithNavixRuntimeState<
     cuvs::neighbors::filtering::udf_filter>>;
+using offset_bitmap_filter_t = cuvs::neighbors::cagra::detail::CagraSampleFilterWithQueryIdOffset<
+  cuvs::neighbors::cagra::detail::CagraSampleFilterWithBaseQueryIdOffset<
+    cuvs::neighbors::filtering::bitmap_filter<uint32_t, int64_t>>>;
+using accumulator_bitmap_filter_t =
+  cuvs::neighbors::cagra::detail::CagraSampleFilterWithQueryIdOffset<
+    cuvs::neighbors::cagra::detail::CagraSampleFilterWithBaseQueryIdOffset<
+      cuvs::neighbors::cagra::detail::CagraSampleFilterWithRuntimeState<
+        cuvs::neighbors::filtering::bitmap_filter<uint32_t, int64_t>,
+        true>>>;
+using navix_bitmap_filter_t = cuvs::neighbors::cagra::detail::CagraSampleFilterWithQueryIdOffset<
+  cuvs::neighbors::cagra::detail::CagraSampleFilterWithBaseQueryIdOffset<
+    cuvs::neighbors::cagra::detail::CagraSampleFilterWithNavixRuntimeState<
+      cuvs::neighbors::filtering::bitmap_filter<uint32_t, int64_t>>>>;
 
 }  // namespace
 
@@ -40,5 +53,8 @@ instantiate_kernel_selection(data_t, uint32_t, float, udf_filter_t);
 instantiate_kernel_selection(data_t, uint32_t, float, favor_udf_accumulator_filter_t);
 instantiate_kernel_selection(data_t, uint32_t, float, favor_udf_legacy_filter_t);
 instantiate_kernel_selection(data_t, uint32_t, float, navix_udf_filter_t);
+instantiate_kernel_selection(data_t, uint32_t, float, offset_bitmap_filter_t);
+instantiate_kernel_selection(data_t, uint32_t, float, accumulator_bitmap_filter_t);
+instantiate_kernel_selection(data_t, uint32_t, float, navix_bitmap_filter_t);
 
 }  // namespace cuvs::neighbors::cagra::detail::single_cta_search
