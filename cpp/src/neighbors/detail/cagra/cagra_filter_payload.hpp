@@ -51,8 +51,20 @@ struct cagra_device_payload_owner {
 
     ~state() noexcept
     {
+      // Cached payloads intentionally live until process teardown. Their creation stream may
+      // already have been destroyed by then, so cudaFreeAsync(device_payload, stream) is invalid
+      // and can crash in cuMemFreeAsync. A synchronous free needs no surviving stream and is safe
+      // after the benchmark resources have been released.
       if (device_payload != nullptr) {
-        RAFT_CUDA_TRY_NO_THROW(cudaFreeAsync(device_payload, stream));
+        int previous_device{-1};
+        RAFT_CUDA_TRY_NO_THROW(cudaGetDevice(&previous_device));
+        if (device >= 0 && previous_device != device) {
+          RAFT_CUDA_TRY_NO_THROW(cudaSetDevice(device));
+        }
+        RAFT_CUDA_TRY_NO_THROW(cudaFree(device_payload));
+        if (previous_device >= 0 && previous_device != device) {
+          RAFT_CUDA_TRY_NO_THROW(cudaSetDevice(previous_device));
+        }
       }
       if (ready_event != nullptr) { RAFT_CUDA_TRY_NO_THROW(cudaEventDestroy(ready_event)); }
     }
@@ -216,6 +228,23 @@ void fill_cagra_sample_filter(cagra_sample_filter<SourceIndexT>& out,
     }
     if constexpr (requires { filter.passing_accumulator; }) {
       out.passing_accumulator = filter.passing_accumulator ? 1u : 0u;
+    }
+    if constexpr (requires {
+                    filter.bitmap_seeds;
+                    filter.seed_ids;
+                    filter.seed_counts;
+                    filter.seed_stride;
+                  }) {
+      if (filter.bitmap_seeds) {
+        out.navix_seed_ids             = filter.seed_ids;
+        out.navix_seed_counts          = filter.seed_counts;
+        out.navix_seed_stride          = filter.seed_stride;
+        out.navix_seed_query_id_offset = out.query_id_offset;
+        out.navix_bitmap_seeds         = 1u;
+      }
+    }
+    if constexpr (requires { filter.base_query_offset; }) {
+      out.query_id_offset += filter.base_query_offset;
     }
   }
 }

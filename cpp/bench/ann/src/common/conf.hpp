@@ -35,6 +35,10 @@ class configuration {
       nlohmann::json options = nlohmann::json::object();
     };
 
+    struct bitmap_filter_conf {
+      std::string file;
+    };
+
     std::string name;
     std::string base_file;
     // use only a subset of base_file,
@@ -53,6 +57,7 @@ class configuration {
     std::optional<double> filtering_rate{std::nullopt};
     std::optional<std::string> filter_bitset_file{std::nullopt};
     std::optional<udf_filter_conf> udf_filter{std::nullopt};
+    std::optional<bitmap_filter_conf> bitmap_filter{std::nullopt};
   };
 
   [[nodiscard]] inline auto get_dataset_conf() const -> const dataset_conf&
@@ -103,19 +108,27 @@ class configuration {
     }
     if (conf.contains("filter")) {
       const auto& filter = conf.at("filter");
-      if (filter.at("kind") != "udf") {
-        log_error("Unsupported filtered-dataset kind '%s'",
-                  filter.at("kind").get<std::string>().c_str());
+      const auto kind    = filter.at("kind").get<std::string>();
+      if (kind == "udf") {
+        dataset_conf::udf_filter_conf udf;
+        udf.adapter             = filter.at("adapter");
+        udf.base_metadata_file  = combine_path(data_prefix, filter.at("base_metadata_file"));
+        udf.query_metadata_file = combine_path(data_prefix, filter.at("query_metadata_file"));
+        if (filter.contains("options")) { udf.options = filter.at("options"); }
+        dataset_conf_.udf_filter = std::move(udf);
+      } else if (kind == "bitmap") {
+        dataset_conf_.bitmap_filter =
+          dataset_conf::bitmap_filter_conf{combine_path(data_prefix, filter.at("file"))};
+      } else {
+        log_error("Unsupported filtered-dataset kind '%s'", kind.c_str());
       }
-      dataset_conf::udf_filter_conf udf;
-      udf.adapter             = filter.at("adapter");
-      udf.base_metadata_file  = combine_path(data_prefix, filter.at("base_metadata_file"));
-      udf.query_metadata_file = combine_path(data_prefix, filter.at("query_metadata_file"));
-      if (filter.contains("options")) { udf.options = filter.at("options"); }
-      dataset_conf_.udf_filter = std::move(udf);
     }
-    if (dataset_conf_.filter_bitset_file.has_value() && dataset_conf_.udf_filter.has_value()) {
-      log_error("A dataset cannot configure both filter_bitset_file and a UDF filter");
+    const auto configured_filters =
+      static_cast<unsigned>(dataset_conf_.filter_bitset_file.has_value()) +
+      static_cast<unsigned>(dataset_conf_.udf_filter.has_value()) +
+      static_cast<unsigned>(dataset_conf_.bitmap_filter.has_value());
+    if (configured_filters > 1) {
+      log_error("A dataset can configure only one bitset, UDF, or bitmap filter");
     }
 
     if (conf.contains("groundtruth_neighbors_file")) {

@@ -15,9 +15,14 @@ struct cagra_sample_filter {
 
   void* filter_data{nullptr};
   const float* filtering_rates{nullptr};
+  const std::uint32_t* navix_seed_ids{nullptr};
+  const std::uint32_t* navix_seed_counts{nullptr};
   std::uint32_t query_id_offset{0};
+  std::uint32_t navix_seed_query_id_offset{0};
+  std::uint32_t navix_seed_stride{0};
   std::uint32_t filter_kind{kind_none};
   std::uint32_t passing_accumulator{0};
+  std::uint32_t navix_bitmap_seeds{0};
 
   __device__ __forceinline__ void* sample_filter_data() { return filter_data; }
 
@@ -34,6 +39,11 @@ struct cagra_sample_filter {
   __device__ __forceinline__ bool uses_passing_accumulator() const
   {
     return passing_accumulator != 0;
+  }
+
+  __device__ __forceinline__ bool uses_navix_bitmap_seeds() const
+  {
+    return navix_bitmap_seeds != 0;
   }
 };
 

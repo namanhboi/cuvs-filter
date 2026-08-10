@@ -50,6 +50,10 @@ template <class CagraSampleFilterT>
 struct CagraSampleFilterWithNavixRuntimeState {
   CagraSampleFilterT filter;
   std::uint32_t policy{};
+  const std::uint32_t* seed_ids{};
+  const std::uint32_t* seed_counts{};
+  std::uint32_t seed_stride{};
+  bool bitmap_seeds{};
   static constexpr bool navix = true;
 
   CagraSampleFilterWithNavixRuntimeState(CagraSampleFilterT filter, std::uint32_t policy)
@@ -57,9 +61,40 @@ struct CagraSampleFilterWithNavixRuntimeState {
   {
   }
 
+  CagraSampleFilterWithNavixRuntimeState(CagraSampleFilterT filter,
+                                         std::uint32_t policy,
+                                         const std::uint32_t* seed_ids,
+                                         const std::uint32_t* seed_counts,
+                                         std::uint32_t seed_stride)
+    : filter(std::move(filter)),
+      policy(policy),
+      seed_ids(seed_ids),
+      seed_counts(seed_counts),
+      seed_stride(seed_stride),
+      bitmap_seeds(true)
+  {
+  }
+
   _RAFT_DEVICE auto operator()(const uint32_t query_id, const uint32_t sample_id)
   {
     return filter(query_id, sample_id);
+  }
+};
+
+/** Private wrapper for benchmark datasets whose bitmap covers a larger query set than this call. */
+template <class CagraSampleFilterT>
+struct CagraSampleFilterWithBaseQueryIdOffset {
+  CagraSampleFilterT filter;
+  std::uint32_t base_query_offset{};
+
+  CagraSampleFilterWithBaseQueryIdOffset(CagraSampleFilterT filter, std::uint32_t base_query_offset)
+    : filter(std::move(filter)), base_query_offset(base_query_offset)
+  {
+  }
+
+  _RAFT_DEVICE auto operator()(const uint32_t query_id, const uint32_t sample_id)
+  {
+    return filter(query_id + base_query_offset, sample_id);
   }
 };
 
@@ -125,6 +160,14 @@ struct cagra_filter_uses_passing_accumulator<CagraSampleFilterWithQueryIdOffset<
 
 template <typename InnerFilterT>
 struct cagra_filter_uses_navix<CagraSampleFilterWithQueryIdOffset<InnerFilterT>>
+  : cagra_filter_uses_navix<InnerFilterT> {};
+
+template <typename InnerFilterT>
+struct cagra_filter_uses_passing_accumulator<CagraSampleFilterWithBaseQueryIdOffset<InnerFilterT>>
+  : cagra_filter_uses_passing_accumulator<InnerFilterT> {};
+
+template <typename InnerFilterT>
+struct cagra_filter_uses_navix<CagraSampleFilterWithBaseQueryIdOffset<InnerFilterT>>
   : cagra_filter_uses_navix<InnerFilterT> {};
 
 template <typename T>
