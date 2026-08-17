@@ -1,0 +1,205 @@
+#+title: NaviX GPU optimization and CPU baseline report
+#+options: toc:3 num:t
+
+* Status
+
+This report is the canonical implementation and evaluation artifact.  The implementation is in
+progress.  Sections marked =TODO= will be replaced with measured results; the original plan below
+is retained so deviations and rejected optimizations remain auditable.
+
+* Research questions
+
+1. Can strict bitmap-seeded NaviX be made materially faster on GPU without changing its traversal
+   semantics, result set, graph budget, or public cuVS API?
+2. Which costs dominate the current kernel: generic bitmap dispatch, eager bridge setup,
+   two-hop synchronization, distance work, registers, or shared-memory occupancy?
+3. How does optimized GPU NaviX compare with default CAGRA, default CAGRA plus its passing-result
+   accumulator, CPU FAISS-NaviX, ACORN-1, and ACORN-gamma?
+
+* Original implementation plan
+
+** Scope and semantic contract
+
+- Optimize strict bitmap-seeded, non-persistent, degree-32 NaviX for CAGRA =SINGLE_CTA=.
+- Keep strict bitmap seeding: select the first =k= passing internal graph IDs in ascending order;
+  never add random or rejected seeds.
+- Preserve the degree-32 adaptive-local policy.  If =P= of the 32 first-hop neighbors pass, use
+  one hop for =P >= 13=, blind two-hop for =P <= 4=, and directed two-hop otherwise.
+- Persist only passing nodes in CAGRA's fused =itopk=.  Rejected nodes may be transient bridges but
+  never persistent frontier entries.
+- Preserve raw squared-L2 ordering, the fused =itopk + W*D= candidate tail, parent selection,
+  merging, expansion tags, deterministic bridge order, and B0/max-iteration accounting.
+- Retain the existing =W*D= bridge-ID buffer.  Grandchildren remain warp-local register values;
+  never allocate a =D*D= shared-memory buffer.
+- Include the bitmap seed prepass in end-to-end timing, but do not charge it graph iterations.
+- Preserve query offsets, source-index remapping, invalid sentinels, and underfilled-row behavior.
+- Add no public cuVS search field, overload, filter type, fallback mode, or accumulator behavior.
+
+** Isolated reference and optimized kernels
+
+- Work on branch =navix-single-cta-kernel-opt= in a clean worktree, leaving the dirty
+  =favor-filtered-search= checkout untouched.
+- Add benchmark-private selection between =reference= and =optimized= NaviX kernels.
+- Compile separate JIT specializations so reference code does not inflate the optimized kernel's
+  register count.  Keep the existing serial/tiled scheduler control orthogonal.
+- Freeze current strict-bitmap outputs as the golden reference.
+
+** CTA-local bitmap lookup
+
+- Hoist the bitmap pointer, dimensions, native packing flag, effective query row, 64-bit row start,
+  aligned row pointer, and source-map status once per CTA.
+- For a native, word-aligned row with identity IDs, test
+  =row_words[source_id >> 5] & (1u << (source_id & 31))= through the read-only cache.
+- For unaligned rows, non-native =original_nbits=, or source-index remapping, use an exact fallback
+  matching RAFT's =bitmap_view.test(row, source)=.
+- Use the direct lookup in both first- and second-hop traversal.  Leave UDF and other filter types
+  on the generic linked path.
+- Test warp grouping for repeated bitmap-word addresses with =__match_any_sync=, retaining it only
+  if its measured benefit exceeds its instruction/register cost.
+
+** Lazy bridge lifecycle
+
+1. Clear only the mandatory =W*D= output IDs and distances.
+2. Load/filter first-hop rows, ballot =P=, resolve policies, and publish a two-hop-parent mask.
+3. For one-hop parents, insert and compact passing children without touching bridge state.
+4. For blind/directed parents, initialize only their bridge count and stably compact rejected
+   first-hop nodes.
+5. If every parent is one-hop, skip the bridge phase and its CTA barriers entirely.
+
+Only the initialized =bridge_count= prefix may be read, so stale unused bridge entries are safe.
+
+** Distance-work reduction
+
+- Compute passing-node distance only after successful visited admission.
+- Never compute rejected one-hop or rejected second-hop distance.
+- Blind mode computes no rejected-node distance.
+- Directed mode necessarily computes one raw distance for each unique, previously unvisited
+  rejected first-hop bridge so it can order bridge expansion.
+- Use a read-only visited check before directed bridge distance and never recompute an available
+  value.
+- Test separating passing compaction from rejected directed sorting.  Keep it only when final IDs
+  and distances remain exactly identical.
+
+** Warp-cooperative two-hop producer/consumer scheduler
+
+For each two-hop parent and bridge tile:
+
+1. Assign consecutive bridge rows to resident warps.
+2. Each producer warp performs one coalesced 32-ID graph-row load, maps IDs if required, applies
+   direct bitmap tests, ballots passing lanes, and retains IDs/mask in registers.
+3. Publish one 32-bit pass mask per producer warp.
+4. Consume nonempty producer rows in original bridge order.  The owner warp applies visited
+   insertion, stable lane compaction, and appends up to the =D= cap.
+
+- Reserve masks for at most eight warps, matching the 256-thread tuning ceiling.
+- Skip commit turns for empty pass masks.
+- Keep CTA synchronization between nonempty ordered commits so later rows observe earlier hash
+  insertions and the current output count.
+- Remove only demonstrably redundant pre-commit synchronization.
+- Use the actual active-warp count in a partial tile and uniformly stop loading new tiles at the
+  candidate cap.
+- Do not parallelize semantic commits across bridge rows or introduce degree-squared staging.
+
+** Launch and occupancy tuning
+
+- Compile/test 64, 128, and 256 threads per CTA.
+- Record registers/thread, static/dynamic shared memory, active blocks/threads/warps per SM, the
+  limiting resource, kernel time, and end-to-end time.
+- Profile representative configurations for active warps, barrier stalls, long-scoreboard stalls,
+  graph/bitmap traffic, and branch efficiency.
+- Use three repetitions and median QPS for small optimization gates; use one repetition for the
+  complete sweep.
+- Retain an optimization only if outputs are exact, correctness counters remain zero, hard-workload
+  median QPS improves by at least 2 percent (or the change enables a combined improvement), no
+  representative EM/R configuration regresses by more than 2 percent, and resource growth does not
+  create a harmful residency tier.
+
+** CPU baselines
+
+*** FAISS-NaviX
+
+- Build standard HNSW graphs with =M=32= and =efConstruction=200=.
+- Set =index.hnsw.efSearch= directly for every sweep point.
+- Replace the fixed 4,096-ID two-hop scratch with degree-derived per-worker storage.  A level-zero
+  degree of 64 requires at least =64 + 64^2 = 4160= entries.
+- Preserve native mask semantics, source-order IDs, and squared L2.
+
+*** ACORN
+
+- Run ACORN-1 with =gamma=1= and =M_beta=2M= as the published default-density control.
+- Build workload-specific ACORN-gamma graphs:
+  - ArXiv EM: =M=16=, =M_beta=24=, =gamma=10=, =efConstruction=160=.
+  - ArXiv R: =M=32=, =M_beta=24=, =gamma=12=, =efConstruction=384=.
+  - ArXiv EMIS: =M=16=, =M_beta=24=, =gamma=15=, =efConstruction=240=.
+  - YFCC: =M=32=, =M_beta=32=, =gamma=100=; label this as an experimental
+    selectivity-guided choice, not a published parameter.
+- Sweep =efSearch={10,15,20,25,30,50,100,250,500,750}= and set
+  =index.acorn.efSearch= directly.
+- Test upstream ACORN first and apply a labeled correctness patch only if a concrete test fails.
+- Configure CMake 4.4 with =CMAKE_POLICY_VERSION_MINIMUM=3.5= and system zlib headers.
+
+Convert YFCC uint8 coordinates exactly to float32; use native ArXiv float32.  Use CPU masks exactly
+matching the GPU predicate.  Test YFCC mask chunks of 128/256/512 queries and select the smallest
+within 2 percent of the best throughput; ArXiv may process 10,000 queries in one call.
+
+** Validation and throughput protocol
+
+- Exhaustively test aligned/unaligned rows, source-ID permutations, query offsets,
+  native/non-native packing, empty rows, fewer-than-k rows, all-pass rows, and sparse random rows.
+- Compare direct lookup against RAFT for every fixture bit.
+- Compare reference/optimized seeds, final IDs, and distances for forced one-hop, directed, blind,
+  adaptive-Kuzu, and adaptive-paper modes at 64/128/256 threads.
+- Require zero filter violations and correct invalid sentinels.
+- Correctness uses 1,000 queries; throughput covers 10,000 queries with =k=10=, degree 32,
+  =L={64,128,256,512}=, =W={1,2}=, and B0 (=max_iterations=0=).
+- ArXiv uses one 10,000-query host call.  YFCC uses four 2,048-query calls and one 1,808-query call.
+  With =max_queries=512= both workloads execute 20 internal CAGRA chunks.  YFCC aggregate QPS is
+  =10000 / sum(the five end-to-end call times)=.
+- Do not add deeper settings after approximately 0.95 recall is reached.
+
+GPU plots compare default CAGRA, default plus accumulator, reference strict-bitmap NaviX, and
+optimized strict-bitmap NaviX.  CPU plots compare FAISS-NaviX, ACORN-1, and ACORN-gamma.  CPU and
+GPU receive separate primary panels; an absolute-QPS overlay is appendix-only.  QPS axes begin at
+zero and important parameter values are annotated.
+
+* Implementation
+
+TODO: describe retained code changes and deviations from the original plan.
+
+* Correctness
+
+TODO: fixture, real-workload, filter-violation, sentinel, and exact-output results.
+
+* GPU resource and profiler analysis
+
+TODO: registers, shared memory, occupancy, limiting resource, and Nsight Compute results.
+
+* Optimization ablations
+
+TODO: direct bitmap lookup, lazy bridges, distance reduction, scheduler, and block-size results;
+include rejected/reverted variants and the evidence for rejecting them.
+
+* End-to-end GPU results
+
+TODO: YFCC, ArXiv EM, EMIS, and R tables and Pareto plots.
+
+* CPU baseline implementation and results
+
+TODO: FAISS-NaviX, ACORN-1, ACORN-gamma, graph construction time, index size, recall, and QPS.
+
+* Limitations and conclusion
+
+TODO: separate implementation efficiency from algorithmic reachability, especially for YFCC.
+
+* Reproduction
+
+TODO: exact environment, build, correctness, profiling, sweep, plotting, and DOCX export commands.
+
+* Artifact policy
+
+- Commit benchmark code, configurations, curated data, plots, this Org report, and its DOCX export.
+- Exclude copied datasets, generated graph binaries, caches, and bulky transient profiler output.
+- Export with Pandoc using this directory as the resource path so figures are embedded.
+- Validate the DOCX archive contains =word/media= images and that headings, tables, equations, and
+  conclusions match the Org source.
+- Do not merge into =favor-filtered-search= until correctness and performance gates pass.
