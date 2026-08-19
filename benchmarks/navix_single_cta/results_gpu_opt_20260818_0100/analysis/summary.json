@@ -1,0 +1,6 @@
+{
+  "gpu_raw_points": 340,
+  "gpu_aggregate_points": 96,
+  "cpu_aggregate_points": 347,
+  "correctness_error_total": 0.0
+}
