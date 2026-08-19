@@ -81,6 +81,36 @@ struct CagraSampleFilterWithNavixRuntimeState {
   }
 };
 
+/**
+ * Private runtime decoration used to give default SINGLE_CTA search the same strict bitmap seeds
+ * as the NaviX benchmark.  Seed selection is intentionally independent of traversal policy: this
+ * wrapper leaves raw-distance CAGRA traversal unchanged and only replaces random initialization.
+ */
+template <class CagraSampleFilterT>
+struct CagraSampleFilterWithBitmapSeedRuntimeState {
+  CagraSampleFilterT filter;
+  const std::uint32_t* seed_ids{};
+  const std::uint32_t* seed_counts{};
+  std::uint32_t seed_stride{};
+  bool bitmap_seeds{true};
+
+  CagraSampleFilterWithBitmapSeedRuntimeState(CagraSampleFilterT filter,
+                                              const std::uint32_t* seed_ids,
+                                              const std::uint32_t* seed_counts,
+                                              std::uint32_t seed_stride)
+    : filter(std::move(filter)),
+      seed_ids(seed_ids),
+      seed_counts(seed_counts),
+      seed_stride(seed_stride)
+  {
+  }
+
+  _RAFT_DEVICE auto operator()(const uint32_t query_id, const uint32_t sample_id)
+  {
+    return filter(query_id, sample_id);
+  }
+};
+
 /** Private wrapper for benchmark datasets whose bitmap covers a larger query set than this call. */
 template <class CagraSampleFilterT>
 struct CagraSampleFilterWithBaseQueryIdOffset {
@@ -145,6 +175,9 @@ struct cagra_filter_uses_passing_accumulator : std::false_type {};
 template <typename T>
 struct cagra_filter_uses_navix : std::false_type {};
 
+template <typename T>
+struct cagra_filter_uses_bitmap_seeds : std::false_type {};
+
 template <typename InnerFilterT, bool PassingAccumulator>
 struct cagra_filter_uses_passing_accumulator<
   CagraSampleFilterWithRuntimeState<InnerFilterT, PassingAccumulator>>
@@ -152,6 +185,15 @@ struct cagra_filter_uses_passing_accumulator<
 
 template <typename InnerFilterT>
 struct cagra_filter_uses_navix<CagraSampleFilterWithNavixRuntimeState<InnerFilterT>>
+  : std::true_type {};
+
+template <typename InnerFilterT>
+struct cagra_filter_uses_passing_accumulator<
+  CagraSampleFilterWithBitmapSeedRuntimeState<InnerFilterT>>
+  : cagra_filter_uses_passing_accumulator<InnerFilterT> {};
+
+template <typename InnerFilterT>
+struct cagra_filter_uses_bitmap_seeds<CagraSampleFilterWithBitmapSeedRuntimeState<InnerFilterT>>
   : std::true_type {};
 
 template <typename InnerFilterT>
@@ -163,12 +205,20 @@ struct cagra_filter_uses_navix<CagraSampleFilterWithQueryIdOffset<InnerFilterT>>
   : cagra_filter_uses_navix<InnerFilterT> {};
 
 template <typename InnerFilterT>
+struct cagra_filter_uses_bitmap_seeds<CagraSampleFilterWithQueryIdOffset<InnerFilterT>>
+  : cagra_filter_uses_bitmap_seeds<InnerFilterT> {};
+
+template <typename InnerFilterT>
 struct cagra_filter_uses_passing_accumulator<CagraSampleFilterWithBaseQueryIdOffset<InnerFilterT>>
   : cagra_filter_uses_passing_accumulator<InnerFilterT> {};
 
 template <typename InnerFilterT>
 struct cagra_filter_uses_navix<CagraSampleFilterWithBaseQueryIdOffset<InnerFilterT>>
   : cagra_filter_uses_navix<InnerFilterT> {};
+
+template <typename InnerFilterT>
+struct cagra_filter_uses_bitmap_seeds<CagraSampleFilterWithBaseQueryIdOffset<InnerFilterT>>
+  : cagra_filter_uses_bitmap_seeds<InnerFilterT> {};
 
 template <typename T>
 std::uint32_t cagra_filter_navix_policy(const T& filter)

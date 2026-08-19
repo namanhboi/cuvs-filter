@@ -50,7 +50,19 @@ class factory {
                   search_plan_impl_base& plan,
                   const dataset_descriptor_host<DataT, IndexT, DistanceT>& dataset_desc)
   {
-    if (plan.algo == search_algo::SINGLE_CTA) {
+    // The matched-seed paper control deliberately has only a SINGLE_CTA launcher.  Resolve this
+    // restriction at compile time so its private filter decoration cannot introduce unresolved
+    // MULTI_CTA/MULTI_KERNEL template references into libcuvs.
+    if constexpr (cagra_filter_uses_bitmap_seeds<CagraSampleFilterT>::value) {
+      RAFT_EXPECTS(plan.algo == search_algo::SINGLE_CTA,
+                   "bitmap-seeded CAGRA supports only SINGLE_CTA search");
+      RAFT_EXPECTS(!plan.persistent,
+                   "bitmap-seeded CAGRA does not support persistent search");
+      return std::make_unique<
+        single_cta_search::
+          search<DataT, IndexT, DistanceT, CagraSampleFilterT, SourceIndexT, OutputIndexT>>(
+        res, plan, dataset_desc, plan.dim, plan.dataset_size, plan.graph_degree, plan.topk);
+    } else if (plan.algo == search_algo::SINGLE_CTA) {
       return std::make_unique<
         single_cta_search::
           search<DataT, IndexT, DistanceT, CagraSampleFilterT, SourceIndexT, OutputIndexT>>(

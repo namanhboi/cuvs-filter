@@ -559,6 +559,12 @@ void parse_search_param(const nlohmann::json& conf,
   if (conf.contains("navix_bitmap_seeds")) {
     param.navix_bitmap_seeds = conf.at("navix_bitmap_seeds");
   }
+  if (conf.contains("cagra_bitmap_seeds")) {
+    param.cagra_bitmap_seeds = conf.at("cagra_bitmap_seeds");
+  }
+  if (conf.contains("require_identity_source_indices")) {
+    param.require_identity_source_indices = conf.at("require_identity_source_indices");
+  }
   param.navix_seed_k = conf.value("k", 10u);
   if (conf.contains("favor_delta_d_file")) {
     param.favor_delta_d_file = conf.at("favor_delta_d_file").get<std::string>();

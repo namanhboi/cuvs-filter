@@ -6,6 +6,7 @@
 
 #include "../common/ann_types.hpp"
 #include "cuvs_ann_bench_utils.h"
+#include "filtered_dataset_adapter.h"
 
 #include <cuvs/distance/distance.hpp>
 #include <cuvs/neighbors/brute_force.hpp>
@@ -55,6 +56,13 @@ class cuvs_gpu : public algo<T>, public algo_gpu {
               algo_base::index_type* neighbors,
               float* distances) const final;
 
+  void search_with_query_offset(const T* queries,
+                                int batch_size,
+                                int k,
+                                algo_base::index_type* neighbors,
+                                float* distances,
+                                std::size_t query_offset) const final;
+
   // to enable dataset access from GPU memory
   [[nodiscard]] auto get_preference() const -> algo_property override
   {
@@ -71,6 +79,19 @@ class cuvs_gpu : public algo<T>, public algo_gpu {
   void save(const std::string& file) const override;
   void load(const std::string&) override;
   std::unique_ptr<algo<T>> copy() override;
+  [[nodiscard]] auto supports_filter_validation() const -> bool override
+  {
+    return bitmap_filter_adapter_ != nullptr;
+  }
+  [[nodiscard]] auto is_filter_valid(std::size_t query_id, algo_base::index_type candidate_id) const
+    -> bool override
+  {
+    return bitmap_filter_adapter_ != nullptr && candidate_id >= 0 &&
+           static_cast<std::uint64_t>(candidate_id) < bitmap_filter_adapter_->base_rows() &&
+           query_id < bitmap_filter_adapter_->query_rows() &&
+           bitmap_filter_adapter_->passes(static_cast<std::uint32_t>(query_id),
+                                          static_cast<std::uint32_t>(candidate_id));
+  }
 
  protected:
   // handle_ must go first to make sure it dies last and all memory allocated in pool
@@ -82,6 +103,7 @@ class cuvs_gpu : public algo<T>, public algo_gpu {
   size_t nrow_;
 
   std::shared_ptr<cuvs::neighbors::filtering::base_filter> filter_;
+  std::shared_ptr<detail::bitmap_filter_adapter> bitmap_filter_adapter_;
 };
 
 template <typename T>
@@ -104,7 +126,23 @@ void cuvs_gpu<T>::build(const T* dataset, size_t nrow)
 template <typename T>
 void cuvs_gpu<T>::set_search_param(const search_param_base&, const void* filter_bitset)
 {
-  filter_ = make_cuvs_filter(filter_bitset, index_->size());
+  const auto& dataset_conf = configuration::singleton().get_dataset_conf();
+  if (dataset_conf.bitmap_filter.has_value()) {
+    RAFT_EXPECTS(filter_bitset == nullptr,
+                 "The brute-force benchmark cannot combine a shared bitset and query bitmap");
+    if (!bitmap_filter_adapter_) {
+      bitmap_filter_adapter_ =
+        detail::make_bitmap_filter_adapter(handle_, *dataset_conf.bitmap_filter);
+    }
+    RAFT_EXPECTS(bitmap_filter_adapter_->base_rows() == index_->size(),
+                 "The query bitmap width must match the brute-force dataset size");
+    filter_ =
+      std::make_shared<cuvs::neighbors::filtering::bitmap_filter<std::uint32_t, std::int64_t>>(
+        bitmap_filter_adapter_->filter());
+  } else {
+    bitmap_filter_adapter_.reset();
+    filter_ = make_cuvs_filter(filter_bitset, index_->size());
+  }
 }
 
 template <typename T>
@@ -139,6 +177,9 @@ template <typename T>
 void cuvs_gpu<T>::search(
   const T* queries, int batch_size, int k, algo_base::index_type* neighbors, float* distances) const
 {
+  RAFT_EXPECTS(!bitmap_filter_adapter_ ||
+                 static_cast<std::uint32_t>(batch_size) == bitmap_filter_adapter_->query_rows(),
+               "A brute-force bitmap benchmark call must cover every bitmap query row");
   auto queries_view =
     raft::make_device_matrix_view<const T, int64_t>(queries, batch_size, this->dim_);
 
@@ -148,6 +189,19 @@ void cuvs_gpu<T>::search(
 
   cuvs::neighbors::brute_force::search(
     handle_, *index_, queries_view, neighbors_view, distances_view, *filter_);
+}
+
+template <typename T>
+void cuvs_gpu<T>::search_with_query_offset(const T* queries,
+                                           int batch_size,
+                                           int k,
+                                           algo_base::index_type* neighbors,
+                                           float* distances,
+                                           std::size_t query_offset) const
+{
+  RAFT_EXPECTS(!bitmap_filter_adapter_ || query_offset == 0,
+               "A brute-force query bitmap must begin at query row zero");
+  search(queries, batch_size, k, neighbors, distances);
 }
 
 template <typename T>

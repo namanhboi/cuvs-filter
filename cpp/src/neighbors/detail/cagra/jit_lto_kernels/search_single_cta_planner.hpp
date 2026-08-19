@@ -31,18 +31,43 @@ struct CagraSingleCtaSearchPlanner
                               bool /*is_vpq*/,
                               uint32_t /*pq_bits*/,
                               uint32_t /*pq_len*/,
-                              bool persistent  = false,
-                              bool favor       = false,
-                              bool navix       = false,
-                              bool diagnostics = false)
+                              bool persistent    = false,
+                              bool favor         = false,
+                              bool navix         = false,
+                              bool diagnostics   = false,
+                              bool bitmap_seeded = false)
     : CagraPlannerBase<DataTag, IndexTag, DistanceTag, QueryTag, CodebookTag, SampleFilterJitTag>(
-        navix ? (diagnostics ? "search_single_cta_navix_diagnostic" : "search_single_cta_navix")
+        bitmap_seeded ? "search_single_cta_bitmap_seeded"
+        : navix ? (diagnostics ? "search_single_cta_navix_diagnostic" : "search_single_cta_navix")
         : persistent ? "search_single_cta_p"
                      : (diagnostics ? (favor ? "search_single_cta_favor_diagnostic"
                                              : "search_single_cta_default_diagnostic")
                                     : (favor ? "search_single_cta_favor" : "search_single_cta")),
         launcher_jit_cache)
   {
+  }
+
+  void add_bitmap_seeded_search_kernel_fragment(bool topk_by_bitonic_sort,
+                                                bool bitonic_sort_and_merge_multi_warps)
+  {
+    auto add = [&]<bool TopkByBitonic, bool MultiWarpMerge>() {
+      this->template add_static_fragment<
+        fragment_tag_search_single_cta_bitmap_seeded<DataTag,
+                                                     SourceIndexTag,
+                                                     IndexTag,
+                                                     DistanceTag,
+                                                     TopkByBitonic,
+                                                     MultiWarpMerge>>();
+    };
+    if (topk_by_bitonic_sort && bitonic_sort_and_merge_multi_warps) {
+      add.template operator()<true, true>();
+    } else if (topk_by_bitonic_sort) {
+      add.template operator()<true, false>();
+    } else if (bitonic_sort_and_merge_multi_warps) {
+      add.template operator()<false, true>();
+    } else {
+      add.template operator()<false, false>();
+    }
   }
 
   void add_navix_search_kernel_fragment(bool topk_by_bitonic_sort,

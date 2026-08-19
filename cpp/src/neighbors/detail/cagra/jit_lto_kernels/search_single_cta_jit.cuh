@@ -209,7 +209,8 @@ template <bool FAVOR,
           typename IndexT,
           typename DistanceT,
           typename SourceIndexT,
-          bool DIAGNOSTICS = false>
+          bool DIAGNOSTICS   = false,
+          bool BITMAP_SEEDED = false>
 RAFT_DEVICE_INLINE_FUNCTION void search_core(
   uintptr_t result_indices_ptr,
   DistanceT* const result_distances_ptr,
@@ -249,6 +250,8 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   const std::uint32_t navix_policy_value                      = 0)
 {
   static_assert(!(FAVOR && NAVIX), "FAVOR and NaviX are separate traversal specializations");
+  static_assert(!(BITMAP_SEEDED && (FAVOR || NAVIX || DIAGNOSTICS)),
+                "bitmap-seeded default CAGRA uses a dedicated non-diagnostic specialization");
   using LOAD_T = device::LOAD_128BIT_T;
 
   // The launcher privately uses the high bit to request the same rejected-parent retirement
@@ -429,26 +432,30 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
 
   // compute distance to randomly selecting nodes using JIT version
   _CLK_START();
-  const bool navix_bitmap_seed_path = NAVIX && filter_payload.uses_navix_bitmap_seeds();
-  const auto navix_seed_query_id    = query_id + filter_payload.navix_seed_query_id_offset;
-  const auto navix_seed_count =
-    navix_bitmap_seed_path
-      ? min(filter_payload.navix_seed_counts[navix_seed_query_id], filter_payload.navix_seed_stride)
-      : 0u;
+  // Preserve the ordinary default/FAVOR fragment exactly: only NaviX and the dedicated
+  // benchmark-only seeded fragment compile bitmap-seed initialization into their kernels.
+  const bool bitmap_seed_path =
+    BITMAP_SEEDED || (NAVIX && filter_payload.uses_navix_bitmap_seeds());
+  const auto bitmap_seed_query_id  = query_id + filter_payload.navix_seed_query_id_offset;
+  const auto bitmap_seed_count     = bitmap_seed_path
+                                       ? min(filter_payload.navix_seed_counts[bitmap_seed_query_id],
+                                         filter_payload.navix_seed_stride)
+                                       : 0u;
+  const bool bitmap_has_entrypoint = bitmap_seed_path && bitmap_seed_count != 0;
   const IndexT* const local_seed_ptr =
-    navix_bitmap_seed_path
+    bitmap_seed_path
       ? reinterpret_cast<const IndexT*>(filter_payload.navix_seed_ids) +
-          static_cast<std::uint64_t>(filter_payload.navix_seed_stride) * navix_seed_query_id
+          static_cast<std::uint64_t>(filter_payload.navix_seed_stride) * bitmap_seed_query_id
       : (seed_ptr ? seed_ptr + (num_seeds * query_id) : nullptr);
   // Get dataset_size directly from base descriptor
   IndexT dataset_size = smem_desc->size;
-  if (navix_bitmap_seed_path) {
+  if (bitmap_seed_path) {
     compute_distance_to_navix_bitmap_seeds_jit<IndexT, DistanceT, DataT>(result_indices_buffer,
                                                                          result_distances_buffer,
                                                                          smem_desc,
                                                                          result_buffer_size,
                                                                          local_seed_ptr,
-                                                                         navix_seed_count,
+                                                                         bitmap_seed_count,
                                                                          local_visited_hashmap_ptr,
                                                                          hash_bitlen);
   } else if constexpr (FAVOR) {
@@ -513,14 +520,14 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   // immediately. Otherwise the normal CAGRA loop below remains in its seed-discovery phase.
   bool navix_seeded = false;
   if constexpr (NAVIX) {
-    if (navix_bitmap_seed_path) {
-      navix_seeded = navix_seed_count != 0;
+    if (bitmap_seed_path) {
+      navix_seeded = bitmap_has_entrypoint;
       if constexpr (DIAGNOSTICS) {
         if (navix_seeded) {
           device::capture_navix_seed_batch(result_indices_buffer,
                                            result_distances_buffer,
                                            result_buffer_size,
-                                           navix_seed_count,
+                                           bitmap_seed_count,
                                            0u,
                                            diagnostic_query_id,
                                            source_indices_ptr,
@@ -578,9 +585,9 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
 
   std::uint32_t iter = 0;
   while (1) {
-    // An empty bitmap row has no legal NaviX entrypoint. It is already represented by an
+    // An empty strict bitmap seed row has no legal entrypoint. It is already represented by an
     // all-invalid candidate buffer, so bypass graph work and preserve the normal sentinels.
-    if (navix_bitmap_seed_path && !navix_seeded) { break; }
+    if (bitmap_seed_path && !bitmap_has_entrypoint) { break; }
     // sort
     if constexpr (TOPK_BY_BITONIC_SORT) {
       assert(blockDim.x >= 64);
@@ -1746,6 +1753,85 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
       clk_compute_distance);
   }
 #endif
+}
+
+/** Private benchmark-only default CAGRA entry with strict preselected bitmap seeds. */
+template <bool TOPK_BY_BITONIC_SORT,
+          bool BITONIC_SORT_AND_MERGE_MULTI_WARPS,
+          typename DataT,
+          typename IndexT,
+          typename DistanceT,
+          typename SourceIndexT>
+__device__ void search_bitmap_seeded_kernel_jit(
+  uintptr_t result_indices_ptr,
+  DistanceT* const result_distances_ptr,
+  const std::uint32_t top_k,
+  const DataT* const queries_ptr,
+  const IndexT* const knn_graph,
+  const std::uint32_t graph_degree,
+  const SourceIndexT* source_indices_ptr,
+  const unsigned num_distilation,
+  const uint64_t rand_xor_mask,
+  const IndexT* seed_ptr,
+  const uint32_t num_seeds,
+  IndexT* const visited_hashmap_ptr,
+  const std::uint32_t max_candidates,
+  const std::uint32_t max_itopk,
+  const std::uint32_t internal_topk,
+  const std::uint32_t search_width,
+  const std::uint32_t min_iteration,
+  const std::uint32_t max_iteration,
+  std::uint32_t* const num_executed_iterations,
+  const std::uint32_t hash_bitlen,
+  const std::uint32_t small_hash_bitlen,
+  const std::uint32_t small_hash_reset_interval,
+  const std::uint32_t query_id_offset,
+  const dataset_descriptor_base_t<DataT, IndexT, DistanceT>* dataset_desc,
+  const IndexT graph_size,
+  cagra_sample_filter<SourceIndexT> filter_payload)
+{
+  const auto query_id = blockIdx.y;
+  search_core<false,
+              false,
+              TOPK_BY_BITONIC_SORT,
+              BITONIC_SORT_AND_MERGE_MULTI_WARPS,
+              DataT,
+              IndexT,
+              DistanceT,
+              SourceIndexT,
+              false,
+              true>(result_indices_ptr,
+                    result_distances_ptr,
+                    top_k,
+                    queries_ptr,
+                    knn_graph,
+                    graph_degree,
+                    source_indices_ptr,
+                    num_distilation,
+                    rand_xor_mask,
+                    seed_ptr,
+                    num_seeds,
+                    visited_hashmap_ptr,
+                    max_candidates,
+                    max_itopk,
+                    internal_topk,
+                    search_width,
+                    min_iteration,
+                    max_iteration,
+                    num_executed_iterations,
+                    hash_bitlen,
+                    small_hash_bitlen,
+                    small_hash_reset_interval,
+                    query_id,
+                    query_id_offset,
+                    dataset_desc,
+                    filter_payload,
+                    0.0f,
+                    0.0f,
+                    0u,
+                    0.0f,
+                    0.5f,
+                    graph_size);
 }
 
 // JIT device implementation - called from extern "C" __global__ entry in generated .cu

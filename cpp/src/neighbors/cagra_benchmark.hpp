@@ -85,6 +85,26 @@ CUVS_EXPORT void benchmark_search_bitmap_with_query_offset(
   std::uint32_t query_offset,
   bool passing_accumulator = false);
 
+/**
+ * Select the first k passing bitmap nodes, then run default SINGLE_CTA from only those seeds.
+ * This is a benchmark control: traversal remains default CAGRA and the optional accumulator only
+ * changes result retention.
+ */
+template <typename T>
+CUVS_EXPORT void benchmark_search_bitmap_seeded(
+  raft::resources const& res,
+  cagra::search_params const& params,
+  cagra::index<T, std::uint32_t> const& index,
+  raft::device_matrix_view<const T, std::int64_t, raft::row_major> queries,
+  raft::device_matrix_view<std::int64_t, std::int64_t, raft::row_major> neighbors,
+  raft::device_matrix_view<float, std::int64_t, raft::row_major> distances,
+  cuvs::neighbors::filtering::base_filter const& sample_filter,
+  std::uint32_t query_offset,
+  std::uint32_t* seed_ids,
+  std::uint32_t* seed_counts,
+  std::uint32_t* inspected_units,
+  bool passing_accumulator = false);
+
 /** Run legacy in-kernel-seeded NaviX against a per-query bitmap. */
 template <typename T>
 CUVS_EXPORT void benchmark_search_navix_bitmap(

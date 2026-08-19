@@ -341,7 +341,7 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_random_nodes_jit(
     graph_size);
 }
 
-/** Initialize a CAGRA candidate buffer from a variable-length, passing-only NaviX seed row. */
+/** Initialize a CAGRA candidate buffer from a variable-length, passing-only bitmap seed row. */
 template <typename IndexT, typename DistanceT, typename DataT>
 RAFT_DEVICE_INLINE_FUNCTION void compute_distance_to_navix_bitmap_seeds_jit(
   IndexT* __restrict__ result_indices_ptr,

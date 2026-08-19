@@ -137,6 +137,10 @@ class cuvs_cagra : public algo<T>, public algo_gpu {
     std::optional<std::uint32_t> navix_policy;
     /** Replace NaviX's in-kernel seed discovery with the first k passing bitmap nodes. */
     bool navix_bitmap_seeds = false;
+    /** Give default CAGRA the same first-k passing bitmap seeds as the NaviX control. */
+    bool cagra_bitmap_seeds = false;
+    /** Paper-control assertion: internal graph IDs must also be externally reported source IDs. */
+    bool require_identity_source_indices = false;
     /** Expected result width, used to allocate seed scratch before benchmark timing begins. */
     std::uint32_t navix_seed_k = 10;
     float refine_ratio;
@@ -284,6 +288,7 @@ class cuvs_cagra : public algo<T>, public algo_gpu {
   std::uint32_t favor_udf_sample_offset_{};
   std::optional<std::uint32_t> navix_policy_;
   bool navix_bitmap_seeds_{};
+  bool cagra_bitmap_seeds_{};
   std::uint32_t navix_seed_k_{10};
   std::shared_ptr<rmm::device_uvector<std::uint32_t>> navix_seed_ids_;
   std::shared_ptr<rmm::device_uvector<std::uint32_t>> navix_seed_counts_;
@@ -431,6 +436,12 @@ void cuvs_cagra<T, IdxT>::set_search_param(const search_param_base& param,
     filter_ = make_cuvs_filter(nullptr, index_ ? index_->size() : 0);
   }
   auto sp = dynamic_cast<const search_param&>(param);
+  if (sp.require_identity_source_indices) {
+    RAFT_EXPECTS(index_ != nullptr, "identity source-ID validation requires a loaded CAGRA index");
+    RAFT_EXPECTS(
+      !index_->source_indices().has_value(),
+      "paper benchmark requires identity source IDs; remapped CAGRA indices are unsupported");
+  }
   RAFT_EXPECTS(!udf_filter_runtime_ || !sp.dynamic_batching,
                "Query-dependent UDF filters do not support dynamic batching");
   RAFT_EXPECTS(!udf_filter_runtime_ || index_params_.num_dataset_splits <= 1 ||
@@ -462,6 +473,7 @@ void cuvs_cagra<T, IdxT>::set_search_param(const search_param_base& param,
   favor_udf_sample_offset_ = sp.favor_udf_sample_offset;
   navix_policy_            = sp.navix_policy;
   navix_bitmap_seeds_      = sp.navix_bitmap_seeds;
+  cagra_bitmap_seeds_      = sp.cagra_bitmap_seeds;
   navix_seed_k_            = sp.navix_seed_k;
   filter_empty_            = false;
   favor_udf_sampled_rates_.reset();
@@ -516,20 +528,33 @@ void cuvs_cagra<T, IdxT>::set_search_param(const search_param_base& param,
                  "The benchmark-only NaviX path does not support FAVOR retry diagnostics");
     RAFT_EXPECTS(favor_seed_masks_.empty(),
                  "The benchmark-only NaviX path does not support FAVOR retry seeds");
-    if (navix_bitmap_seeds_) {
-      RAFT_EXPECTS(bitmap_filter_adapter_ != nullptr,
-                   "navix_bitmap_seeds requires a query-dependent bitmap filter");
-      RAFT_EXPECTS(navix_seed_k_ > 0, "navix_bitmap_seeds requires a positive result width");
-      auto stream           = raft::resource::get_cuda_stream(handle_);
-      const auto query_rows = static_cast<std::size_t>(bitmap_filter_adapter_->query_rows());
-      navix_seed_ids_ =
-        std::make_shared<rmm::device_uvector<std::uint32_t>>(query_rows * navix_seed_k_, stream);
-      navix_seed_counts_ = std::make_shared<rmm::device_uvector<std::uint32_t>>(query_rows, stream);
-      navix_seed_inspected_units_ =
-        std::make_shared<rmm::device_uvector<std::uint32_t>>(query_rows, stream);
-    }
   } else {
     RAFT_EXPECTS(!navix_bitmap_seeds_, "navix_bitmap_seeds requires navix_mode");
+  }
+  if (cagra_bitmap_seeds_) {
+    RAFT_EXPECTS(!navix_policy_, "cagra_bitmap_seeds is a default-CAGRA control");
+    RAFT_EXPECTS(bitmap_filter_adapter_ != nullptr,
+                 "cagra_bitmap_seeds requires a query-dependent bitmap filter");
+    RAFT_EXPECTS(search_params_.filter_mode == cuvs::neighbors::cagra::filtering_mode::DEFAULT,
+                 "cagra_bitmap_seeds requires filter_mode=default");
+    RAFT_EXPECTS(search_params_.algo == cuvs::neighbors::cagra::search_algo::SINGLE_CTA,
+                 "cagra_bitmap_seeds requires SINGLE_CTA");
+    RAFT_EXPECTS(!search_params_.persistent,
+                 "cagra_bitmap_seeds does not support persistent search");
+    RAFT_EXPECTS(!sp.dynamic_batching, "cagra_bitmap_seeds does not support dynamic batching");
+    RAFT_EXPECTS(sp.refine_ratio == 1.0f, "cagra_bitmap_seeds does not support refinement");
+  }
+  if (navix_bitmap_seeds_ || cagra_bitmap_seeds_) {
+    RAFT_EXPECTS(bitmap_filter_adapter_ != nullptr,
+                 "bitmap seed control requires a query-dependent bitmap filter");
+    RAFT_EXPECTS(navix_seed_k_ > 0, "bitmap seed control requires a positive result width");
+    auto stream           = raft::resource::get_cuda_stream(handle_);
+    const auto query_rows = static_cast<std::size_t>(bitmap_filter_adapter_->query_rows());
+    navix_seed_ids_ =
+      std::make_shared<rmm::device_uvector<std::uint32_t>>(query_rows * navix_seed_k_, stream);
+    navix_seed_counts_ = std::make_shared<rmm::device_uvector<std::uint32_t>>(query_rows, stream);
+    navix_seed_inspected_units_ =
+      std::make_shared<rmm::device_uvector<std::uint32_t>>(query_rows, stream);
   }
   if (filter_bitset_ != nullptr && search_params_.filtering_rate < 0.0f) {
     const auto num_set_bits =
@@ -828,7 +853,7 @@ std::unique_ptr<algo<T>> cuvs_cagra<T, IdxT>::copy()
     result->filter_ =
       std::make_shared<cuvs::neighbors::filtering::bitmap_filter<std::uint32_t, std::int64_t>>(
         bitmap_filter_adapter_->filter());
-    if (navix_bitmap_seeds_) {
+    if (navix_bitmap_seeds_ || cagra_bitmap_seeds_) {
       auto stream           = raft::resource::get_cuda_stream(result->handle_);
       const auto query_rows = static_cast<std::size_t>(bitmap_filter_adapter_->query_rows());
       result->navix_seed_ids_ =
@@ -921,6 +946,24 @@ void cuvs_cagra<T, IdxT>::search_base(
   }
 
   if (bitmap_filter_adapter_) {
+    if (cagra_bitmap_seeds_) {
+      RAFT_EXPECTS(static_cast<std::uint32_t>(k) == navix_seed_k_,
+                   "bitmap seed stride must equal the benchmark result width");
+      cuvs::neighbors::cagra::detail::benchmark_search_bitmap_seeded<T>(
+        handle_,
+        search_params_,
+        *index_,
+        queries_view,
+        neighbors_view,
+        distances_view,
+        *filter_,
+        bitmap_query_offset_,
+        navix_seed_ids_->data(),
+        navix_seed_counts_->data(),
+        navix_seed_inspected_units_->data(),
+        favor_udf_passing_accumulator_);
+      return;
+    }
     cuvs::neighbors::cagra::detail::benchmark_search_bitmap_with_query_offset<T>(
       handle_,
       search_params_,

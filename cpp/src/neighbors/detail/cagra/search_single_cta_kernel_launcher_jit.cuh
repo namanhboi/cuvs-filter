@@ -817,6 +817,15 @@ void select_and_run(
   const auto filter_payload      = extract_cagra_sample_filter<SourceIndexT>(sample_filter, stream);
   const uint32_t query_id_offset = filter_payload.query_id_offset;
   constexpr bool navix           = cagra_filter_uses_navix<SampleFilterT>::value;
+  constexpr bool bitmap_seeded   = cagra_filter_uses_bitmap_seeds<SampleFilterT>::value;
+  if constexpr (bitmap_seeded) {
+    RAFT_EXPECTS(filter_payload.filter_kind == cagra_sample_filter<SourceIndexT>::kind_bitmap,
+                 "bitmap-seeded CAGRA requires a bitmap filter payload");
+    RAFT_EXPECTS(
+      filter_payload.navix_bitmap_seeds != 0 && filter_payload.navix_seed_ids != nullptr &&
+        filter_payload.navix_seed_counts != nullptr && filter_payload.navix_seed_stride != 0,
+      "bitmap-seeded CAGRA requires nonempty seed payload metadata");
+  }
 
   // Use common logic to compute launch config
   auto config             = compute_launch_config(num_itopk_candidates, ps.itopk_size, block_size);
@@ -869,6 +878,8 @@ void select_and_run(
     const bool diagnostics = favor_search_diagnostics::get_active_context() != nullptr;
     static_assert(!(navix && cagra_filter_uses_passing_accumulator<SampleFilterT>::value),
                   "NaviX deliberately has no passing-result accumulator");
+    static_assert(!(navix && bitmap_seeded),
+                  "NaviX and default-CAGRA bitmap seeding use separate filter traits");
     if constexpr (navix) {
       RAFT_EXPECTS(!favor, "NaviX is a separate default-mode traversal specialization");
       RAFT_EXPECTS(graph.extent(1) == 32, "NaviX SINGLE_CTA currently requires graph degree 32");
@@ -890,7 +901,8 @@ void select_and_run(
         make_cagra_sample_filter_udf_fragment<SourceIndexT>(sample_filter),
         favor,
         diagnostics,
-        navix);
+        navix,
+        bitmap_seeded);
     if (!launcher) { RAFT_FAIL("Failed to get JIT launcher for CAGRA search kernel"); }
 
     if constexpr (navix) {

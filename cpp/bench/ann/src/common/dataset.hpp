@@ -135,6 +135,33 @@ struct ground_truth_map {
     return {matching, total};
   }
 
+  /** Count only source IDs in [0, base_rows), excluding filtered-GT padding sentinels. */
+  template <typename index_type>
+  [[nodiscard]] auto count_valid_matches(size_t query_idx,
+                                         const index_type* candidates,
+                                         uint32_t k,
+                                         size_t base_rows) const -> std::pair<size_t, size_t>
+  {
+    if (query_idx >= gt_maps_.size() || gt_maps_[query_idx].empty()) return {0, 0};
+
+    auto is_valid = [base_rows](auto id) {
+      return static_cast<std::uint64_t>(id) < static_cast<std::uint64_t>(base_rows);
+    };
+    size_t matching = 0;
+    for (uint32_t i = 0; i < k; ++i) {
+      auto act_idx = candidates[i];
+      if (is_valid(act_idx) && gt_maps_[query_idx].count(act_idx) &&
+          static_cast<uint32_t>(gt_maps_[query_idx].at(act_idx)) < k) {
+        ++matching;
+      }
+    }
+    size_t total = 0;
+    for (auto const& [id, rank] : gt_maps_[query_idx]) {
+      total += is_valid(id) && static_cast<uint32_t>(rank) < k;
+    }
+    return {matching, total};
+  }
+
  private:
   // Hash maps of {id, neighbor_rank} for up to kMaxQueriesForRecall queries in the ground truth set
   // e.g. gt_maps_[i][j] = k means that for the i-th query in the ground truth set, the neighbor
