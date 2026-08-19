@@ -1,0 +1,65 @@
+#+title: ArXiv-EMIS exact locality and traversal diagnostic
+
+* Verdict
+
+EMIS is heterogeneous but negative for the typical query in exact distance space: filtered neighbors lie substantially deeper than an independent-label model predicts. At the same time, passing nodes are clustered in the CAGRA graph.  This combination explains the result: an ordinary raw-distance frontier has difficulty entering a category region, but once NaviX finds a passing seed its passing-only frontier and two-hop bridges exploit the strong within-category graph connectivity.
+
+The pooled exact top-32 local-selectivity lift is 1.3655 and the top-1024 lift is 1.3773; the per-query top-1024 median is 0.2339, and 0.7460 of queries are below the independence baseline.  The median normalized global rank of the tenth filtered neighbor is 4.9345; 1.0 is the independence expectation.  Thus distance locality is measured directly rather than inferred from graph-search recall.
+
+The pooled and per-query statistics differ because EMIS mixes very different categories. At top-1024, 23/27 categories, representing 6973 queries, have mean lift below 1.  Category 3 alone represents 2010 queries and has 3.1802 lift, which pulls the pooled statistic above 1.
+
+On graph edges, a passing parent has 8.3651x the global chance of reaching another passing node, while a rejected parent has 0.3254x.  The query-weighted largest weak passing component contains 0.9911 of passing nodes.
+
+At matched SINGLE_CTA L=64, W=1, B0, default CAGRA plus the passing accumulator returns 0.5496 recall, versus 0.9681 for strict bitmap-seeded NaviX: a 0.4186 absolute gap with the same graph and filter semantics.  The accumulator fixes output eviction; it cannot fix which graph regions the fused frontier explores.
+
+* Exact distance-space locality
+
+[[file:plots/distance_locality_lift.png]]
+
+[[file:plots/gt10_normalized_rank.png]]
+
+| R | pooled lift | per-query median lift | fraction of queries below 1 |
+|---+-------------+-----------------------+-----------------------------|
+| 32 | 1.3655 | 0.0000 | 0.7635 |
+| 64 | 1.3714 | 0.1085 | 0.7631 |
+| 128 | 1.3732 | 0.1236 | 0.7615 |
+| 256 | 1.3747 | 0.1545 | 0.7583 |
+| 512 | 1.3753 | 0.1931 | 0.7551 |
+| 1024 | 1.3773 | 0.2339 | 0.7460 |
+
+Exact masked squared-L2 top-10 matched the supplied GT as a set for 10000/10000 queries and in identical order for 9994/10000.  The bitmap matched the UDF metadata for every row.  The 95% null band uses 200 deterministic permutations of query category labels.
+
+* CAGRA graph locality
+
+[[file:plots/graph_neighbor_lift.png]]
+
+Passing-parent and rejected-parent edge yields are normalized by each query category's exact global selectivity.  Component statistics use weak components in the induced passing-node subgraph.
+
+* GPU traversal telemetry
+
+| method | regular recall | diagnostic recall | QPS | mean checks | yield lift | underfilled |
+|--------+----------------+-------------------+-----+-------------+------------+-------------|
+| Default CAGRA + accumulator | 0.5496 | 0.5496 | 28711 | 1092.0 | 1.3585 | 0.1865 |
+| Legacy NaviX (UDF seed discovery) | 0.9427 | 0.9427 | 12671 | 19502.7 | 1.3825 | 0.0258 |
+| Strict bitmap-seeded NaviX | 0.9681 | 0.9681 | 12364 | 20324.1 | 1.4156 | 0.0000 |
+
+[[file:plots/traversal_yield_lift_by_decile.png]]
+
+[[file:plots/gt_stage_waterfall.png]]
+
+All three captures have zero filter violations, invalid-sentinel errors, and duplicate outputs.  Instrumented recall agrees with the immediately adjacent uninstrumented benchmark iteration within 0.0002.
+
+* Interpretation
+
+- Lift above 1 in exact distance neighborhoods is positive distance/filter correlation; lift below 1 would be negative correlation.
+- Passing-parent graph lift above 1 measures category clustering.  Low rejected-parent lift means a raw traversal outside the category has relatively few entrances.
+- The GT-stage waterfall separates neighbors checked, admitted, retained, and returned. Here the combination of negative distance locality for most queries, strong passing-node graph clustering, and a large default/NaviX gap points to category entry, frontier lifecycle, and bridge selection—not accumulator loss alone.
+
+* Reproduction
+
+#+begin_src sh
+benchmarks/navix_single_cta/run_emis_locality_diagnostic.sh offline-smoke
+benchmarks/navix_single_cta/run_emis_locality_diagnostic.sh all
+#+end_src
+
+The exact analysis uses all 10,000 queries, exact GPU squared-L2 distances over all 100,000 base vectors, and R in {32,64,128,256,512,1024}.  Traversal measurements use SINGLE_CTA L=64, W=1, automatic B0.  Exact-distance and graph analysis are offline and excluded from QPS.

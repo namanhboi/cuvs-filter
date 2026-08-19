@@ -1,0 +1,81 @@
+#+title: RETRIEVE exact bitmap control
+
+* Purpose
+
+This benchmark measures exact, per-query bitmap-filtered squared-L2 search using the existing
+=cuvs::neighbors::brute_force= API.  It is an exact-scan control for the YFCC-10M and ArXiv EM,
+EMIS, and R graph-search experiments; it does not add or change a public cuVS API.
+
+The benchmark-private brute-force wrapper recognizes the same =filter.kind=bitmap= configuration
+used by CAGRA.  Each timed =brute_force::search= call includes bitmap population counting, query
+norm computation, optional bitmap-to-CSR and CSR-to-COO construction for sparse masks,
+masked-sparse or tiled-dense distance evaluation, the distance/top-k epilogues, and temporary
+device allocation/deallocation.  Bitmap materialization, host-to-device bitmap upload, and
+vector/index preparation occur before timing.
+
+YFCC is stored as =uint8=, while public cuVS brute force is instantiated for =float=/=half=.  The
+preparation step converts both its base and every query shard to =float32=.  Every byte coordinate
+is represented exactly, and source IDs, bitmaps, and ground truth are unchanged.  This is still a
+float32 =L2Expanded= control rather than a native-uint8 throughput baseline: norm/dot
+intermediates can exceed =2^24=, so distance ties/order are validated empirically against the
+original ground truth, and vector traffic is four times the native uint8 footprint.  ArXiv uses
+its native float32 files.
+
+* Commands
+
+One-command deterministic smoke test.  It runs separate sparse/CSR and dense/tiled fixtures; both
+include underfilled rows and the dense fixture also includes an empty predicate row:
+
+#+begin_src sh
+benchmarks/retrieve_workshop/exact_bitmap/run_exact.sh smoke
+#+end_src
+
+Full experiment:
+
+#+begin_src sh
+benchmarks/retrieve_workshop/exact_bitmap/run_exact.sh all
+#+end_src
+
+Individual stages are =build=, =prepare=, =configs=, =correctness=, =throughput=, and =analyze=.
+Override locations with =RETRIEVE_DATA_ROOT=, =RETRIEVE_BITMAP_ROOT=,
+=RETRIEVE_EXACT_DATA_ROOT=, =RETRIEVE_EXACT_RESULT_ROOT=, =RETRIEVE_EXACT_BENCH_BIN=, and
+=RETRIEVE_EXACT_LIBCUVS=.  Existing NaviX bitmap manifests are the predicate source.  YFCC keeps
+its 2,048/2,048/2,048/2,048/1,808-query shards; each ArXiv predicate uses one 10,000-query bitmap.
+
+Prepared manifests are reusable only when the resolved source-base path and full SHA-256 plus the
+resolved source-bitmap-manifest path and full SHA-256 still match.  UInt8-to-float conversions have
+their own source/target SHA-256 sidecars; a same-shaped stale conversion is not accepted.  Use
+=RETRIEVE_EXACT_FORCE_PREPARE=1= to replace stale or legacy preparation state explicitly.
+
+Preparation records an exact bitmap population and a conservative GPU-memory estimate for every
+shard.  The estimate models the resident float base, norms, queries, bitmap and outputs; the sparse
+CSR/value/index and COO-row allocations or dense tiled workspace; and adds
+=max(2 GiB, 20% of modeled allocations)= for CUDA/RMM workspaces and fragmentation.  Before every
+benchmark process, the runner compares this requirement with free memory on the first
+CUDA-visible GPU, writes the decision under =provenance/gpu_memory/=, and refuses to launch on
+failure.  =RETRIEVE_EXACT_AVAILABLE_BYTES= is a test/debug override, not a paper-run setting.
+
+Correctness runs use the fixed first 1,000 queries and one repetition.  Reported throughput runs
+use all 10,000 queries and three repetitions.  YFCC aggregate QPS is exactly
+=10000 / sum(shard search seconds)=, never an arithmetic mean of shard QPS.
+
+* Outputs and correctness contract
+
+Generated files live under =results/= by default:
+
+- =raw/<phase>/<workload>/shard_NN.json=: unmodified Google Benchmark JSON.
+- =provenance/gpu_memory/<phase>/<workload>/shard_NN.json=: mandatory pre-launch free-memory
+  decision and the complete estimate used for it.
+- =analysis/exact_shard_measurements.csv=: each shard/repetition, including QPS and all checks.
+- =analysis/exact_aggregate_measurements.csv=: each workload/repetition after serial shard
+  aggregation.
+- =analysis/exact_summary.csv=: median, minimum, and maximum QPS plus exact recall.
+- =analysis/exact_results.json=: machine-readable timing contract, correctness rules, and summaries.
+
+The analyzer reports =valid_gt_recall= over legal ground-truth IDs.  ArXiv-EM has one intrinsically
+underfilled query whose fixed-width GT row contains out-of-range padding IDs; those IDs are not
+neighbors and are excluded from the exact denominator.  A run passes only when valid recall is
+1.0, predicate violations, invalid-sentinel errors, and duplicate-output queries are zero, and
+observed underfilled/missing output slots exactly match legal GT cardinality.  The analyzer also
+requires the exact configured shard/repetition sets and a passing memory-preflight record for every
+production shard, and exits nonzero on any violation.

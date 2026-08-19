@@ -1,0 +1,104 @@
+#+TITLE: RETRIEVE Workshop GPU Graph Experiment
+
+* Scope
+
+This directory freezes the SINGLE_CTA, resident per-query bitmap experiment used by the
+RETRIEVE paper.  It does not expose a public cuVS option.  The graph is CAGRA G=32/IG=64,
+=k=10=, =max_queries=512=, and the search distance is squared L2 through cuVS-bench.
+
+The primary comparison is:
+
+- =default_cagra= (CAGRA-Base): distance-first CAGRA traversal and ordinary filtered output.
+- =default_cagra_accumulator= (CAGRA-Retain): identical traversal plus the bounded top-k
+  passing-result accumulator.
+- =navix_reference= (CAGRA-NaviX): the reference adaptive-Kuzu policy, strict bitmap seeds,
+  tiled two-hop scheduler, and the fused CAGRA frontier.
+
+The =default_cagra_seeded= and =default_cagra_accumulator_seeded= controls give Base and Retain
+the same deterministic first-k passing bitmap seeds used by NaviX.  They isolate traversal from
+entry-point availability; they are ablations, not replacements for the primary curves.
+
+* Frozen sweep
+
+The B0 sweep contains exactly six =(L,W)= cells: =(64,1)=, =(128,1)=, =(128,2)=,
+=(256,1)=, =(256,2)=, and =(512,2)=.  B0 is encoded as =max_iterations=0= and therefore uses
+the existing CAGRA automatic budget.  Throughput uses all 10,000 queries and three benchmark
+repetitions.  The short correctness gate runs all five methods only at representative
+=(L=64,W=1,B0)= on the fixed first 1,000 queries for one repetition; it does not duplicate the
+throughput sweep and is not reported as a performance result.
+
+Optional deep runs use only =(64,1)= and =(512,2)= at =max_iterations= 522, 1044, 2088,
+4176, and 7569.  Generate them only for workload/method pairs that fail to reach 0.90 at B0.
+The deep runner isolates each workload/method series, analyzes it after every depth, and stops it
+as soon as either retained cell reaches 0.90.  The analyzer retains all measurements in CSV,
+while marking only points through that first target-reaching depth as eligible for paper plots.
+
+* Timing contract
+
+Each reported repetition times the complete cuVS-bench search call.  This includes the
+benchmark-private bitmap seed-selection kernel and the graph-search kernel when a seeded method
+is selected.  It excludes graph/index loading, host configuration parsing, and construction or
+host-to-device installation of the already-resident query bitmap.  That is intentional: this is
+the resident-bitmap query-time comparison, not a bitmap-construction benchmark.
+
+YFCC is stored as four 2,048-query shards and one 1,808-query shard to bound device memory.  The
+five search calls run serially.  For every =repetition_index= independently, the analyzer computes
+
+#+begin_example
+YFCC QPS = 10000 / sum(query_count_of_shard / shard_QPS)
+#+end_example
+
+Only after that serial aggregation does it report the median, minimum, and maximum over the three
+repetitions.  It rejects missing shards, missing repetitions, unexpected search points, nonzero
+filter violations, invalid-sentinel errors, and duplicate-output errors.
+All three correctness counters are mandatory in the raw JSON; a missing counter fails validation
+instead of being interpreted as zero.
+
+* Exact commands
+
+Use one explicit result directory throughout a staged run:
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter-retrieve
+export RETRIEVE_RESULT_ROOT=/home/ubuntu/cuvs-filter-retrieve/benchmarks/retrieve_workshop/gpu_graph/results/l4_paper_$(date -u +%Y%m%d_%H%M%S)
+export RETRIEVE_DATA_ROOT=/home/ubuntu/cuvs-filter/datasets
+
+benchmarks/retrieve_workshop/gpu_graph/run_gpu_graph.sh generate
+benchmarks/retrieve_workshop/gpu_graph/run_gpu_graph.sh correctness
+benchmarks/retrieve_workshop/gpu_graph/run_gpu_graph.sh b0
+benchmarks/retrieve_workshop/gpu_graph/run_gpu_graph.sh analyze
+#+end_src
+
+Review =${RETRIEVE_RESULT_ROOT}/analysis/deep_candidates.json=.  It is deliberately a candidate
+list, not an automatic claim that more work is scientifically useful.  Remove unwanted pairs,
+then add deep configurations and run them:
+
+#+begin_src sh
+benchmarks/retrieve_workshop/gpu_graph/run_gpu_graph.sh generate \
+  --deep-selection "${RETRIEVE_RESULT_ROOT}/analysis/deep_candidates.json"
+benchmarks/retrieve_workshop/gpu_graph/run_gpu_graph.sh deep
+benchmarks/retrieve_workshop/gpu_graph/run_gpu_graph.sh analyze
+#+end_src
+
+To stop a preliminary deep run at a global cap, set (for example)
+=RETRIEVE_DEEP_MAX_ITERATION=1044=.  A later =deep= invocation validates and retains complete
+earlier depth groups before continuing, so staged execution is resumable.  Existing raw JSON is
+never overwritten unless
+=RETRIEVE_ALLOW_OVERWRITE=1= is explicitly set.
+
+The runner writes =provenance/run.json=.  Analysis emits =raw_points.csv=,
+=repetition_aggregates.csv=, =summary_points.csv=, =pareto_points.csv=,
+=deep_candidates.json=, =summary.json=, =provenance.json=, and PNG/PDF figures.  Figure y-axes
+start at zero, recall never exceeds one, and B0/deep points use distinct markers.
+
+* Static and synthetic checks
+
+These do not compile or execute GPU code:
+
+#+begin_src sh
+/home/ubuntu/micromamba/envs/cuvs/bin/python -m py_compile \
+  benchmarks/retrieve_workshop/gpu_graph/*.py
+MPLBACKEND=Agg /home/ubuntu/micromamba/envs/cuvs/bin/python \
+  benchmarks/retrieve_workshop/gpu_graph/test_pipeline.py
+bash -n benchmarks/retrieve_workshop/gpu_graph/run_gpu_graph.sh
+#+end_src

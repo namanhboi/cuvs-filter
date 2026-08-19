@@ -1,0 +1,9 @@
+{
+  "graph_rows": 100000,
+  "graph_degree": 32,
+  "categories_used": 27,
+  "query_weighted_pass_parent_lift": 8.365074451620393,
+  "query_weighted_reject_parent_lift": 0.3254428447540797,
+  "query_weighted_passing_zero_outdegree_fraction": 0.008447691631623401,
+  "query_weighted_largest_component_fraction": 0.9911108303159372
+}

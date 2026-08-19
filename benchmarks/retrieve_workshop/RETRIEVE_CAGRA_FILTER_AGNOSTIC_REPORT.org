@@ -1,0 +1,988 @@
+#+TITLE: Filter-Agnostic Search over CAGRA: Implementation and Experiment Handoff
+#+SUBTITLE: RETRIEVE workshop artifact and paper-results skeleton
+#+AUTHOR: TODO (double-blind paper: remove author metadata)
+#+DATE: TODO
+#+OPTIONS: toc:3 num:t ^:nil
+#+TODO: TODO(t) VERIFY(v) READY(r) | DONE(d)
+
+* Document status
+
+This file is the canonical handoff for the RETRIEVE workshop implementation and experiment
+pipeline in this working tree.  It describes what is frozen, how the benchmark-private code is
+wired, how to reproduce the measurements, and where validated results must be inserted.
+
+This is deliberately a *report skeleton*, not a results report.  Every result cell and claim below
+is marked =TODO=.  Populate it only from the analysis artifacts named in this document; do not
+copy values from an old report, terminal transcript, plot annotation, or memory.
+
+The benchmark code does not add a supported public cuVS search option.  It is an experimental
+SINGLE_CTA path and a set of benchmark controls.  Any paper language must preserve that boundary.
+
+** Handoff checklist
+
+- [ ] Freeze a commit for the paper artifact and record its SHA below.
+- [ ] Run all static and synthetic gates.
+- [ ] Run the 1,000-query correctness gates before any throughput run is accepted.
+- [ ] Run the complete 10,000-query B0 sweep with three repetitions.
+- [ ] Review the generated deep-search candidate list before running optional depths.
+- [ ] Run the exact bitmap control with its per-shard memory preflight enabled.
+- [ ] Run the native CPU context pipeline only if CPU context is retained in the paper.
+- [ ] Perform final analysis without any input-hash bypass.
+- [ ] Copy only analyzer-generated tables/figures into the final paper directory.
+- [ ] Archive result roots, manifests, logs, and provenance JSON together.
+
+** Artifact identity
+
+| Item | Frozen value |
+|-
+| cuVS repository | =/home/ubuntu/cuvs-filter-retrieve= |
+| Paper commit | TODO |
+| Git status at run time | TODO; should be clean for the final run |
+| GPU host and device | TODO; take from =provenance/run.json= |
+| CUDA/driver version | TODO; take from =provenance/run.json= |
+| cuVS benchmark binary SHA-256 | TODO; take from =provenance/run.json= |
+| =libcuvs.so= SHA-256 | TODO; take from =provenance/run.json= |
+| Dataset root | TODO; resolved path from provenance |
+| GPU graph result root | TODO |
+| Exact-control result root | TODO |
+| CPU-context result root | TODO or N/A |
+
+** Completed static validation snapshot (2026-08-19)
+
+These are implementation/preflight facts, not search-performance results:
+
+- The GPU graph Python pipeline ran 4 tests and passed all 4.
+- The exact-control Python pipeline ran 5 tests and passed all 5.
+- The CPU context standalone test program passed.  It covers one valid synthetic aggregation/plot
+  scenario and one negative scenario proving that a filter violation is rejected.
+- The native CPU read-only preflight passed with 8 graph artifacts, 5 methods, 4 workloads, and
+  10,000 queries per workload.
+- Exact preparation completed for 8 workload/phase manifests: YFCC correctness/throughput and
+  ArXiv EM, EMIS, and R correctness/throughput.  Every prepared manifest records preparation
+  schema 1, =ground_truth_k=10=, a full source-base SHA-256, and a full source-bitmap-manifest
+  SHA-256.
+- YFCC preparation produced one float32 base conversion and six query-shard conversions (one
+  correctness shard and five throughput shards).  All seven converted files have adjacent
+  provenance sidecars binding full source and target path/size/SHA-256 records.
+- The largest modeled YFCC requirement is throughput shard 1 (zero-based):
+  21,755,556,850 bytes (20.2614 GiB) required free memory.  A live NVIDIA L4 preflight at
+  =2026-08-19T23:38:12Z= observed 23,660,068,864 bytes (22.0352 GiB) free and passed with
+  1,904,512,014 bytes (1.7737 GiB) headroom.  This was a read-only preflight observation, not a
+  throughput measurement.
+
+* Frozen research scope
+
+** Research question
+
+The study asks how far traversal-only, predicate-agnostic techniques can improve filtered search
+over an unchanged CAGRA graph on a GPU.  The graph is constructed without using a query predicate.
+At search time, each query supplies a resident packed bitmap describing the legal base IDs.
+
+The primary comparison separates two failure modes:
+
+1. *Retention loss*: a legal, high-quality node is evaluated but disappears from CAGRA's bounded
+   search state before final filtered output.
+2. *Exploration loss*: the traversal spends its finite distance budget in non-passing regions or
+   cannot continue through a sufficiently useful passing frontier.
+
+CAGRA-Retain targets the first problem without changing traversal.  CAGRA-NaviX targets traversal
+by retaining a predicate-clean frontier and adaptively using one- or two-hop expansion.  The
+matched-seed controls isolate entry-point availability from the traversal/retention policy.  The
+exact bitmap scan gives the non-graph control.
+
+** In scope
+
+- CAGRA graph search with the existing graph fixed at =G=32= and =IG=64=.
+- SINGLE_CTA search, squared L2, =k=10=, and =max_queries=512=.
+- Resident, per-query, row-major packed bitmaps.
+- YFCC-10M and ArXiv EM, EMIS, and R workloads.
+- CAGRA-Base, CAGRA-Retain, and CAGRA-NaviX as the primary GPU methods.
+- Matched deterministic passing-seed controls as ablations.
+- B0 search and narrowly selected deeper-budget diagnostics.
+- Exact masked brute-force search as a control.
+- Native FAISS-NaviX and ACORN results as qualitative CPU context only.
+
+** Explicitly out of scope
+
+- A new supported cuVS public API or ABI.
+- FAVOR scoring, retention penalties, or FAVOR-vs-CAGRA claims.
+- MULTI_CTA, MULTI_KERNEL, persistent search, dynamic batching, or refinement.
+- Predicate evaluation, UDF execution, or bitmap construction time.
+- Filter-aware graph construction or a GPU ACORN/MCI implementation.
+- Index-build time, index-update cost, distributed search, or out-of-core execution.
+- Absolute CPU/GPU speedup claims.
+- Native-uint8 exact-scan throughput for YFCC.
+
+** Frozen hypotheses / evaluation questions
+
+- *RQ1 -- Retention:* Does CAGRA-Retain move the QPS--recall Pareto frontier relative to
+  CAGRA-Base while keeping traversal identical?
+- *RQ2 -- Traversal:* Does CAGRA-NaviX improve recall within B0 when the passing subgraph is
+  reachable and locally useful?
+- *RQ3 -- Entry points:* How much of each method's behavior is explained by deterministic access
+  to passing seeds rather than its subsequent traversal policy?
+- *RQ4 -- Hard predicates:* When a graph method misses the target, is the gap closed by a deeper
+  budget, or does it persist despite additional work?
+- *RQ5 -- Exact boundary:* What query throughput does exact resident-bitmap search provide under
+  the explicit exact-control timing contract?
+- *RQ6 -- CPU context:* Do native CPU NaviX/ACORN curves show qualitatively similar or different
+  algorithmic behavior, without treating the systems as an apples-to-apples speed comparison?
+
+* Terminology and invariants
+
+| Term | Meaning in this artifact |
+|-
+| Filter/predicate agnostic | The CAGRA graph topology is built independently of the query bitmap. |
+| Resident bitmap | A packed per-query bitmap already installed on the GPU before timed graph search. |
+| =L= / =itopk= | Capacity of CAGRA's internal top-k/frontier state. |
+| =W= / =search_width= | Number of selected parents expanded per iteration. |
+| B0 | =max_iterations=0=, which delegates to CAGRA's automatic budget; it does *not* mean zero iterations. |
+| Deep point | An explicit positive =max_iterations= value used only after the B0 gate. |
+| Valid GT | In-range ground-truth IDs; out-of-range fixed-width padding is excluded. |
+| Passing node | A source ID whose bit is set for the current query. |
+| Matched seeds | The same deterministic first-=k= passing bitmap IDs supplied to a CAGRA control. |
+| Underfilled query | Fewer than =k= legal output IDs are returned, interpreted together with legal GT cardinality. |
+| Pareto point | A measured point not dominated by another point of the same method in both recall and QPS. |
+
+The paper result width and ground-truth width are both exactly =k=10=.  The exact-control
+preparation rejects a GT matrix whose width is merely greater than ten.
+
+* Implementation architecture
+
+** Repository map
+
+| Area | Key files | Responsibility |
+|-
+| Dataset/bitmap benchmark adapter | =cpp/bench/ann/src/common/dataset.hpp=, =cpp/bench/ann/src/cuvs/filtered_dataset_adapter.h= | Load query shards, packed bitmaps, and fixed-width filtered GT. |
+| Benchmark configuration | =cpp/bench/ann/src/cuvs/cuvs_ann_bench_param_parser.h= | Parse benchmark-private method, accumulator, seeding, and identity-ID controls. |
+| CAGRA dispatch | =cpp/bench/ann/src/cuvs/cuvs_cagra_wrapper.h= | Validate combinations, allocate seed scratch outside timing, launch seed/search paths, expose correctness checks. |
+| Seed selector | =cpp/src/neighbors/detail/cagra/navix_bitmap_seeds.cuh= | Select deterministic first-=k= passing graph nodes for each query. |
+| Benchmark entry points | =cpp/src/neighbors/cagra_benchmark.hpp=, =cpp/src/neighbors/cagra_search_inst.cu.in= | Bind bitmap filters and dispatch benchmark-only seeded/default/NaviX paths. |
+| Runtime filter payload | =cpp/src/neighbors/detail/cagra/sample_filter_utils.cuh=, =cpp/src/neighbors/detail/cagra/jit_lto_kernels/cagra_filter_payload.cuh= | Carry packed bitmap, query offset, seed buffers, and accumulator state into the kernel. |
+| SINGLE_CTA kernel | =cpp/src/neighbors/detail/cagra/jit_lto_kernels/search_single_cta_jit.cuh= | Shared CAGRA frontier plus Base/Retain/NaviX behavior. |
+| NaviX device policy | =cpp/src/neighbors/detail/cagra/jit_lto_kernels/navix_device.cuh= | Adaptive local policy and tiled two-hop bridge scheduling. |
+| JIT planning/launcher | =cpp/src/neighbors/detail/cagra/jit_lto_kernels/search_single_cta_planner.hpp= and launcher/factory files | Select and compile benchmark-only seeded and NaviX kernel fragments. |
+| CUDA correctness tests | =cpp/tests/neighbors/ann_cagra/test_filter_bitmap.cu= | Bitmap, seeding, accumulator, output, and unsupported-combination coverage. |
+| GPU experiment | =benchmarks/retrieve_workshop/gpu_graph/= | Frozen configs, staged runner, validation, aggregation, and plots. |
+| Exact control | =benchmarks/retrieve_workshop/exact_bitmap/= | Preparation, exact benchmark configs, memory preflight, validation, and hash manifest. |
+| CPU context | =benchmarks/retrieve_workshop/cpu_context/= | Native FAISS-NaviX/ACORN execution and qualitative context plots. |
+
+** Graph-search dataflow
+
+#+begin_example
+source query vectors + filtered GT + packed bitmap manifest
+                         |
+                         v
+       cuVS-bench dataset/bitmap adapter (resident GPU bitmap)
+                         |
+             +-----------+----------------+
+             |                            |
+      ordinary CAGRA              deterministic bitmap
+       initialization               seed selection
+             |                            |
+             +-------------+--------------+
+                           v
+             SINGLE_CTA fused CAGRA search state
+              +------------+-------------+
+              |            |             |
+            Base         Retain        NaviX
+        raw-distance   same traversal   passing frontier,
+         traversal     + passing top-k  adaptive 1/2 hop
+              |            |             |
+              +------------+-------------+
+                           v
+             filtered IDs/distances + correctness counters
+#+end_example
+
+** Resident bitmap contract
+
+- The input is one packed bitmap row per query and one bit per source-order base ID.
+- Graph configs use =filter.kind="bitmap"= and require an identity source-ID index.  This avoids
+  silently comparing source-order bitmap/GT IDs with a remapped internal graph space.
+- The seed selector contains a correct source-remapping fallback, but the frozen paper
+  configurations deliberately reject remapped indices through
+  =require_identity_source_indices=true=.
+- YFCC is split into five serial query shards to bound resident bitmap memory.  ArXiv uses one
+  shard per predicate/phase.
+- Query offsets are carried explicitly so that a shard's bitmap rows, query vectors, and GT rows
+  remain aligned.
+
+** Bitmap-seeded control
+
+For each search-call shard, =select_navix_bitmap_seeds= launches one warp-sized CTA per query.  On
+the identity-ID fast path, lanes load packed 32-bit bitmap words coalescently and lane zero emits
+at most =k= set bits in ascending internal-node order.  It stops once =k= passing IDs have been
+found; an underfilled row is scanned through its legal graph domain.  The selector records seed
+counts and inspected units in preallocated device buffers.
+
+The seed selection kernel executes inside the timed cuVS-bench search call, while its scratch
+allocation occurs during setup.  The graph kernel computes distances only for valid supplied
+seeds, inserts only those seeds into the visited structure, leaves remaining initial slots
+invalid, and returns legal invalid sentinels for an empty row.  It does not add ordinary random
+CAGRA starting candidates to fill missing seed slots.
+
+Two uses are frozen:
+
+- CAGRA-NaviX uses strict bitmap seeds for its primary curve.
+- =default_cagra_seeded= and =default_cagra_accumulator_seeded= use the same seed selector as an
+  entry-point ablation.  These curves must be labeled as controls, not primary methods.
+
+** CAGRA-Base
+
+CAGRA-Base preserves CAGRA's distance-first fused frontier and default filtering behavior.  The
+predicate governs legal output, but no dedicated passing-result accumulator is enabled and the
+NaviX traversal policy is absent.  It is configured with =filter_mode=default= and
+=favor_udf_passing_accumulator=false=.
+
+** CAGRA-Retain
+
+CAGRA-Retain executes the same parent selection, graph expansion, raw-distance computation,
+visited checking, and bounded frontier evolution as CAGRA-Base.  Its only algorithmic addition is
+a bounded shared-memory top-=k= accumulator for the best passing nodes observed so far.  The final
+output is taken from this accumulator.  It is intended to measure retention loss; it must not be
+described as changing which graph nodes are explored.
+
+The benchmark-private switch is =favor_udf_passing_accumulator=true=.  The name is historical;
+this frozen experiment uses =filter_mode=default= and does not enable FAVOR scoring.
+
+** CAGRA-NaviX
+
+CAGRA-NaviX keeps CAGRA's fused frontier and raw-distance ordering but restricts its persistent
+search frontier to passing candidates after strict bitmap seeding.  For each selected parent it
+examines first-hop neighbors, measures their local passing yield, and selects one of the frozen
+adaptive-Kuzu policies:
+
+- one hop when the degree-32 first hop has at least 13 passing nodes;
+- directed capped two hop for intermediate yield;
+- blind capped two hop when the first hop has at most 4 passing nodes.
+
+The tiled scheduler writes passing children into CAGRA's existing =W*D= candidate tail.  Rejected
+first-hop rows occupy a =W*D= bridge array; resident warps load grandchildren and commit candidates
+in stable bridge order.  It does not materialize a =D*D= neighborhood.  The frozen settings are
+=navix_mode=adaptive_kuzu=, =navix_scheduler=tiled=, =navix_bitmap_seeds=true=, and
+=navix_kernel_variant=reference=.
+
+** Exact resident-bitmap control
+
+The exact pipeline uses the existing =cuvs::neighbors::brute_force= interface through a
+benchmark-private bitmap wrapper.  It operates on the same source-order bitmaps and GT as the
+graph experiment and returns exact squared-L2 top-=k= among passing IDs.
+
+At the current 10% selectivity boundary, cuVS chooses either:
+
+- a sparse path: bitmap population count, bitmap-to-CSR, CSR-to-COO, masked sparse distance, and
+  top-k; or
+- a dense path: tiled masked distance plus tiled/final top-k.
+
+YFCC uint8 base/query matrices are converted exactly coordinate-by-coordinate to float32 because
+the public brute-force instantiations used here are float/half.  The conversion preserves IDs and
+coordinate values, but the resulting exact throughput is a float32 control with four times the
+native uint8 vector traffic.  ArXiv remains native float32.
+
+The exact-control timed call includes bitmap counting, query norms, optional CSR/COO construction,
+distance evaluation, distance/top-k epilogues, and temporary device allocation/deallocation.  It
+excludes bitmap materialization/upload, predicate evaluation, and uint8 conversion.
+
+** Native CPU context
+
+The CPU pipeline runs already-built FAISS-NaviX, reference ACORN-1, and reference ACORN-gamma
+adapters and graphs.  Optional ACORN variants with NaviX seeds remain in tables but not the main
+CPU Pareto plot.  CPU adapters unpack the packed bitmap to their dense byte-mask API outside the
+timed search call.  Different graph families, graph parameters, thread counts, and timing
+boundaries make these qualitative context curves, not GPU speedup baselines.
+
+* Frozen workloads and artifacts
+
+** Workload table
+
+Fill descriptive statistics from the source/prepared manifests or a separately archived analysis
+script.  Do not infer selectivity from method behavior.
+
+| Workload | Base rows | Dim. | Base dtype | Predicate semantics | Queries | Mean selectivity | Selectivity distribution | Valid-GT fraction | Shards |
+|-
+| YFCC-10M | TODO | TODO | uint8 | query tags are a subset of candidate tags | 10,000 | TODO | TODO | TODO | 2,048 + 2,048 + 2,048 + 2,048 + 1,808 |
+| ArXiv-EM | TODO | TODO | float32 | exact-match predicate | 10,000 | TODO | TODO | TODO | 10,000 |
+| ArXiv-EMIS | TODO | TODO | float32 | membership/category predicate | 10,000 | TODO | TODO | TODO | 10,000 |
+| ArXiv-R | TODO | TODO | float32 | inclusive range predicate | 10,000 | TODO | TODO | TODO | 10,000 |
+
+** Expected data layout
+
+With =RETRIEVE_DATA_ROOT=/home/ubuntu/cuvs-filter/datasets=, the GPU generator expects:
+
+#+begin_example
+${RETRIEVE_DATA_ROOT}/
+  yfcc-10M/
+    base.10M.u8bin
+    cagra_g32_ig64.index
+  arxiv-for-fanns-medium/
+    base.fbin
+    cagra_g32_ig64.index
+  navix_bitmap/
+    yfcc/{correctness_1000,throughput_10000}/manifest.json
+    arxiv/{em,emis,r}/{correctness_1000,throughput_10000}/manifest.json
+#+end_example
+
+Every bitmap manifest must describe contiguous shards, matching query/GT/bitmap row counts, and
+exactly 1,000 or 10,000 queries for its phase.  The graph pipeline requires the listed CAGRA index
+files to exist; it does not construct them.
+
+* Frozen GPU graph protocol
+
+** Search matrix
+
+| Dimension | Frozen value |
+|-
+| Search algorithm | SINGLE_CTA |
+| Graph | CAGRA =G=32=, =IG=64= |
+| Metric | squared L2 via the cuVS benchmark's Euclidean setting |
+| Result width | =k=10= |
+| Maximum concurrent query plan | =max_queries=512= |
+| Filter mode | default |
+| B0 cells =(L,W)= | =(64,1), (128,1), (128,2), (256,1), (256,2), (512,2)= |
+| B0 encoding | =max_iterations=0= (automatic CAGRA budget) |
+| Primary methods | Base, Retain, NaviX |
+| Seed ablations | Base + matched seeds, Retain + matched seeds |
+| Correctness queries/repetitions | fixed first 1,000 / one repetition |
+| Throughput queries/repetitions | all 10,000 / three repetitions |
+| Target used for deep-run selection | Recall@10 = 0.90 |
+
+** Optional deep protocol
+
+Deep runs are diagnostic extensions, not an unconditional Cartesian sweep.  Run only
+workload/method pairs whose best six-cell B0 recall is below 0.90, after manually reviewing
+=analysis/deep_candidates.json=.  Retain only =(L,W)=(64,1)= and =(512,2)= and test explicit
+=max_iterations={522,1044,2088,4176,7569}= in increasing order.  Stop a series after either cell
+first reaches 0.90 recall.  Raw CSV retains later measured points if they exist, but paper plots
+exclude over-search points after the first target-reaching depth.
+
+** GPU graph timing and aggregation
+
+Each repetition times the complete cuVS-bench search call.  Seeded methods include the bitmap
+seed-selection kernel and graph-search kernel in that call.  The timing excludes graph/index load,
+host configuration parsing, and construction or host-to-device installation of the resident
+bitmap.
+
+YFCC's five shards execute as serial host calls.  For each =repetition_index= independently:
+
+#+begin_example
+seconds_rep = sum(query_count_shard / QPS_shard)
+QPS_rep     = 10000 / seconds_rep
+#+end_example
+
+Only then are median/min/max computed over the three repetitions.  Never average shard QPS and
+never combine different repetition indices.
+
+** GPU graph correctness gate
+
+The analyzer must observe all expected methods, B0 cells, shards, and repetitions and no extra
+ones.  For every raw record it requires:
+
+- =algo="single_cta"=, =filter_mode="default"=, =k=10=, and =max_queries=512=;
+- method label and runtime flags matching the generated manifest;
+- =require_identity_source_indices=1=;
+- zero =FilterViolations=;
+- zero =InvalidSentinelErrors=;
+- zero =DuplicateOutputQueries=;
+- finite positive QPS, Recall@10 in =[0,1]=, and a valid-GT fraction in =(0,1]=.
+
+Underfilled-query and missing-slot counters are retained for interpretation.  Missing mandatory
+correctness counters fail analysis rather than being treated as zero.
+
+* Frozen exact-control protocol
+
+** Preparation and cache validation
+
+=prepare_exact_workload.py= binds a prepared manifest to both the resolved source-base path/full
+SHA-256 and the resolved source-bitmap-manifest path/full SHA-256.  A same-shaped input is not a
+valid cache key.  YFCC float conversions also have sidecars binding complete source and target
+path/size/SHA-256 records.  Missing, legacy, or stale provenance fails preparation.
+
+Use =RETRIEVE_EXACT_FORCE_PREPARE=1= only to explicitly replace stale/legacy preparation state.
+It is not a substitute for recording which inputs changed.
+
+Preparation additionally enforces:
+
+- base/query dimension agreement;
+- contiguous query-shard coverage;
+- exact ground-truth width =k=10=;
+- legal bitmap shape and zero unused tail bits;
+- exact per-shard bitmap population counts;
+- a valid conservative GPU-memory estimate for every shard.
+
+The five-test exact pipeline verifies the cache contract rather than only its happy path.  It
+accepts byte-identical reuse, rejects a same-shaped source whose contents changed, rejects a
+changed source bitmap manifest, permits explicit refresh with =--force=, validates conversion
+sidecars, rejects GT width 11 when =k=10=, and checks the memory gate at exactly the required byte
+count and at one byte below it.  The prepared production snapshot is rooted at
+=/home/ubuntu/retrieve_workshop_data/exact_bitmap/= and contains all eight manifests listed in the
+static validation snapshot above.
+
+** GPU memory preflight
+
+The estimate includes resident float32 base vectors, base norms, float32 queries, bitmap, output
+IDs/distances, timed query norms, and path-specific workspace:
+
+- sparse: float CSR values, int64 CSR columns/row offsets, and int64 COO rows;
+- dense: the modeled dense distance tile and tiled top-k intermediates.
+
+The required free memory is:
+
+#+begin_example
+required = modeled_peak + max(2 GiB, 0.20 * modeled_peak)
+#+end_example
+
+The margin covers CUDA/RMM workspaces, select-k/conversion workspace, fragmentation, and
+unmodeled context overhead.  Before each production shard, =gpu_memory_preflight.py= queries the
+first CUDA-visible GPU, writes a PASS/FAIL record under =provenance/gpu_memory/=, and refuses to
+launch if free memory is below the recorded requirement.  =RETRIEVE_EXACT_AVAILABLE_BYTES= is a
+test/debug override and must not be set for a paper run.
+
+This is a conservative launch gate, not a measured peak-memory result.
+
+The worst prepared YFCC shard observed in this validation pass was:
+
+| Field | Value |
+|-
+| Prepared manifest | =/home/ubuntu/retrieve_workshop_data/exact_bitmap/yfcc/throughput_10000/manifest.json= |
+| Shard | 1 (zero-based; 2,048 queries) |
+| Execution path selected by estimate | =sparse_csr_masked_matmul= |
+| Modeled peak | 18,129,630,708 bytes (16.8845 GiB) |
+| Safety margin | 3,625,926,142 bytes (3.3769 GiB) |
+| Required free memory | 21,755,556,850 bytes (20.2614 GiB) |
+| Observed free memory | 23,660,068,864 bytes (22.0352 GiB) |
+| Observed headroom | 1,904,512,014 bytes (1.7737 GiB) |
+| Device / status | NVIDIA L4 / PASS |
+| Check time | =2026-08-19T23:38:12.205246+00:00= |
+
+** Exact correctness gate
+
+For each workload, the exact analyzer requires:
+
+- valid-GT recall exactly 1.0;
+- zero predicate violations;
+- zero invalid-sentinel errors;
+- zero duplicate-output queries;
+- observed underfill and missing slots exactly matching legal GT cardinality;
+- the complete configured shard/repetition sets;
+- a matching PASS memory-preflight record for every production shard.
+
+ArXiv fixed-width GT may contain out-of-range padding for an intrinsically underfilled query.
+Those values are excluded from the denominator; they are not accepted as neighbors.
+
+* Native CPU context protocol
+
+| Dimension | Frozen value |
+|-
+| Workloads | YFCC-10M, ArXiv EM, EMIS, R |
+| Queries | 10,000 each; YFCC uses the same five serial shards |
+| Search sweep | =efSearch={10,15,20,25,30,50,100,250,500,750}= |
+| Repetitions | 3 |
+| FAISS-NaviX threads | 16 ArXiv, 32 YFCC |
+| ACORN threads | 32 |
+| Query chunks | 10,000 ArXiv, 512 YFCC |
+| Metric / result width | squared L2 / =k=10= |
+
+Frozen graph parameters are recorded in =cpu_context/run.py= and summarized in its README.  Graph
+construction is outside the run.  The runner must find existing build-provenance CSVs and records
+their parameters, byte sizes, modification times, and sampled fingerprints.
+
+The native timed regions exclude packed-bitmap-to-byte-mask conversion.  State this in every
+caption or table using CPU QPS.  Do not draw or report an absolute CPU/GPU speedup.
+
+The read-only preflight executed on 2026-08-19 reported:
+
+#+begin_example
+preflight PASS: 8 graphs, 5 methods, 4 workloads, 10,000 queries/workload
+#+end_example
+
+This establishes artifact/configuration completeness only; it is not evidence that a production
+CPU throughput run has completed.
+
+* Reproduction commands
+
+** One-time environment check
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter-retrieve
+git rev-parse HEAD
+git status --short
+nvidia-smi
+/home/ubuntu/micromamba/envs/cuvs/bin/python --version
+#+end_src
+
+For a final paper run, archive the command output and use a clean, frozen commit.  Ensure no other
+GPU workload overlaps throughput measurement.
+
+** Static and synthetic gates
+
+GPU graph pipeline:
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter-retrieve
+/home/ubuntu/micromamba/envs/cuvs/bin/python -m py_compile \
+  benchmarks/retrieve_workshop/gpu_graph/*.py
+MPLBACKEND=Agg /home/ubuntu/micromamba/envs/cuvs/bin/python \
+  benchmarks/retrieve_workshop/gpu_graph/test_pipeline.py
+bash -n benchmarks/retrieve_workshop/gpu_graph/run_gpu_graph.sh
+#+end_src
+
+Exact pipeline:
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter-retrieve
+/home/ubuntu/micromamba/envs/cuvs/bin/python -m py_compile \
+  benchmarks/retrieve_workshop/exact_bitmap/*.py
+MPLBACKEND=Agg /home/ubuntu/micromamba/envs/cuvs/bin/python \
+  benchmarks/retrieve_workshop/exact_bitmap/test_pipeline.py
+bash -n benchmarks/retrieve_workshop/exact_bitmap/run_exact.sh
+benchmarks/retrieve_workshop/exact_bitmap/run_exact.sh smoke
+#+end_src
+
+CPU context pipeline:
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter-retrieve
+/home/ubuntu/micromamba/envs/cuvs/bin/python \
+  benchmarks/retrieve_workshop/cpu_context/test_pipeline.py
+#+end_src
+
+The Python pipeline checks completed on 2026-08-19 as follows.  CUDA/build and exact GPU smoke
+remain separate gates and are intentionally not inferred from Python success:
+
+| Gate | UTC time | Result | Log/archive path |
+|-
+| GPU Python pipeline tests | 2026-08-19 | PASS: 4/4 tests | =benchmarks/retrieve_workshop/gpu_graph/test_pipeline.py= |
+| CUDA bitmap tests/build | TODO | TODO | TODO |
+| Exact Python pipeline tests | 2026-08-19 | PASS: 5/5 tests | =benchmarks/retrieve_workshop/exact_bitmap/test_pipeline.py= |
+| Exact sparse/dense smoke | TODO | TODO | TODO |
+| CPU pipeline test program | 2026-08-19 | PASS: 1 program / 2 synthetic scenarios | =benchmarks/retrieve_workshop/cpu_context/test_pipeline.py= |
+| CPU artifact preflight | 2026-08-19 | PASS: 8 graphs / 5 methods / 4 workloads | =benchmarks/retrieve_workshop/cpu_context/run.py --preflight= |
+
+** GPU graph production run
+
+Choose one new result root and retain it for every stage:
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter-retrieve
+export RETRIEVE_DATA_ROOT=/home/ubuntu/cuvs-filter/datasets
+export RETRIEVE_RESULT_ROOT=/home/ubuntu/cuvs-filter-retrieve/benchmarks/retrieve_workshop/gpu_graph/results/paper_$(date -u +%Y%m%d_%H%M%S)
+
+benchmarks/retrieve_workshop/gpu_graph/run_gpu_graph.sh generate
+benchmarks/retrieve_workshop/gpu_graph/run_gpu_graph.sh correctness
+benchmarks/retrieve_workshop/gpu_graph/run_gpu_graph.sh b0
+benchmarks/retrieve_workshop/gpu_graph/run_gpu_graph.sh analyze
+#+end_src
+
+Do not set =RETRIEVE_ALLOW_OVERWRITE=1= in a production run.  If a stage fails, diagnose it and
+start a new result root unless the runner's documented deep-stage resume behavior applies.
+
+Review the generated candidates before optional deep search:
+
+#+begin_src sh
+${EDITOR:-vi} "${RETRIEVE_RESULT_ROOT}/analysis/deep_candidates.json"
+benchmarks/retrieve_workshop/gpu_graph/run_gpu_graph.sh generate \
+  --deep-selection "${RETRIEVE_RESULT_ROOT}/analysis/deep_candidates.json"
+benchmarks/retrieve_workshop/gpu_graph/run_gpu_graph.sh deep
+benchmarks/retrieve_workshop/gpu_graph/run_gpu_graph.sh analyze
+#+end_src
+
+The final =analyze= call must not use =--skip-full-input-hashes=.  That switch exists only to make
+intermediate staged analysis cheaper and produces an artifact explicitly marked not paper-valid.
+
+** Exact-control production run
+
+Use a new exact result root.  Leave memory availability under real =nvidia-smi= control:
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter-retrieve
+export RETRIEVE_DATA_ROOT=/home/ubuntu/cuvs-filter/datasets
+export RETRIEVE_EXACT_RESULT_ROOT=/home/ubuntu/cuvs-filter-retrieve/benchmarks/retrieve_workshop/exact_bitmap/results/paper_$(date -u +%Y%m%d_%H%M%S)
+unset RETRIEVE_EXACT_AVAILABLE_BYTES
+
+benchmarks/retrieve_workshop/exact_bitmap/run_exact.sh build
+benchmarks/retrieve_workshop/exact_bitmap/run_exact.sh prepare
+benchmarks/retrieve_workshop/exact_bitmap/run_exact.sh configs
+benchmarks/retrieve_workshop/exact_bitmap/run_exact.sh correctness
+benchmarks/retrieve_workshop/exact_bitmap/run_exact.sh throughput
+benchmarks/retrieve_workshop/exact_bitmap/run_exact.sh analyze
+#+end_src
+
+Alternatively, =run_exact.sh all= performs the production stages serially.  Do not set
+=RETRIEVE_EXACT_OVERWRITE=1= for the final run.  Use =RETRIEVE_EXACT_FORCE_PREPARE=1= only after
+documenting why the prepared cache is stale; the source hashes remain the authority.
+
+** Native CPU context run
+
+First run the read-only preflight, then create a new immutable run directory:
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter-retrieve
+/home/ubuntu/micromamba/envs/cuvs/bin/python \
+  benchmarks/retrieve_workshop/cpu_context/run.py --preflight
+
+/home/ubuntu/micromamba/envs/cuvs/bin/python \
+  benchmarks/retrieve_workshop/cpu_context/run.py \
+  --results-root /home/ubuntu/retrieve_cpu_context_results
+
+/home/ubuntu/micromamba/envs/cuvs/bin/python \
+  benchmarks/retrieve_workshop/cpu_context/analyze.py \
+  /home/ubuntu/retrieve_cpu_context_results/<run-id>
+#+end_src
+
+The CPU runner refuses to reuse a run ID and preserves failed runs.  Do not manually splice a
+partial run into a completed run.
+
+** Export this report
+
+After validated results and links have been inserted:
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter-retrieve
+pandoc benchmarks/retrieve_workshop/RETRIEVE_CAGRA_FILTER_AGNOSTIC_REPORT.org \
+  -o benchmarks/retrieve_workshop/RETRIEVE_CAGRA_FILTER_AGNOSTIC_REPORT.docx
+#+end_src
+
+Check captions, image paths, table widths, equations, and TODO markers in the exported document.
+
+* Provenance and publication gates
+
+** GPU graph gates
+
+- =provenance/run.json= records git HEAD/status, host, GPU, CPU, relevant environment, resolved
+  data root, and full SHA-256 for the benchmark binary and =libcuvs.so=.
+- Reusing a result root is rejected if binary/library hashes, data root, host, or GPU change.
+- Generated manifests freeze exact methods, search points, shard coverage, query count, and
+  repetitions.
+- Raw JSON cannot be overwritten without explicit =RETRIEVE_ALLOW_OVERWRITE=1=.
+- Analysis rejects missing/extra shards, points, or repetitions and checks method labels/runtime
+  flags against each manifest.
+- Final analysis records SHA-256 for configs, source bitmap manifests, raw results, and all resident
+  base/query/GT/bitmap/index inputs.
+- A final paper artifact with =resident_input_hash_status= saying hashes were skipped is invalid.
+
+** Exact-control gates
+
+- Prepared cache reuse requires source base and source bitmap manifest full SHA-256/path matches.
+- UInt8 conversion reuse requires verified source and target sidecars, not shape alone.
+- GT width must be exactly ten and bitmap populations are counted during preparation.
+- Every config copies the corresponding per-shard memory requirement.
+- Every process requires a matching preflight PASS record with available memory at least required
+  memory.
+- Raw JSON cannot be overwritten without explicit =RETRIEVE_EXACT_OVERWRITE=1=.
+- Production analysis requires run provenance, complete phases, all correctness conditions, and
+  the complete shard/repetition sets.
+- =analysis/final_hash_manifest.json= binds configs, raw results, source/prepared manifests,
+  resident inputs, memory decisions, run provenance, analyzer, and analysis outputs.
+
+** CPU context gates
+
+- Preflight validates repositories, binaries, graph artifacts, manifests, and frozen parameters.
+- A run directory is created atomically and cannot be reused.
+- Each command, log, start/end time, return code, environment, hardware snapshot, repository
+  revision, binary fingerprint, dataset manifest, and graph artifact is recorded.
+- Analysis requires matching =run.created.json= and =run.completed.json=, the full command count,
+  exact method/workload/efSearch/repetition coverage, and zero correctness errors.
+
+** Manual publication gate
+
+Before a number appears in the paper:
+
+- [ ] Its source row exists in an analyzer-generated CSV/JSON.
+- [ ] The source result root passed all automated gates.
+- [ ] The number uses the correct timing boundary.
+- [ ] YFCC QPS was serially aggregated, not averaged by shard.
+- [ ] Recall uses legal/valid GT IDs.
+- [ ] It is a median of three complete throughput repetitions unless explicitly labeled otherwise.
+- [ ] Seeded controls are labeled as ablations.
+- [ ] CPU results are labeled qualitative and use native-search timing.
+- [ ] Exact YFCC is labeled float32-converted.
+- [ ] The figure and its machine-readable source are archived together.
+
+* Frozen supporting evidence bundle
+
+Supporting diagnostics that are not recomputed by the final three-repetition QPS--recall sweep are
+frozen under =benchmarks/retrieve_workshop/evidence/=.  The bundle README records a full SHA-256
+for every evidence file and the 2026-08-19 copy provenance.  The machine-readable
+=diagnostic_manifest.json= is verified by the paper staging script before it publishes the final
+results sentinel.  These artifacts must remain separate
+from production performance points: diagnostic instrumentation is untimed, and the older YFCC
+NaviX oracle is a stratified 18-query hard-case sample rather than a representative workload
+sample or the final strict bitmap-seeded method.
+
+| Evidence path | Frozen role / interpretation boundary |
+|-
+| =benchmarks/retrieve_workshop/evidence/README.org= | Canonical inventory, origin statement, interpretation limits, and SHA-256 table. |
+| =benchmarks/retrieve_workshop/evidence/diagnostic_manifest.json= | Machine-readable artifact hashes and claim-coverage keys consumed by the paper staging gate. |
+| =benchmarks/retrieve_workshop/evidence/PASSING_ACCUMULATOR_DESIGN_AND_EVIDENCE_REPORT.org= | Accumulator design plus GT-seen versus returned-recall diagnostic provenance. |
+| =benchmarks/retrieve_workshop/evidence/YFCC_RECALL_ROOT_CAUSE_REPORT.org= | YFCC B0-versus-continuous-depth diagnostic provenance. |
+| =benchmarks/retrieve_workshop/evidence/yfcc_navix/YFCC_NAVIX_ROOT_CAUSE_REPORT.org= | Historical in-kernel-seeded NaviX root-cause report; not a final-sweep point. |
+| =benchmarks/retrieve_workshop/evidence/yfcc_navix/diagnostic_summary.json= | Machine-readable aggregate for that historical NaviX diagnostic. |
+| =benchmarks/retrieve_workshop/evidence/yfcc_navix/counterfactual_oracle.csv= | Stratified 18-query counterfactual sample; never generalize it to all YFCC queries. |
+| =benchmarks/retrieve_workshop/evidence/emis_locality/EMIS_LOCALITY_DIAGNOSTIC_REPORT.org= | Interpretation and reproduction boundary for EMIS locality diagnostics. |
+| =benchmarks/retrieve_workshop/evidence/emis_locality/exact_summary.json= | Exact distance-space locality summary. |
+| =benchmarks/retrieve_workshop/evidence/emis_locality/graph_summary.json= | CAGRA graph-edge/passing-component locality summary. |
+| =benchmarks/retrieve_workshop/evidence/emis_locality/traversal_summary.json= | GPU traversal-counter summary used alongside the two offline locality controls. |
+
+Any paper claim sourced from this bundle must cite both the precise file and its SHA-256 entry in
+=evidence/README.org=.  If a diagnostic is regenerated, create a new versioned evidence bundle;
+do not silently replace a frozen file.
+
+* Expected final tables
+
+All cells remain placeholders until the final analyzers complete.
+
+** Table 1: Dataset and predicate characteristics
+
+| Workload | N | d | dtype | Predicate | Mean selectivity | p50 | p90 | Queries below 1% | Valid GT slots |
+|-
+| YFCC-10M | TODO | TODO | uint8 | subset tags | TODO | TODO | TODO | TODO | TODO |
+| ArXiv-EM | TODO | TODO | float32 | exact match | TODO | TODO | TODO | TODO | TODO |
+| ArXiv-EMIS | TODO | TODO | float32 | membership | TODO | TODO | TODO | TODO | TODO |
+| ArXiv-R | TODO | TODO | float32 | range | TODO | TODO | TODO | TODO | TODO |
+
+Source: TODO (script and artifact path).
+
+** Table 2: Frozen GPU configuration
+
+| Graph | G / IG | k | Mode | max_queries | B0 cells | Repetitions |
+|-
+| CAGRA | 32 / 64 | 10 | SINGLE_CTA | 512 | 6 | 3 |
+
+** Table 3: Best B0 point by GPU method
+
+| Workload | Method | L | W | Recall@10 median [min,max] | QPS median [min,max] | Pareto? |
+|-
+| YFCC-10M | CAGRA-Base | TODO | TODO | TODO | TODO | TODO |
+| YFCC-10M | CAGRA-Retain | TODO | TODO | TODO | TODO | TODO |
+| YFCC-10M | CAGRA-NaviX | TODO | TODO | TODO | TODO | TODO |
+| ArXiv-EM | all three rows | TODO | TODO | TODO | TODO | TODO |
+| ArXiv-EMIS | all three rows | TODO | TODO | TODO | TODO | TODO |
+| ArXiv-R | all three rows | TODO | TODO | TODO | TODO | TODO |
+
+Define “best” before filling this table: TODO (for example, highest QPS at/above target recall, with
+a separate highest-recall row when target is not reached).  Do not silently choose a favorable
+criterion per method.
+
+** Table 4: Matched-seed ablation
+
+| Workload | Method pair | Cell | Recall delta | QPS delta | Interpretation |
+|-
+| YFCC-10M | Base vs Base + matched seeds | TODO | TODO | TODO | TODO |
+| YFCC-10M | Retain vs Retain + matched seeds | TODO | TODO | TODO | TODO |
+| ArXiv-EM | same | TODO | TODO | TODO | TODO |
+| ArXiv-EMIS | same | TODO | TODO | TODO | TODO |
+| ArXiv-R | same | TODO | TODO | TODO | TODO |
+
+** Table 5: Exact resident-bitmap control
+
+| Workload | Execution path | Valid recall | Median QPS [min,max] | Required free GPU memory | Correctness |
+|-
+| YFCC-10M | TODO | TODO | TODO | TODO | TODO |
+| ArXiv-EM | TODO | TODO | TODO | TODO | TODO |
+| ArXiv-EMIS | TODO | TODO | TODO | TODO | TODO |
+| ArXiv-R | TODO | TODO | TODO | TODO | TODO |
+
+** Table 6: Optional deep-budget outcome
+
+| Workload | Method | Best B0 recall | First depth reaching 0.90 | QPS there | If never reached, max recall/depth |
+|-
+| TODO | TODO | TODO | TODO | TODO | TODO |
+
+Only include selected pairs recorded in the edited =deep_candidates.json= and =deep_plan.json=.
+
+** Table 7: Native CPU context
+
+| Workload | Method | Best =efSearch= under stated rule | Recall | Native-search QPS | Graph provenance |
+|-
+| TODO | FAISS-NaviX | TODO | TODO | TODO | TODO |
+| TODO | ACORN-1 | TODO | TODO | TODO | TODO |
+| TODO | ACORN-gamma | TODO | TODO | TODO | TODO |
+
+Caption must say that bitmap unpacking is excluded and the table is not an absolute GPU/CPU
+comparison.
+
+* Expected final figures
+
+** Primary GPU QPS--recall curves
+
+The GPU analyzer produces one PNG/PDF pair per workload:
+
+- =analysis/yfcc_gpu_graph_qps_recall.{png,pdf}=
+- =analysis/em_gpu_graph_qps_recall.{png,pdf}=
+- =analysis/emis_gpu_graph_qps_recall.{png,pdf}=
+- =analysis/r_gpu_graph_qps_recall.{png,pdf}=
+
+TODO: insert a 2x2 composite or the four panels selected for the six-page paper.  Preserve linear
+QPS axes starting at zero, distinguish B0 from deep markers, show only analyzer-approved deep
+points, and state “median of three repetitions.”
+
+#+CAPTION: TODO -- CAGRA-Base, CAGRA-Retain, and CAGRA-NaviX QPS--Recall@10 Pareto frontiers.
+#+NAME: fig:gpu-primary
+#+ATTR_ORG: :width 900
+[[file:TODO_GPU_PRIMARY_FIGURE.png]]
+
+** Matched-seed ablation
+
+Expected files are =analysis/<workload>_matched_seed_control.{png,pdf}=.
+
+#+CAPTION: TODO -- Deterministic passing-seed ablation separating entry-point availability from traversal and retention.
+#+NAME: fig:matched-seeds
+#+ATTR_ORG: :width 900
+[[file:TODO_MATCHED_SEED_FIGURE.png]]
+
+** Exact-control figure or table
+
+The current exact analyzer emits tables/JSON rather than a paper plot.  Decide before submission
+whether exact QPS belongs in Table 5, a small bar chart, or an appendix.  Do not place it on a
+graph-search Pareto curve because its recall is fixed at one and its timing contract differs.
+
+#+CAPTION: TODO -- Exact resident-bitmap control with complete timed-search components stated.
+#+NAME: fig:exact-control
+[[file:TODO_EXACT_CONTROL_FIGURE.png]]
+
+** Native CPU context
+
+Expected files are =analysis/cpu_context_pareto.{png,pdf}=.
+
+#+CAPTION: TODO -- Native CPU bitmap-search context; graphs, resources, and timed regions differ from the GPU experiment, so no absolute CPU/GPU speedup is implied.
+#+NAME: fig:cpu-context
+#+ATTR_ORG: :width 900
+[[file:TODO_CPU_CONTEXT_FIGURE.png]]
+
+** Optional diagnostic figure
+
+TODO: if space permits, add one evidence-backed figure that distinguishes retention loss from
+exploration loss (for example, GT-seen vs returned recall from a separately frozen diagnostic).
+This figure is not produced by the current production pipelines.  The existing frozen sources are
+=evidence/PASSING_ACCUMULATOR_DESIGN_AND_EVIDENCE_REPORT.org= and
+=evidence/YFCC_RECALL_ROOT_CAUSE_REPORT.org=; their SHA-256 values and interpretation boundaries
+are in =evidence/README.org=.  Include a regenerated diagnostic only with a dedicated script,
+manifest, correctness gate, and a new provenance record.
+
+* Results narrative template
+
+** RQ1: Retention
+
+TODO: State whether Retain dominates, partially improves, or matches Base on each workload's
+Pareto frontier.  Report matched-recall QPS and/or matched-QPS recall using one predeclared rule.
+Connect any improvement to retained passing nodes, not to changed exploration.
+
+Evidence paths:
+
+- =GPU_RESULT_ROOT/analysis/pareto_points.csv=
+- =GPU_RESULT_ROOT/analysis/summary_points.csv=
+- =GPU_RESULT_ROOT/analysis/<workload>_gpu_graph_qps_recall.pdf=
+
+** RQ2: Adaptive passing-only traversal
+
+TODO: State where NaviX helps and where it fails within B0.  Separate inability to acquire/use a
+passing frontier from inability to retain a good result.  Do not infer correlation solely from
+global selectivity.
+
+** RQ3: Seed availability
+
+TODO: Compare Base and Retain with/without matched passing seeds at identical =(L,W,budget)=.
+State whether seed access explains the gap and whether the remaining difference is attributable to
+traversal/retention.
+
+** RQ4: Budget sensitivity
+
+TODO: For only the preselected deep pairs, state whether deeper continuation reaches 0.90 and at
+what throughput cost.  A failure to reach target is a result for this graph/implementation/budget
+range, not proof of impossibility.
+
+** RQ5: Exact control
+
+TODO: Report exact throughput with the correct sparse/dense path and timing boundary.  Compare it
+to graph search only as a control/tradeoff, not as if setup and data representations were identical.
+
+** RQ6: CPU algorithmic context
+
+TODO: Describe qualitative curve shapes for FAISS-NaviX and ACORN.  Do not claim a CPU/GPU speedup
+or attribute differences solely to the search policy because graph construction and systems differ.
+
+* Limitations and threats to validity
+
+- *Graph scope:* one CAGRA topology (=G=32=, =IG=64=) is tested.  Results do not establish behavior
+  for other degrees, construction algorithms, or filter-aware graphs.
+- *Kernel scope:* only SINGLE_CTA is frozen.  Batch-one MULTI_CTA latency and MULTI_KERNEL behavior
+  are outside this study.
+- *Predicate representation:* graph-search timing assumes a resident bitmap.  Predicate/UDF
+  evaluation, bitmap creation, transfer, caching, and invalidation costs are excluded.
+- *ID scope:* paper configs require identity source indices.  The results do not validate
+  performance on compacted/remapped indices.
+- *Metric/type scope:* squared L2 and =k=10= only.  YFCC graph search is uint8, while its exact
+  control is float32-converted.
+- *Budget scope:* B0 plus five explicit deep caps is not proof over all possible traversal depths.
+- *Accumulator scope:* Retain is bounded to top-=k= passing results and shares the production
+  traversal; other accumulator capacities/designs are not evaluated.
+- *NaviX scope:* the primary curve freezes adaptive-Kuzu plus the tiled scheduler.  Other NaviX
+  policies are not part of the primary matrix.
+- *Sharding:* YFCC uses five serial calls.  QPS is corrected by total elapsed search time, but launch
+  structure still differs from single-call ArXiv.
+- *Exact memory:* the preflight estimate is conservative and not a measured allocator peak.
+- *Exact YFCC arithmetic:* byte coordinates convert exactly to float, but large expanded-L2
+  intermediates can exceed float's exact-integer range; correctness must be established against GT.
+- *CPU context:* CPU and GPU use different graph families, construction parameters, resource
+  counts, adapters, and timing regions.
+- *Dataset coverage:* two dataset families and four predicate workloads cannot establish universal
+  behavior across all correlations/selectivities.
+- *Preliminary contribution:* failure modes and promising design directions may be stronger than a
+  complete general solution; claims should match the workshop's preliminary-results scope.
+
+* Paper mapping (six-page target)
+
+This report is implementation-first.  A compact paper can map it as follows:
+
+1. *Introduction:* filtered ANN, why filter-agnostic graphs matter, absence of a clear GPU design
+   study, and the retention-vs-exploration decomposition.
+2. *Background:* CAGRA's fused SINGLE_CTA traversal, per-query bitmap filtering, and the
+   pre-/in-/post-filtering taxonomy.
+3. *Design:* CAGRA-Retain, GPU CAGRA-NaviX, strict bitmap seeding, and matched-seed controls.
+4. *Methodology:* workloads, frozen graph/sweep, correctness/provenance gates, timing contracts,
+   exact control, and CPU-context boundary.
+5. *Results:* primary GPU Pareto curves, matched-seed ablation, selected deep results, and exact
+   boundary; CPU context only if space permits.
+6. *Implications:* what remains unresolved by traversal-only methods and why more information-rich
+   predicate-agnostic GPU structures merit investigation.
+
+Related-work claims for CAGRA, NaviX, ACORN, MCI, VecFlow, GARFIELD, JAG, UNG, and the filtered-ANN
+taxonomy must be checked against the cited papers before submission.  Keep filter-aware index
+construction separate from the filter-agnostic focus of this experiment.
+
+* Final artifact index
+
+Fill this only after all gates pass.
+
+| Artifact | Path | SHA-256 / provenance link | Status |
+|-
+| Frozen source archive | TODO | TODO | TODO |
+| GPU run provenance | TODO | TODO | TODO |
+| GPU raw data | TODO | TODO | TODO |
+| GPU analyzed tables | TODO | TODO | TODO |
+| GPU primary figures | TODO | TODO | TODO |
+| GPU seed-control figures | TODO | TODO | TODO |
+| Exact preparation manifests | TODO | TODO | TODO |
+| Exact memory-preflight records | TODO | TODO | TODO |
+| Exact final hash manifest | TODO | TODO | TODO |
+| Exact summary | TODO | TODO | TODO |
+| CPU created/completed manifests | TODO | TODO | TODO or N/A |
+| CPU analysis/figure | TODO | TODO | TODO or N/A |
+| Frozen supporting diagnostics | =benchmarks/retrieve_workshop/evidence/README.org= | SHA-256 inventory in the README | Present; diagnostic-only |
+| Paper source/PDF | TODO | TODO | TODO |
+| Exported handoff DOCX | TODO | TODO | TODO |
+
+* Open decisions before submission
+
+- [ ] Decide the single rule used to select one operating point per method for summary tables.
+- [ ] Decide whether optional deep results belong in the main paper or only an appendix/artifact.
+- [ ] Decide whether exact control is a table or figure.
+- [ ] Decide whether CPU context fits within six pages; if retained, preserve its interpretation
+  boundary in the caption and body.
+- [ ] Decide whether a separately frozen GT-seen/returned diagnostic is essential to the core
+  retention argument.
+- [ ] Verify every dataset/predicate statistic and correlation claim from reproducible analysis.
+- [ ] Confirm graph construction provenance for both CAGRA indices.
+- [ ] Replace all =TODO= markers and run =rg -n 'TODO|VERIFY' THIS_FILE= before export.
+- [ ] Remove author-identifying paths/metadata from the double-blind submission while retaining a
+  private artifact manifest with full provenance.

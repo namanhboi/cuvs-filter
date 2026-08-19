@@ -1,0 +1,42 @@
+#+TITLE: Frozen Supporting Diagnostics
+
+This directory preserves the compact, analyzer-generated evidence used for claims that are not
+recomputed by the final QPS--recall sweep.  The files were copied byte-for-byte on 2026-08-19 from
+the =favor-filtered-search= checkout at =/home/ubuntu/cuvs-filter=; raw multi-megabyte traces and
+result arrays remain in that checkout.  The final paper treats these as separate diagnostics, not
+as points in the three-repetition performance experiment.
+
+=diagnostic_manifest.json= is the machine-readable inventory consumed by the paper staging script.
+The script verifies every listed artifact against its SHA-256 before publishing the final-results
+sentinel, so stale performance summaries cannot be combined with silently changed diagnostics.
+
+* Accumulator and YFCC discovery evidence
+
+- =PASSING_ACCUMULATOR_DESIGN_AND_EVIDENCE_REPORT.org= documents the accumulator design and the
+  GT-seen versus returned-recall measurements.
+- =YFCC_RECALL_ROOT_CAUSE_REPORT.org= documents B0 versus continuous deep traversal.
+- =yfcc_navix/YFCC_NAVIX_ROOT_CAUSE_REPORT.org=, =diagnostic_summary.json=, and
+  =counterfactual_oracle.csv= document the older in-kernel-seeded NaviX diagnostic.  Its oracle is
+  a stratified 18-query hard-case sample and must not be described as representative of all YFCC
+  queries or as the strict bitmap-seeded method used in the final sweep.
+
+* ArXiv-EMIS locality evidence
+
+=emis_locality/EMIS_LOCALITY_DIAGNOSTIC_REPORT.org= and the three JSON summaries document exact
+query-distance locality, graph-edge locality, and traversal counters.  These data motivate a
+region-entry hypothesis; they do not by themselves separate seed quality from traversal.  The
+final matched-seed sweep is the causal control for that distinction.
+
+* SHA-256
+
+| File | SHA-256 |
+|------+----------|
+| =PASSING_ACCUMULATOR_DESIGN_AND_EVIDENCE_REPORT.org= | =fe9d8f42dcdd2dc884473484b0d9cbb7fd43bb92e1ca3b4a1c6e1f3a6f9a12c0= |
+| =YFCC_RECALL_ROOT_CAUSE_REPORT.org= | =9cd2d4991503b3a28584a9f4884206785b25f3fabdd95eeaed93f11ab33651d3= |
+| =yfcc_navix/YFCC_NAVIX_ROOT_CAUSE_REPORT.org= | =fe9c6fdc8ca57a063d5fb7ad12bb2ecd9f94dbb3d0b03ff930f2bcc9c0e9ce97= |
+| =yfcc_navix/diagnostic_summary.json= | =edd38be020e9d4da780dbcb4e4cec7a29eca75e521f95737085d6a181f284d5f= |
+| =yfcc_navix/counterfactual_oracle.csv= | =98bd435d80f4935cf79718dfad9312dd15cbaa10aeda35da49219992b56e659a= |
+| =emis_locality/EMIS_LOCALITY_DIAGNOSTIC_REPORT.org= | =e7a1b7dca91ffde75acf41a82e219bdf35ace42847b1a7cb2ae9e4c2682f5130= |
+| =emis_locality/exact_summary.json= | =ae1b5424939d3a0c374ace73c71c6bc245719de1f2870b0531c35a3363e67976= |
+| =emis_locality/graph_summary.json= | =4edadd37841bce82d83dc2ed9763a1bf1ee04231b518b9bf4fd7169c3a86f336= |
+| =emis_locality/traversal_summary.json= | =173d84ab36e2c4a9f4a245f5630eb108ad1dae23fe9897ee13088f5a11ff81d4= |

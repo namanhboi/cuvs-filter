@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "snapshot_date_utc": "2026-08-19",
+  "source": {
+    "branch": "favor-filtered-search",
+    "git_commit": "9d8820ef9b12649067cfa858a9d6a169a1b6880e",
+    "note": "Analyzer-generated compact diagnostics copied byte-for-byte from the source checkout; SHA-256 values, rather than mutable source paths, define this snapshot."
+  },
+  "artifacts": [
+    {
+      "path": "PASSING_ACCUMULATOR_DESIGN_AND_EVIDENCE_REPORT.org",
+      "sha256": "fe9d8f42dcdd2dc884473484b0d9cbb7fd43bb92e1ca3b4a1c6e1f3a6f9a12c0",
+      "supports": ["yfcc_gt_seen_and_returned_recall", "accumulator_design"]
+    },
+    {
+      "path": "YFCC_RECALL_ROOT_CAUSE_REPORT.org",
+      "sha256": "9cd2d4991503b3a28584a9f4884206785b25f3fabdd95eeaed93f11ab33651d3",
+      "supports": ["yfcc_b0_vs_continuous_traversal", "yfcc_selectivity_distribution"]
+    },
+    {
+      "path": "yfcc_navix/YFCC_NAVIX_ROOT_CAUSE_REPORT.org",
+      "sha256": "fe9c6fdc8ca57a063d5fb7ad12bb2ecd9f94dbb3d0b03ff930f2bcc9c0e9ce97",
+      "supports": ["yfcc_in_kernel_seeded_navix_diagnostic"]
+    },
+    {
+      "path": "yfcc_navix/diagnostic_summary.json",
+      "sha256": "edd38be020e9d4da780dbcb4e4cec7a29eca75e521f95737085d6a181f284d5f",
+      "supports": ["yfcc_frontier_exhaustion_and_underfill"]
+    },
+    {
+      "path": "yfcc_navix/counterfactual_oracle.csv",
+      "sha256": "98bd435d80f4935cf79718dfad9312dd15cbaa10aeda35da49219992b56e659a",
+      "supports": ["yfcc_stratified_18_query_hard_case_oracle"]
+    },
+    {
+      "path": "emis_locality/EMIS_LOCALITY_DIAGNOSTIC_REPORT.org",
+      "sha256": "e7a1b7dca91ffde75acf41a82e219bdf35ace42847b1a7cb2ae9e4c2682f5130",
+      "supports": ["emis_locality_interpretation"]
+    },
+    {
+      "path": "emis_locality/exact_summary.json",
+      "sha256": "ae1b5424939d3a0c374ace73c71c6bc245719de1f2870b0531c35a3363e67976",
+      "supports": ["emis_distance_filter_correlation"]
+    },
+    {
+      "path": "emis_locality/graph_summary.json",
+      "sha256": "4edadd37841bce82d83dc2ed9763a1bf1ee04231b518b9bf4fd7169c3a86f336",
+      "supports": ["emis_passing_edge_lift_and_component"]
+    },
+    {
+      "path": "emis_locality/traversal_summary.json",
+      "sha256": "173d84ab36e2c4a9f4a245f5630eb108ad1dae23fe9897ee13088f5a11ff81d4",
+      "supports": ["emis_traversal_counters"]
+    }
+  ]
+}

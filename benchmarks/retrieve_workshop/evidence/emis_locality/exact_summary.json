@@ -1,0 +1,44 @@
+{
+  "queries": 10000,
+  "base_rows": 100000,
+  "dimensions": 4096,
+  "categories": 37,
+  "mean_selectivity": 0.152429374,
+  "min_selectivity": 0.00016,
+  "max_selectivity": 0.27645,
+  "exact_gt_order_matches": 9994,
+  "exact_gt_set_matches": 10000,
+  "bitmap_validation": {
+    "rows": 10000,
+    "cols": 100000,
+    "mismatched_rows": 0
+  },
+  "distance_lift": {
+    "32": 1.3654889444077885,
+    "64": 1.3714138194912484,
+    "128": 1.373248685650313,
+    "256": 1.3746940271499113,
+    "512": 1.3753449433571772,
+    "1024": 1.3772996139756501
+  },
+  "distance_lift_query_median": {
+    "32": 0.0,
+    "64": 0.1084918761283155,
+    "128": 0.12357639987345777,
+    "256": 0.1544704998418222,
+    "512": 0.19308812480227777,
+    "1024": 0.2338760643959553
+  },
+  "distance_lift_query_fraction_below_one": {
+    "32": 0.7635,
+    "64": 0.7631,
+    "128": 0.7615,
+    "256": 0.7583,
+    "512": 0.7551,
+    "1024": 0.746
+  },
+  "gt1_rank_ratio_median": 5.42266,
+  "gt10_rank_ratio_median": 4.93449,
+  "gt10_rank_ratio_p90": 35.63865200000001,
+  "permutations": 200
+}
