@@ -37,6 +37,27 @@ ACORN_SEED_LABELS = {
         "acorn_1", "acorn_1_navix_seeded", "acorn_gamma", "acorn_gamma_navix_seeded"
     )
 }
+NAVIX_POLICY_LABELS = {
+    "one_hop": "Forced one hop",
+    "directed_capped": "Forced directed two hop",
+    "blind_capped": "Forced blind two hop",
+    "adaptive_kuzu": "Adaptive Kuzu",
+    "adaptive_paper": "Adaptive paper",
+}
+NAVIX_POLICY_COLORS = {
+    "one_hop": "#4c78a8",
+    "directed_capped": "#e45756",
+    "blind_capped": "#59a14f",
+    "adaptive_kuzu": "#f58518",
+    "adaptive_paper": "#b279a2",
+}
+NAVIX_POLICY_MARKERS = {
+    "one_hop": "o",
+    "directed_capped": "D",
+    "blind_capped": "v",
+    "adaptive_kuzu": "^",
+    "adaptive_paper": "s",
+}
 COLORS = {
     "default_cagra": "#4c78a8", "default_cagra_accumulator": "#e45756",
     "navix_reference": "#f58518", "navix_optimized": "#54a24b",
@@ -67,6 +88,7 @@ class GPUPoint:
     workload: str
     shard: str
     method: str
+    policy: str
     queries: int
     recall: float
     qps: float
@@ -86,6 +108,7 @@ class Aggregate:
     group: str
     workload: str
     method: str
+    policy: str
     queries: int
     shards: int
     recall: float
@@ -116,7 +139,7 @@ def gpu_points(root: Path) -> list[GPUPoint]:
                 continue
             result.append(
                 GPUPoint(
-                    group, workload, path.stem, method,
+                    group, workload, path.stem, method, label_value(label, "navix_mode"),
                     round(number(row, "n_queries", path)), number(row, "Recall", path),
                     number(row, "items_per_second", path), round(number(row, "itopk", path)),
                     round(number(row, "search_width", path)),
@@ -136,16 +159,19 @@ def gpu_points(root: Path) -> list[GPUPoint]:
 def aggregate_gpu(points: list[GPUPoint]) -> list[Aggregate]:
     groups: dict[tuple, list[GPUPoint]] = {}
     for p in points:
-        key = (p.group, p.workload, p.method, p.itopk, p.width, p.max_iterations, p.block_size)
+        key = (
+            p.group, p.workload, p.method, p.policy,
+            p.itopk, p.width, p.max_iterations, p.block_size,
+        )
         groups.setdefault(key, []).append(p)
     rows = []
     for key, members in sorted(groups.items()):
-        group, workload, method, L, W, iterations, threads = key
+        group, workload, method, policy, L, W, iterations, threads = key
         queries = sum(x.queries for x in members)
         seconds = sum(x.queries / x.qps for x in members)
         recall = sum(x.recall * x.queries for x in members) / queries
         rows.append(Aggregate(
-            "GPU", group, workload, method, queries, len(members), recall, queries / seconds,
+            "GPU", group, workload, method, policy, queries, len(members), recall, queries / seconds,
             f"L={L},W={W},iterations={iterations},threads={threads}",
             sum(x.filter_violations for x in members), sum(x.sentinel_errors for x in members),
             sum(x.underfilled_queries for x in members),
@@ -186,7 +212,7 @@ def aggregate_cpu(root: Path) -> list[Aggregate]:
                 seconds = sum(float(x["search_seconds"]) for x in members)
                 recall = sum(float(x["recall"]) * int(x["queries"]) for x in members) / queries
                 rows.append(Aggregate(
-                    "CPU", "ef_search", workload, method, queries, len(members), recall,
+                    "CPU", "ef_search", workload, method, "", queries, len(members), recall,
                     queries / seconds, parameter,
                     sum(float(x["filter_violations"]) for x in members),
                     sum(float(x.get("sentinel_error_queries", 0)) for x in members),
@@ -222,7 +248,7 @@ def draw(path: Path, workload: str, rows: list[Aggregate], labels: dict[str, str
     minimum = min(x.recall for x in selected)
     ax.set_xlim(max(0, minimum - .02), 1.0)
     ax.set_ylim(bottom=0)
-    ax.set_xlabel("Recall@10")
+    ax.set_xlabel("Recall@10", loc="center")
     ax.set_ylabel("Queries per second")
     ax.set_title(f"{WORKLOAD_LABELS[workload]}: {title}")
     ax.grid(alpha=.25)
@@ -230,6 +256,70 @@ def draw(path: Path, workload: str, rows: list[Aggregate], labels: dict[str, str
     fig.tight_layout()
     fig.savefig(path, dpi=180)
     plt.close(fig)
+
+
+def draw_navix_policies(path: Path, workload: str, rows: list[Aggregate]) -> None:
+    selected = [
+        x for x in rows
+        if x.workload == workload
+        and x.method == "navix_reference"
+        and x.policy in NAVIX_POLICY_LABELS
+    ]
+    if not selected:
+        return
+    fig, ax = plt.subplots(figsize=(9.4, 5.5))
+    for policy, label in NAVIX_POLICY_LABELS.items():
+        policy_rows = [x for x in selected if x.policy == policy]
+        if not policy_rows:
+            continue
+        color = NAVIX_POLICY_COLORS[policy]
+        marker = NAVIX_POLICY_MARKERS[policy]
+        ax.scatter(
+            [x.recall for x in policy_rows], [x.qps for x in policy_rows],
+            color=color, marker=marker, alpha=.25, s=30,
+        )
+        front = pareto(policy_rows)
+        ax.plot(
+            [x.recall for x in front], [x.qps for x in front],
+            color=color, marker=marker, linewidth=2, label=label,
+        )
+    minimum = min(x.recall for x in selected)
+    ax.set_xlim(max(0, minimum - .02), 1.0)
+    ax.set_ylim(bottom=0)
+    ax.set_xlabel("Recall@10", loc="center")
+    ax.set_ylabel("Queries per second")
+    ax.set_title(f"{WORKLOAD_LABELS[workload]}: GPU NaviX policies, 10,000 queries, B0")
+    ax.grid(alpha=.25)
+    ax.legend(fontsize=9)
+    fig.tight_layout()
+    fig.savefig(path, dpi=180)
+    plt.close(fig)
+
+
+def validate_policy_sweep(rows: list[Aggregate]) -> None:
+    if not rows:
+        return
+    expected_policies = set(NAVIX_POLICY_LABELS)
+    for workload in WORKLOADS:
+        workload_rows = [x for x in rows if x.workload == workload]
+        policies = {x.policy for x in workload_rows}
+        if policies != expected_policies or len(workload_rows) != 30:
+            raise ValueError(
+                f"{workload} policy sweep has {len(workload_rows)} points and policies "
+                f"{sorted(policies)}; expected 30 points over {sorted(expected_policies)}"
+            )
+        expected_shards = 5 if workload == "yfcc" else 1
+        for row in workload_rows:
+            if row.queries != 10000 or row.shards != expected_shards:
+                raise ValueError(
+                    f"incomplete {workload}/{row.policy}/{row.parameter}: "
+                    f"queries={row.queries}, shards={row.shards}"
+                )
+            errors = row.filter_violations + row.sentinel_errors + row.duplicate_output_queries
+            if errors:
+                raise ValueError(
+                    f"correctness error in {workload}/{row.policy}/{row.parameter}: {errors}"
+                )
 
 
 def write_csv(path: Path, rows: list) -> None:
@@ -256,10 +346,14 @@ def main() -> None:
     args.output.mkdir(parents=True, exist_ok=True)
 
     points = [point for root in args.gpu_results for point in gpu_points(root)]
-    gpu = [x for x in aggregate_gpu(points) if x.group.startswith("sweep_")]
+    gpu_all = aggregate_gpu(points)
+    gpu = [x for x in gpu_all if x.group.startswith("sweep_")]
+    gpu_policy = [x for x in gpu_all if x.group == "navix_policy_b0"]
+    validate_policy_sweep(gpu_policy)
     cpu = aggregate_cpu(args.cpu_artifacts)
     write_csv(args.output / "gpu_points.csv", points)
     write_csv(args.output / "gpu_aggregate.csv", gpu)
+    write_csv(args.output / "gpu_navix_policy_aggregate.csv", gpu_policy)
     write_csv(args.output / "cpu_aggregate.csv", cpu)
     for workload in WORKLOADS:
         draw(args.output / f"{workload}_gpu_qps_recall.png", workload, gpu, GPU_PRIMARY_LABELS,
@@ -270,12 +364,18 @@ def main() -> None:
              ACORN_SEED_LABELS, "ACORN deterministic-seed ablation, 10,000 queries")
         draw(args.output / f"{workload}_cpu_gpu_overlay.png", workload, gpu + cpu,
              {**GPU_PRIMARY_LABELS, **CPU_LABELS}, "absolute CPU/GPU QPS (appendix)")
+        draw_navix_policies(
+            args.output / f"{workload}_gpu_navix_policy_qps_recall.png",
+            workload,
+            gpu_policy,
+        )
     violations = sum(
         x.filter_violations + x.sentinel_errors + x.duplicate_output_queries
-        for x in gpu + cpu
+        for x in gpu + gpu_policy + cpu
     )
     summary = {
         "gpu_raw_points": len(points), "gpu_aggregate_points": len(gpu),
+        "gpu_navix_policy_aggregate_points": len(gpu_policy),
         "cpu_aggregate_points": len(cpu), "correctness_error_total": violations,
     }
     (args.output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")

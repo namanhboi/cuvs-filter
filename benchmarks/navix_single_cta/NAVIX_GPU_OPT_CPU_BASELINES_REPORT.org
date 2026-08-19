@@ -4,10 +4,10 @@
 * Status
 
 This report is the canonical implementation and evaluation artifact.  The implementation is
-complete.  GPU correctness, the complete B0 sweep, two optimization-ablation gates, all native CPU
-graphs, the =8/16/32=-thread scaling gate, deterministic-seed ablations, and every conditional deep
-sweep are complete.  The original plan is retained so deviations and rejected optimizations remain
-auditable.
+complete.  GPU correctness, the complete primary and five-policy B0 sweeps, two
+optimization-ablation gates, all native CPU graphs, the =8/16/32=-thread scaling gate,
+deterministic-seed ablations, and every conditional deep sweep are complete.  The original plan is
+retained so deviations and rejected optimizations remain auditable.
 
 * Research questions
 
@@ -298,6 +298,11 @@ three YFCC =W=2= cells by at most 0.00014 recall; it was therefore rejected on s
 performance.  A subsequent corrected direct-lookup gate and the final lazy-initialization gate are
 bit-for-bit identical to the reference outputs.
 
+The matched 10,000-query GPU policy sweep contributes 120 aggregates: five policies times six
+=(L,W)= cells on each of four workloads.  Every aggregate covers exactly 10,000 queries (five
+disjoint YFCC shards or one ArXiv shard) and has zero filter violations and zero invalid-sentinel
+errors.  Intrinsic underfill is preserved and reported rather than treated as malformed output.
+
 Both CPU runners pass their native self-tests.  The FAISS test proves the degree-derived workspace,
 an unaligned 3-by-37 bitmap, and the regression where a passing upper-layer entry point also occurs
 in the deterministic ten-ID seed prefix without producing a duplicate result.  The ACORN test
@@ -412,6 +417,36 @@ sparse tail.
 
 #+caption: ArXiv-R GPU B0 Pareto frontier.
 [[file:results_gpu_opt_20260818_0100/analysis/r_gpu_qps_recall.png]]
+
+** GPU NaviX policy comparison
+
+This matched sweep uses the accepted reference kernel, tiled scheduler, strict bitmap seeds, B0,
+and the same six =(L,W)= cells for every policy.  The earlier 1,000-query policy points remain
+correctness evidence only and are excluded from these throughput frontiers.
+
+| Workload | Fastest useful high-recall policy | Highest-recall policy point | Verdict |
+|----------+------------------------------------+-----------------------------+---------|
+| YFCC | Blind: 9,036 QPS at 0.70380 | Directed: 0.70395 at 8,137 QPS | Blind obtains effectively the same ceiling 11.0% faster; no policy reaches 0.90. |
+| EM | Adaptive Kuzu: 11,909 QPS at 0.98957 | Blind/directed: 0.99960; blind is 2,033 QPS versus 800 | Adaptive Kuzu leads near 0.99; blind dominates the extreme-recall endpoint. |
+| EMIS | Blind: 12,966 QPS at 0.97275 | Directed: 0.99901 at 849 QPS | Blind dominates through 0.99873; directed buys only the final 0.00028 recall at large cost. |
+| R | Adaptive Kuzu: 14,643 QPS at 0.98907 | Blind/directed: 0.99987; blind is 2,137 QPS versus 844 | Adaptive Kuzu leads near 0.99 and blind dominates the highest-recall region. |
+
+Forced one hop provides the fast, lower-recall end of every frontier.  Across the useful
+high-recall region, blind two hop is the strongest general policy.  Adaptive Kuzu reduces work and
+wins at intermediate recall on EM and R, while directed two hop is justified only when the last
+small recall increment matters.  Adaptive-paper thresholds do not produce a universal advantage.
+
+#+caption: YFCC-10M GPU NaviX policy B0 Pareto frontiers.
+[[file:results_gpu_opt_20260818_0100/analysis/yfcc_gpu_navix_policy_qps_recall.png]]
+
+#+caption: ArXiv-EM GPU NaviX policy B0 Pareto frontiers.
+[[file:results_gpu_opt_20260818_0100/analysis/em_gpu_navix_policy_qps_recall.png]]
+
+#+caption: ArXiv-EMIS GPU NaviX policy B0 Pareto frontiers.
+[[file:results_gpu_opt_20260818_0100/analysis/emis_gpu_navix_policy_qps_recall.png]]
+
+#+caption: ArXiv-R GPU NaviX policy B0 Pareto frontiers.
+[[file:results_gpu_opt_20260818_0100/analysis/r_gpu_navix_policy_qps_recall.png]]
 
 * CPU baseline implementation and results
 
@@ -591,6 +626,13 @@ deeper FAISS-NaviX still reaches 0.797, and neither method reaches 0.90 despite 
 15.42 GB and taking 6.26 hours to construct.  ACORN-1 remains noncompetitive even after matched
 seeding.
 
+The GPU policy sweep further shows that the adaptive decision is a throughput optimization, not a
+recall requirement.  Forced blind two hop is the strongest general high-recall policy and is much
+faster than forced directed expansion at comparable recall.  Adaptive Kuzu improves the
+intermediate-recall frontier on EM and R, but policy selection barely changes YFCC's approximately
+0.704 ceiling.  YFCC is therefore not failing because the adaptive thresholds choose the wrong
+two-hop variant.
+
 Therefore the actionable GPU conclusion is twofold.  First, there is no retained low-level NaviX
 kernel optimization from this study: the reference fused kernel is already efficient for the safe
 changes tested.  Second, filter-aware traversal is highly valuable on correlated EMIS but neither
@@ -618,6 +660,8 @@ GPU configurations and stages:
 ./benchmarks/navix_single_cta/run_optimization_experiment.sh correctness
 ./benchmarks/navix_single_cta/run_optimization_experiment.sh performance_gate
 ./benchmarks/navix_single_cta/run_optimization_experiment.sh b0
+NAVIX_RESULT_ROOT=$PWD/benchmarks/navix_single_cta/results_gpu_navix_policy_20260819_193657 \
+  ./benchmarks/navix_single_cta/run_optimization_experiment.sh policy_b0
 #+end_src
 
 CPU self-tests and baselines:
@@ -643,6 +687,7 @@ Plotting and DOCX export:
 #+begin_src sh
 python benchmarks/navix_single_cta/analyze_optimization.py \
   --gpu-results benchmarks/navix_single_cta/results_gpu_opt_20260818_0100 \
+  --gpu-results benchmarks/navix_single_cta/results_gpu_navix_policy_20260819_193657 \
   --cpu-artifacts /home/ubuntu/navix_cpu_artifacts \
   --output benchmarks/navix_single_cta/results_gpu_opt_20260818_0100/analysis
 pandoc benchmarks/navix_single_cta/NAVIX_GPU_OPT_CPU_BASELINES_REPORT.org \
