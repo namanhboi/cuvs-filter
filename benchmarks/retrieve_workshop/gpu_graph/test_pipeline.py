@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 import csv
 import json
 import math
@@ -100,7 +101,15 @@ def generate(root: Path, data: Path, *extra: str) -> None:
     provenance = root / "provenance" / "run.json"
     provenance.parent.mkdir(parents=True, exist_ok=True)
     provenance.write_text(
-        json.dumps({"schema_version": 1, "data_root": str(data.resolve())})
+        json.dumps(
+            {
+                "schema_version": 2,
+                "data_root": str(data.resolve()),
+                "fixed_contract": {
+                    "output_set_semantics": "distinct_valid_output_ids_v1"
+                },
+            }
+        )
         + "\n"
     )
 
@@ -185,6 +194,7 @@ def write_synthetic_raw(result_root: Path, group: str) -> None:
                             "FilterViolations": 0,
                             "InvalidSentinelErrors": 0,
                             "DuplicateOutputQueries": 0,
+                            "OutputSetSemanticsVersion": 1,
                             "UnderfilledQueries": 0,
                             "MissingResultSlots": 0,
                             "label": benchmark_label(method),
@@ -303,7 +313,8 @@ class PipelineTest(unittest.TestCase):
             # weighted by shard query count; simply summing shard fractions is incorrect.
             gt_fractions = (1.0, 0.8, 0.6, 0.4, 0.2)
             gt_recalls = (0.1, 0.2, 0.3, 0.4, 0.5)
-            underfill_rates = (0.0, 0.1, 0.2, 0.3, 0.4)
+            underfill_rates = (0.05, 0.1, 0.2, 0.3, 0.4)
+            duplicate_rates = (0.01, 0.02, 0.03, 0.04, 0.05)
             for shard_index in range(5):
                 raw_path = (
                     root
@@ -323,6 +334,9 @@ class PipelineTest(unittest.TestCase):
                         row["ValidGTRecall"] = gt_recalls[shard_index]
                         row["ValidGTFraction"] = gt_fractions[shard_index]
                         row["UnderfilledQueries"] = underfill_rates[shard_index]
+                        row["DuplicateOutputQueries"] = duplicate_rates[
+                            shard_index
+                        ]
                 raw_path.write_text(json.dumps(payload) + "\n")
             env = dict(os.environ, MPLBACKEND="Agg")
             subprocess.run(
@@ -378,6 +392,10 @@ class PipelineTest(unittest.TestCase):
                 count * rate
                 for count, rate in zip(shard_counts, underfill_rates)
             ) / sum(shard_counts)
+            expected_duplicate_rate = sum(
+                count * rate
+                for count, rate in zip(shard_counts, duplicate_rates)
+            ) / sum(shard_counts)
             self.assertTrue(
                 math.isclose(
                     float(selected["recall_median"]),
@@ -392,6 +410,13 @@ class PipelineTest(unittest.TestCase):
                     rel_tol=1e-12,
                 )
             )
+            self.assertTrue(
+                math.isclose(
+                    float(selected["duplicate_output_query_rate_max"]),
+                    expected_duplicate_rate,
+                    rel_tol=1e-12,
+                )
+            )
             summary = json.loads(
                 (root / "analysis" / "summary.json").read_text()
             )
@@ -403,6 +428,7 @@ class PipelineTest(unittest.TestCase):
             self.assertIn(
                 "QPS=10000/sum(shard_seconds)", provenance["timing_contract"]
             )
+            self.assertIn("distinct output ID", provenance["recall_contract"])
 
     def test_analyzer_rejects_filter_violation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -461,6 +487,167 @@ class PipelineTest(unittest.TestCase):
             )
             self.assertNotEqual(completed.returncode, 0)
             self.assertIn("missing DuplicateOutputQueries", completed.stderr)
+
+    def test_analyzer_requires_and_validates_distinct_underfill_counters(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            data = root / "data"
+            make_source_manifests(data)
+            generate(root, data)
+            write_synthetic_raw(root, "b0")
+            target = root / "raw" / "b0" / "r" / "shard_00.json"
+            original = json.loads(target.read_text())
+            command = [
+                PYTHON,
+                str(SCRIPT_DIR / "analyze_gpu_graph.py"),
+                "--result-root",
+                str(root),
+                "--require-group",
+                "b0",
+                "--no-plots",
+            ]
+            env = dict(os.environ, MPLBACKEND="Agg")
+
+            for key in ("UnderfilledQueries", "MissingResultSlots"):
+                payload = copy.deepcopy(original)
+                del payload["benchmarks"][0][key]
+                target.write_text(json.dumps(payload) + "\n")
+                completed = subprocess.run(
+                    command,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertNotEqual(completed.returncode, 0)
+                self.assertIn(f"missing {key}", completed.stderr)
+
+            for key, value in (
+                ("UnderfilledQueries", 1.01),
+                ("MissingResultSlots", -0.01),
+            ):
+                payload = copy.deepcopy(original)
+                payload["benchmarks"][0][key] = value
+                target.write_text(json.dumps(payload) + "\n")
+                completed = subprocess.run(
+                    command,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertNotEqual(completed.returncode, 0)
+                self.assertIn("invalid duplicate/underfill", completed.stderr)
+
+            payload = copy.deepcopy(original)
+            base = next(
+                row
+                for row in payload["benchmarks"]
+                if 'bitmap_method="default_cagra"' in row["label"]
+            )
+            base["DuplicateOutputQueries"] = 0.2
+            base["UnderfilledQueries"] = 0.1
+            target.write_text(json.dumps(payload) + "\n")
+            completed = subprocess.run(
+                command,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn("exceeds unique-underfill", completed.stderr)
+
+    def test_analyzer_reports_native_base_duplicates_but_rejects_new_paths(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            data = root / "data"
+            make_source_manifests(data)
+            generate(root, data)
+            write_synthetic_raw(root, "b0")
+            target = root / "raw" / "b0" / "emis" / "shard_00.json"
+            payload = json.loads(target.read_text())
+            base = next(
+                row
+                for row in payload["benchmarks"]
+                if 'bitmap_method="default_cagra"' in row["label"]
+            )
+            base["DuplicateOutputQueries"] = 0.031
+            base["UnderfilledQueries"] = 0.04
+            seeded_base = next(
+                row
+                for row in payload["benchmarks"]
+                if 'bitmap_method="default_cagra_seeded"' in row["label"]
+            )
+            seeded_base["DuplicateOutputQueries"] = 0.021
+            seeded_base["UnderfilledQueries"] = 0.03
+            target.write_text(json.dumps(payload) + "\n")
+            command = [
+                PYTHON,
+                str(SCRIPT_DIR / "analyze_gpu_graph.py"),
+                "--result-root",
+                str(root),
+                "--require-group",
+                "b0",
+                "--no-plots",
+            ]
+            completed = subprocess.run(
+                command,
+                env=dict(os.environ, MPLBACKEND="Agg"),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            summary = json.loads((root / "analysis" / "summary.json").read_text())
+            self.assertEqual(summary["correctness_error_total"], 0)
+            self.assertGreater(summary["native_base_duplicate_query_rate_max"], 0)
+
+            for method in (
+                "default_cagra_accumulator",
+                "default_cagra_accumulator_seeded",
+                "navix_reference",
+            ):
+                invalid = copy.deepcopy(payload)
+                row = next(
+                    item
+                    for item in invalid["benchmarks"]
+                    if f'bitmap_method="{method}"' in item["label"]
+                )
+                row["DuplicateOutputQueries"] = 0.001
+                row["UnderfilledQueries"] = 0.001
+                row["MissingResultSlots"] = 0.001
+                target.write_text(json.dumps(invalid) + "\n")
+                completed = subprocess.run(
+                    command,
+                    env=dict(os.environ, MPLBACKEND="Agg"),
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertNotEqual(completed.returncode, 0)
+                self.assertIn("correctness failure", completed.stderr)
+
+            invalid_rate = copy.deepcopy(payload)
+            next(
+                item
+                for item in invalid_rate["benchmarks"]
+                if 'bitmap_method="default_cagra"' in item["label"]
+            )["DuplicateOutputQueries"] = -0.01
+            target.write_text(json.dumps(invalid_rate) + "\n")
+            completed = subprocess.run(
+                command,
+                env=dict(os.environ, MPLBACKEND="Agg"),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn("invalid duplicate/underfill", completed.stderr)
 
 
 if __name__ == "__main__":

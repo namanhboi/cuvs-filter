@@ -6,6 +6,7 @@
 
 #include "ann_types.hpp"
 #include "blob.hpp"
+#include "output_set_metrics.hpp"
 
 #include <atomic>
 #include <cstdint>
@@ -123,9 +124,11 @@ struct ground_truth_map {
   {
     if (query_idx >= gt_maps_.size() || gt_maps_[query_idx].empty()) return {0, 0};
 
+    // Recall is set-valued: a repeated output ID must not receive multiple match credits.
     size_t matching = 0;
     for (uint32_t i = 0; i < k; ++i) {
       auto act_idx = candidates[i];
+      if (!detail::is_first_output_occurrence(candidates, i)) { continue; }
       if (gt_maps_[query_idx].count(act_idx) &&
           static_cast<uint32_t>(gt_maps_[query_idx].at(act_idx)) < k) {
         ++matching;
@@ -144,20 +147,19 @@ struct ground_truth_map {
   {
     if (query_idx >= gt_maps_.size() || gt_maps_[query_idx].empty()) return {0, 0};
 
-    auto is_valid = [base_rows](auto id) {
-      return static_cast<std::uint64_t>(id) < static_cast<std::uint64_t>(base_rows);
-    };
+    // Keep the valid-GT metric set-valued for underfilled filtered outputs as well.
     size_t matching = 0;
     for (uint32_t i = 0; i < k; ++i) {
       auto act_idx = candidates[i];
-      if (is_valid(act_idx) && gt_maps_[query_idx].count(act_idx) &&
+      if (!detail::is_first_output_occurrence(candidates, i)) { continue; }
+      if (detail::is_valid_source_id(act_idx, base_rows) && gt_maps_[query_idx].count(act_idx) &&
           static_cast<uint32_t>(gt_maps_[query_idx].at(act_idx)) < k) {
         ++matching;
       }
     }
     size_t total = 0;
     for (auto const& [id, rank] : gt_maps_[query_idx]) {
-      total += is_valid(id) && static_cast<uint32_t>(rank) < k;
+      total += detail::is_valid_source_id(id, base_rows) && static_cast<uint32_t>(rank) < k;
     }
     return {matching, total};
   }

@@ -258,11 +258,23 @@ class favor_diagnostic_session {
     }
 
     for (std::uint32_t query = 0; query < num_queries; ++query) {
+      if (summaries_host[query].schema != favor_diag::schema_version ||
+          summaries_host[query].query_id != query) {
+        throw std::runtime_error(
+          "diagnostic device/host schema or query identity mismatch; rebuild all CAGRA JIT kernels");
+      }
       std::uint32_t matches       = 0;
       std::uint32_t valid_outputs = 0;
       for (std::uint32_t rank = 0; rank < topk; ++rank) {
         const auto candidate = result_indices_host[static_cast<std::uint64_t>(query) * topk + rank];
-        valid_outputs += candidate >= 0 && candidate < dataset_size;
+        const bool valid = candidate >= 0 && candidate < dataset_size;
+        bool first_occurrence = valid;
+        for (std::uint32_t prior = 0; valid && prior < rank; ++prior) {
+          first_occurrence &=
+            result_indices_host[static_cast<std::uint64_t>(query) * topk + prior] != candidate;
+        }
+        if (!first_occurrence) { continue; }
+        ++valid_outputs;
         for (std::uint32_t gt_rank = 0; gt_rank < favor_diag::ground_truth_k; ++gt_rank) {
           if (candidate ==
               ground_truth_host[static_cast<std::uint64_t>(query) * favor_diag::ground_truth_k +
@@ -458,6 +470,7 @@ class favor_diagnostic_session {
              << "  \"variant\": \"" << config_.variant << "\",\n"
              << "  \"num_queries\": " << num_queries << ",\n"
              << "  \"topk\": " << topk << ",\n"
+             << "  \"output_set_semantics\": \"distinct_valid_output_ids_v1\",\n"
              << "  \"dataset_size\": " << dataset_size << ",\n"
              << "  \"graph_degree\": " << graph_degree << ",\n"
              << "  \"search_width\": " << search_width << ",\n"

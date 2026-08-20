@@ -5,12 +5,10 @@ from __future__ import annotations
 
 import argparse
 import csv
-import io
 import json
 import math
 import signal
 import statistics
-import struct
 import subprocess
 import sys
 from collections import Counter
@@ -63,8 +61,15 @@ CANDIDATE_DTYPE = np.dtype(
 def load_manifest(run: Path) -> dict:
     with (run / "manifest.json").open() as f:
         manifest = json.load(f)
-    if manifest.get("schema_version") not in (2, 3, 4, 5):
+    schema = manifest.get("schema_version")
+    if schema not in (2, 3, 4, 5, 6, 7):
         raise ValueError(f"unsupported schema version: {manifest.get('schema_version')}")
+    if (
+        schema == 7
+        and manifest.get("output_set_semantics")
+        != "distinct_valid_output_ids_v1"
+    ):
+        raise ValueError("schema 7 requires distinct-valid-output set semantics")
     return manifest
 
 

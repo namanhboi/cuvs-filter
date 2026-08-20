@@ -55,6 +55,12 @@ def main() -> None:
     )
     if destination.is_file():
         payload = json.loads(destination.read_text())
+        if (
+            payload.get("schema_version") != 2
+            or payload.get("fixed_contract", {}).get("output_set_semantics")
+            != "distinct_valid_output_ids_v1"
+        ):
+            raise ValueError("result root uses legacy output/recall semantics")
         old_hashes = (
             payload["benchmark_binary"]["sha256"],
             payload["libcuvs"]["sha256"],
@@ -72,7 +78,7 @@ def main() -> None:
         git_head = command("git", "-C", str(args.repo), "rev-parse", "HEAD")
         git_status = command("git", "-C", str(args.repo), "status", "--short")
         payload = {
-            "schema_version": 1,
+            "schema_version": 2,
             "experiment": "retrieve_workshop_gpu_graph",
             "created_utc": datetime.now(timezone.utc).isoformat(),
             "host": platform.node(),
@@ -99,6 +105,7 @@ def main() -> None:
                 "throughput_queries": 10000,
                 "correctness_queries": 1000,
                 "timing": "complete cuVS-bench search call; setup and index loading excluded",
+                "output_set_semantics": "distinct_valid_output_ids_v1",
             },
             "events": [],
         }

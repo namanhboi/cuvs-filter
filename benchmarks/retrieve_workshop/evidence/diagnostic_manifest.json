@@ -4,18 +4,33 @@
   "source": {
     "branch": "favor-filtered-search",
     "git_commit": "9d8820ef9b12649067cfa858a9d6a169a1b6880e",
-    "note": "Analyzer-generated compact diagnostics copied byte-for-byte from the source checkout; SHA-256 values, rather than mutable source paths, define this snapshot."
+    "note": "Historical compact diagnostics are copied byte-for-byte from the source checkout; deterministic workload statistics are derived from SHA-256-bound resident bitmaps in the isolated experiment checkout. Artifact SHA-256 values define this snapshot."
   },
   "artifacts": [
     {
       "path": "PASSING_ACCUMULATOR_DESIGN_AND_EVIDENCE_REPORT.org",
       "sha256": "fe9d8f42dcdd2dc884473484b0d9cbb7fd43bb92e1ca3b4a1c6e1f3a6f9a12c0",
-      "supports": ["yfcc_gt_seen_and_returned_recall", "accumulator_design"]
+      "supports": ["accumulator_design"]
     },
     {
       "path": "YFCC_RECALL_ROOT_CAUSE_REPORT.org",
       "sha256": "9cd2d4991503b3a28584a9f4884206785b25f3fabdd95eeaed93f11ab33651d3",
-      "supports": ["yfcc_b0_vs_continuous_traversal", "yfcc_selectivity_distribution"]
+      "supports": ["yfcc_b0_vs_continuous_traversal"]
+    },
+    {
+      "path": "workload_selectivity_summary.json",
+      "sha256": "fac7ae3d671f28f7083450af8a0043635465bab5e1c039c86cb96952aeaa61cb",
+      "supports": ["workload_selectivity_distribution", "yfcc_selectivity_distribution"]
+    },
+    {
+      "path": "summarize_bitmap_selectivity.py",
+      "sha256": "ef08f1f23eefb503760cb0265a06240d640f6bafd1cdf6d6913dac61d70144cb",
+      "supports": ["workload_selectivity_derivation"]
+    },
+    {
+      "path": "test_summarize_bitmap_selectivity.py",
+      "sha256": "2fd36cc5dd7cde1f78ae43454525d991b4fce695942a8e6303a540474c6dd65f",
+      "supports": ["workload_selectivity_derivation_test"]
     },
     {
       "path": "yfcc_navix/YFCC_NAVIX_ROOT_CAUSE_REPORT.org",

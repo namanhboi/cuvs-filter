@@ -6,6 +6,7 @@
 #include <cuvs/core/bitmap.hpp>
 #include <cuvs/neighbors/cagra.hpp>
 
+#include "../../../bench/ann/src/common/output_set_metrics.hpp"
 #include "../../../src/neighbors/cagra_benchmark.hpp"
 #include "../../../src/neighbors/detail/cagra/navix_bitmap_seeds.cuh"
 #include "../../../src/neighbors/detail/cagra/sample_filter_utils.cuh"
@@ -1032,6 +1033,23 @@ TEST_P(CagraBitmapFilterTest, RejectsShapeAndUnsupportedModes)
     auto invalid_rate_params = params(k, invalid_rate);
     EXPECT_THROW(search_dynamic(res, valid_filter, invalid_rate_params), std::exception);
   }
+}
+
+TEST(CagraBitmapRecallAccounting, TreatsOutputsAsASetAndRejectsSentinels)
+{
+  const std::int64_t signed_outputs[] = {7, 7, -1, 768, 769};
+  EXPECT_TRUE(cuvs::bench::detail::is_first_output_occurrence(signed_outputs, 0));
+  EXPECT_FALSE(cuvs::bench::detail::is_first_output_occurrence(signed_outputs, 1));
+  EXPECT_TRUE(cuvs::bench::detail::is_first_output_occurrence(signed_outputs, 2));
+  EXPECT_TRUE(cuvs::bench::detail::is_valid_source_id(signed_outputs[0], 769));
+  EXPECT_FALSE(cuvs::bench::detail::is_valid_source_id(signed_outputs[2], 769));
+  EXPECT_TRUE(cuvs::bench::detail::is_valid_source_id(signed_outputs[3], 769));
+  EXPECT_FALSE(cuvs::bench::detail::is_valid_source_id(signed_outputs[4], 769));
+
+  const std::uint32_t unsigned_outputs[] = {
+    3, 3, std::numeric_limits<std::uint32_t>::max()};
+  EXPECT_FALSE(cuvs::bench::detail::is_first_output_occurrence(unsigned_outputs, 1));
+  EXPECT_FALSE(cuvs::bench::detail::is_valid_source_id(unsigned_outputs[2], 769));
 }
 
 INSTANTIATE_TEST_CASE_P(CagraBitmapFilters,

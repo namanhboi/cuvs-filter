@@ -419,15 +419,10 @@ void bench_search(::benchmark::State& state,
             for (std::uint32_t rank = 0; rank < k; ++rank) {
               const bool valid =
                 candidates[rank] >= 0 && static_cast<std::size_t>(candidates[rank]) < base_set_size;
-              valid_results += valid;
-              if (valid) {
-                for (std::uint32_t previous = 0; previous < rank; ++previous) {
-                  if (candidates[previous] == candidates[rank]) {
-                    has_duplicate = true;
-                    break;
-                  }
-                }
-              }
+              const bool first_occurrence =
+                detail::is_first_output_occurrence(candidates, rank);
+              valid_results += valid && first_occurrence;
+              has_duplicate |= valid && !first_occurrence;
               if (valid && validate_filter &&
                   !validation_algo->is_filter_valid(i_orig_idx, candidates[rank])) {
                 ++local_filter_violation_count[tid];
@@ -506,6 +501,8 @@ void bench_search(::benchmark::State& state,
       {"DuplicateOutputQueries",
        {static_cast<double>(duplicate_output_queries) / static_cast<double>(rows),
         benchmark::Counter::kAvgThreads}});
+    state.counters.insert(
+      {"OutputSetSemanticsVersion", {1.0, benchmark::Counter::kAvgThreads}});
     if (validate_filter) {
       state.counters.insert(
         {"FilterViolations",

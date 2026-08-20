@@ -382,11 +382,20 @@ ones.  For every raw record it requires:
 - =require_identity_source_indices=1=;
 - zero =FilterViolations=;
 - zero =InvalidSentinelErrors=;
-- zero =DuplicateOutputQueries=;
+- zero =DuplicateOutputQueries= for Retain and NaviX.  Native fused Base and its matched-seed
+  control may report repeated valid IDs when filtered output is underfilled; those rates remain in
+  every raw/summary artifact and are not treated as successful extra neighbors;
 - finite positive QPS, Recall@10 in =[0,1]=, and a valid-GT fraction in =(0,1]=.
 
-Underfilled-query and missing-slot counters are retained for interpretation.  Missing mandatory
-correctness counters fail analysis rather than being treated as zero.
+Underfilled-query and missing-slot counters count distinct valid output IDs, so a repeated Base ID
+is treated as a missing unique result rather than a filled slot.  Missing mandatory correctness
+counters or =OutputSetSemanticsVersion=1= fail analysis rather than being treated as current data.
+
+Both =Recall= and =ValidGTRecall= are set-valued in the frozen benchmark binary: a repeated output
+ID receives at most one match credit.  This prevents native Base duplicates from inflating quality
+while leaving the search output and its duplicate-rate diagnostic unchanged.  The analyzer rejects
+duplicates from either new method because their accumulator/frontier implementations are designed
+to emit unique results.
 
 * Frozen exact-control protocol
 
@@ -546,14 +555,15 @@ cd /home/ubuntu/cuvs-filter-retrieve
   benchmarks/retrieve_workshop/cpu_context/test_pipeline.py
 #+end_src
 
-The Python pipeline checks completed on 2026-08-19 as follows.  CUDA/build and exact GPU smoke
-remain separate gates and are intentionally not inferred from Python success:
+The duplicate-safe pipeline checks completed on 2026-08-20 as follows.  The exact GPU smoke
+remains a separate gate and is intentionally not inferred from Python success:
 
 | Gate | UTC time | Result | Log/archive path |
 |-
-| GPU Python pipeline tests | 2026-08-19 | PASS: 4/4 tests | =benchmarks/retrieve_workshop/gpu_graph/test_pipeline.py= |
-| CUDA bitmap tests/build | TODO | TODO | TODO |
-| Exact Python pipeline tests | 2026-08-19 | PASS: 5/5 tests | =benchmarks/retrieve_workshop/exact_bitmap/test_pipeline.py= |
+| GPU Python pipeline tests | 2026-08-20 | PASS: 6/6 tests | =benchmarks/retrieve_workshop/gpu_graph/test_pipeline.py= |
+| CUDA bitmap tests/build | 2026-08-20 | PASS: 44 tests; 2 intentional unsupported-mode skips; clean no-op rebuild | =cpp/build/gtests/NEIGHBORS_ANN_CAGRA_FILTER_BITMAP_TEST= |
+| Exact Python pipeline tests | 2026-08-20 | PASS: 6/6 tests | =benchmarks/retrieve_workshop/exact_bitmap/test_pipeline.py= |
+| Bitmap-selectivity derivation tests | 2026-08-20 | PASS: 2/2 tests; all-workload artifact reproduced byte-for-byte | =benchmarks/retrieve_workshop/evidence/test_summarize_bitmap_selectivity.py= |
 | Exact sparse/dense smoke | TODO | TODO | TODO |
 | CPU pipeline test program | 2026-08-19 | PASS: 1 program / 2 synthetic scenarios | =benchmarks/retrieve_workshop/cpu_context/test_pipeline.py= |
 | CPU artifact preflight | 2026-08-19 | PASS: 8 graphs / 5 methods / 4 workloads | =benchmarks/retrieve_workshop/cpu_context/run.py --preflight= |
@@ -650,6 +660,10 @@ Check captions, image paths, table widths, equations, and TODO markers in the ex
 
 - =provenance/run.json= records git HEAD/status, host, GPU, CPU, relevant environment, resolved
   data root, and full SHA-256 for the benchmark binary and =libcuvs.so=.
+- Run-provenance schema 2 freezes =output_set_semantics= as
+  =distinct_valid_output_ids_v1=, and every raw benchmark record must independently report
+  =OutputSetSemanticsVersion=1=.  This prevents an older result root from being relabeled by a
+  newer analyzer.
 - Reusing a result root is rejected if binary/library hashes, data root, host, or GPU change.
 - Generated manifests freeze exact methods, search points, shard coverage, query count, and
   repetitions.
@@ -715,6 +729,8 @@ sample or the final strict bitmap-seeded method.
 | =benchmarks/retrieve_workshop/evidence/diagnostic_manifest.json= | Machine-readable artifact hashes and claim-coverage keys consumed by the paper staging gate. |
 | =benchmarks/retrieve_workshop/evidence/PASSING_ACCUMULATOR_DESIGN_AND_EVIDENCE_REPORT.org= | Accumulator design plus GT-seen versus returned-recall diagnostic provenance. |
 | =benchmarks/retrieve_workshop/evidence/YFCC_RECALL_ROOT_CAUSE_REPORT.org= | YFCC B0-versus-continuous-depth diagnostic provenance. |
+| =benchmarks/retrieve_workshop/evidence/workload_selectivity_summary.json= | Exact 10,000-query selectivity distributions derived from resident bitmaps and bound to source files by SHA-256. |
+| =benchmarks/retrieve_workshop/evidence/summarize_bitmap_selectivity.py= | Bounded-memory selectivity derivation and bitmap-contract validation. |
 | =benchmarks/retrieve_workshop/evidence/yfcc_navix/YFCC_NAVIX_ROOT_CAUSE_REPORT.org= | Historical in-kernel-seeded NaviX root-cause report; not a final-sweep point. |
 | =benchmarks/retrieve_workshop/evidence/yfcc_navix/diagnostic_summary.json= | Machine-readable aggregate for that historical NaviX diagnostic. |
 | =benchmarks/retrieve_workshop/evidence/yfcc_navix/counterfactual_oracle.csv= | Stratified 18-query counterfactual sample; never generalize it to all YFCC queries. |
@@ -735,12 +751,15 @@ All cells remain placeholders until the final analyzers complete.
 
 | Workload | N | d | dtype | Predicate | Mean selectivity | p50 | p90 | Queries below 1% | Valid GT slots |
 |-
-| YFCC-10M | TODO | TODO | uint8 | subset tags | TODO | TODO | TODO | TODO | TODO |
-| ArXiv-EM | TODO | TODO | float32 | exact match | TODO | TODO | TODO | TODO | TODO |
-| ArXiv-EMIS | TODO | TODO | float32 | membership | TODO | TODO | TODO | TODO | TODO |
-| ArXiv-R | TODO | TODO | float32 | range | TODO | TODO | TODO | TODO | TODO |
+| YFCC-10M | 10,000,000 | 192 | uint8 | subset tags | 1.850965% | 0.139485% | 7.057260% | 71.16% | 100,000 |
+| ArXiv-EM | 100,000 | 4,096 | float32 | exact match | 38.469640% | 52.817000% | 52.817000% | 0.30% | 99,991 |
+| ArXiv-EMIS | 100,000 | 4,096 | float32 | membership | 15.242937% | 13.226000% | 27.645000% | 1.15% | 100,000 |
+| ArXiv-R | 100,000 | 4,096 | float32 | range | 44.552398% | 43.787500% | 73.778400% | 0.13% | 100,000 |
 
-Source: TODO (script and artifact path).
+Selectivity source: =evidence/workload_selectivity_summary.json=, derived from all 10,000 bitmap
+rows by =evidence/summarize_bitmap_selectivity.py= and bound to every source bitmap by SHA-256.
+Valid GT slots are counted after excluding out-of-range sentinels; ArXiv-EM contains one query with
+only one legal result.
 
 ** Table 2: Frozen GPU configuration
 

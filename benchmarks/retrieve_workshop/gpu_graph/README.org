@@ -50,9 +50,12 @@ YFCC QPS = 10000 / sum(query_count_of_shard / shard_QPS)
 
 Only after that serial aggregation does it report the median, minimum, and maximum over the three
 repetitions.  It rejects missing shards, missing repetitions, unexpected search points, nonzero
-filter violations, invalid-sentinel errors, and duplicate-output errors.
-All three correctness counters are mandatory in the raw JSON; a missing counter fails validation
-instead of being interpreted as zero.
+filter violations, invalid-sentinel errors, and any duplicate output from Retain or NaviX.  Native
+fused Base (seeded or unseeded) may expose repeated valid IDs when filtered output is underfilled;
+its query-weighted duplicate rate is reported, and set-valued recall gives a repeated ID no extra
+match credit.  Underfill and missing-slot counters likewise count distinct valid output IDs.
+All correctness counters and =OutputSetSemanticsVersion=1= are mandatory in the raw JSON; a missing
+or legacy marker fails validation instead of being interpreted as current output semantics.
 
 * Exact commands
 

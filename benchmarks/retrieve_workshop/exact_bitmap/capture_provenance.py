@@ -51,6 +51,12 @@ def main() -> None:
     )
     if destination.exists():
         payload = json.loads(destination.read_text())
+        if (
+            payload.get("schema_version") != 2
+            or payload.get("fixed_contract", {}).get("output_set_semantics")
+            != "distinct_valid_output_ids_v1"
+        ):
+            raise ValueError("result root uses legacy output/recall semantics")
         old_hashes = (
             payload["benchmark_binary"]["sha256"],
             payload["libcuvs"]["sha256"],
@@ -62,7 +68,7 @@ def main() -> None:
             raise ValueError("host/GPU identity changed within one result root")
     else:
         payload = {
-            "schema_version": 1,
+            "schema_version": 2,
             "experiment": "retrieve_workshop_exact_bitmap",
             "created_utc": datetime.now(timezone.utc).isoformat(),
             "host": platform.node(),
@@ -79,6 +85,9 @@ def main() -> None:
             "libcuvs": {
                 "path": str(args.libcuvs.resolve()),
                 "sha256": sha256(args.libcuvs),
+            },
+            "fixed_contract": {
+                "output_set_semantics": "distinct_valid_output_ids_v1",
             },
             "events": [],
         }

@@ -1,10 +1,11 @@
 #+TITLE: Frozen Supporting Diagnostics
 
-This directory preserves the compact, analyzer-generated evidence used for claims that are not
-recomputed by the final QPS--recall sweep.  The files were copied byte-for-byte on 2026-08-19 from
-the =favor-filtered-search= checkout at =/home/ubuntu/cuvs-filter=; raw multi-megabyte traces and
-result arrays remain in that checkout.  The final paper treats these as separate diagnostics, not
-as points in the three-repetition performance experiment.
+This directory preserves compact evidence used for claims that are not recomputed by the final
+QPS--recall sweep.  Historical diagnostic files were copied byte-for-byte on 2026-08-19 from the
+=favor-filtered-search= checkout at =/home/ubuntu/cuvs-filter=; raw multi-megabyte traces and result
+arrays remain in that checkout.  Deterministic workload statistics are generated in this isolated
+checkout from SHA-256-bound resident bitmaps.  The final paper treats both as separate diagnostics,
+not as points in the three-repetition performance experiment.
 
 =diagnostic_manifest.json= is the machine-readable inventory consumed by the paper staging script.
 The script verifies every listed artifact against its SHA-256 before publishing the final-results
@@ -12,9 +13,17 @@ sentinel, so stale performance summaries cannot be combined with silently change
 
 * Accumulator and YFCC discovery evidence
 
-- =PASSING_ACCUMULATOR_DESIGN_AND_EVIDENCE_REPORT.org= documents the accumulator design and the
-  GT-seen versus returned-recall measurements.
+- =PASSING_ACCUMULATOR_DESIGN_AND_EVIDENCE_REPORT.org= documents the accumulator design.  Its
+  historical GT-seen versus returned-recall numbers used slot-counted output semantics and are not
+  authoritative for the paper's numeric selection-loss claim.  That claim must come from the
+  separately generated schema-7, distinct-output YFCC summary described below.
 - =YFCC_RECALL_ROOT_CAUSE_REPORT.org= documents B0 versus continuous deep traversal.
+- =workload_selectivity_summary.json= derives exact per-query selectivity distributions directly
+  from all 10,000 resident bitmap rows for each workload.  It binds every source manifest and
+  bitmap by SHA-256.  =summarize_bitmap_selectivity.py= is the corresponding bounded-memory
+  derivation tool; =test_summarize_bitmap_selectivity.py= covers continuously packed rows whose
+  widths are not word-aligned.  In particular, YFCC's median selectivity is =0.00139485= and
+  =0.7116= of queries have selectivity below 1%.
 - =yfcc_navix/YFCC_NAVIX_ROOT_CAUSE_REPORT.org=, =diagnostic_summary.json=, and
   =counterfactual_oracle.csv= document the older in-kernel-seeded NaviX diagnostic.  Its oracle is
   a stratified 18-query hard-case sample and must not be described as representative of all YFCC
@@ -33,6 +42,9 @@ final matched-seed sweep is the causal control for that distinction.
 |------+----------|
 | =PASSING_ACCUMULATOR_DESIGN_AND_EVIDENCE_REPORT.org= | =fe9d8f42dcdd2dc884473484b0d9cbb7fd43bb92e1ca3b4a1c6e1f3a6f9a12c0= |
 | =YFCC_RECALL_ROOT_CAUSE_REPORT.org= | =9cd2d4991503b3a28584a9f4884206785b25f3fabdd95eeaed93f11ab33651d3= |
+| =workload_selectivity_summary.json= | =fac7ae3d671f28f7083450af8a0043635465bab5e1c039c86cb96952aeaa61cb= |
+| =summarize_bitmap_selectivity.py= | =ef08f1f23eefb503760cb0265a06240d640f6bafd1cdf6d6913dac61d70144cb= |
+| =test_summarize_bitmap_selectivity.py= | =2fd36cc5dd7cde1f78ae43454525d991b4fce695942a8e6303a540474c6dd65f= |
 | =yfcc_navix/YFCC_NAVIX_ROOT_CAUSE_REPORT.org= | =fe9c6fdc8ca57a063d5fb7ad12bb2ecd9f94dbb3d0b03ff930f2bcc9c0e9ce97= |
 | =yfcc_navix/diagnostic_summary.json= | =edd38be020e9d4da780dbcb4e4cec7a29eca75e521f95737085d6a181f284d5f= |
 | =yfcc_navix/counterfactual_oracle.csv= | =98bd435d80f4935cf79718dfad9312dd15cbaa10aeda35da49219992b56e659a= |

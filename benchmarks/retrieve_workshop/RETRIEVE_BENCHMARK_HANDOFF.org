@@ -1,0 +1,510 @@
+#+TITLE: RETRIEVE Paper Benchmark Handoff
+#+AUTHOR: Anonymous artifact handoff
+#+OPTIONS: toc:3 num:t
+
+* Scope and frozen experiment contract
+
+This document is the executable handoff for the experiments used by the RETRIEVE paper.  Run all
+commands from the isolated implementation checkout at =/home/ubuntu/cuvs-filter-retrieve= unless a
+section explicitly changes directory.  Do not use the development checkout at
+=/home/ubuntu/cuvs-filter= to produce paper results.
+
+The production experiment has four inputs:
+
+1. The SINGLE_CTA resident-bitmap GPU graph sweep: CAGRA-Base, CAGRA-Retain, CAGRA-NaviX, and the
+   two matched-seed controls.
+2. The masked-exact GPU control through the public =cuvs::neighbors::brute_force= API.
+3. Native FAISS-NaviX and ACORN CPU context runs.
+4. A SHA-256-bound manifest of supporting diagnostics.
+
+The GPU graph configuration is fixed at CAGRA graph degree 32/intermediate degree 64, =k=10=,
+=max_queries=512=, squared L2, SINGLE_CTA, and a resident per-query bitmap.  The primary B0 sweep
+contains exactly =(L,W)={(64,1),(128,1),(128,2),(256,1),(256,2),(512,2)}= with
+=max_iterations=0=.  Correctness uses the first 1,000 queries and one repetition.  Reported
+throughput uses all 10,000 queries and three repetitions.
+
+Never overlap the GPU graph suite, masked-exact suite, CPU context suite, graph construction, or
+another substantial CPU/GPU job.  Even though the CPU suite does not launch CUDA kernels, its
+memory traffic and host scheduling can perturb GPU measurements.  Run one production suite at a
+time on an otherwise idle machine.
+
+* Prerequisites
+
+** Repositories and data
+
+The expected locations are:
+
+| Purpose | Path |
+|---------+------|
+| Isolated cuVS implementation and runners | =/home/ubuntu/cuvs-filter-retrieve= |
+| Paper source and staging script | =/home/ubuntu/retrieve-cagra-paper= |
+| Dataset, graph, GT, and bitmap root | =/home/ubuntu/cuvs-filter/datasets= |
+| Native CPU graph artifacts | =/home/ubuntu/navix_cpu_artifacts= |
+| Native FAISS-NaviX checkout | =/home/ubuntu/faiss-navix-native-benchmark= |
+| Native ACORN checkout | =/home/ubuntu/ACORN-gamma-benchmark= |
+| cuVS Python environment | =/home/ubuntu/micromamba/envs/cuvs= |
+
+The CPU preflight below is the authoritative validation of its binaries, graphs, build CSVs,
+datasets, bitmap manifests, and graph parameters.  The GPU and exact generators consume the same
+resident-bitmap manifests under =datasets/navix_bitmap=.
+
+Paper-quality results should be captured from committed source trees.  The cuVS experiment tree
+must be clean before the first timed stage; check the paper tree separately before final staging:
+
+#+begin_src sh
+git -C /home/ubuntu/cuvs-filter-retrieve status --short
+git -C /home/ubuntu/retrieve-cagra-paper status --short
+git -C /home/ubuntu/cuvs-filter-retrieve rev-parse HEAD
+git -C /home/ubuntu/retrieve-cagra-paper rev-parse HEAD
+#+end_src
+
+Do not proceed with a final timed run until the cuVS status is empty, and do not stage the paper
+until its source edits are committed.  The runners record Git HEAD and status, but recording a
+dirty implementation tree does not make it reproducible.
+
+** Hardware and tools
+
+The frozen GPU results use an NVIDIA L4 (compute capability 8.9).  Record the visible device and
+confirm the required tools:
+
+#+begin_src sh
+nvidia-smi --query-gpu=name,uuid,driver_version,memory.total,compute_cap \
+  --format=csv,noheader,nounits
+command -v cmake
+command -v ninja
+command -v pandoc
+command -v latexmk
+command -v pdftotext
+command -v pdfinfo
+command -v rg
+#+end_src
+
+The paper build additionally needs IEEEtran, =graphicx=, =booktabs=, =multirow=, =balance=,
+Palatino metrics, BibTeX, and the Ubuntu packages =texlive-publishers=,
+=texlive-latex-extra=, and =texlive-fonts-recommended=.
+
+* Build and pre-production test gate
+
+** Configure and build
+
+For a fresh or reconfigured build, use the repository build driver.  This builds only the two ANN
+benchmark executables and the bitmap-filter test required by this artifact:
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter-retrieve
+export PARALLEL_LEVEL=32
+./build.sh libcuvs tests bench-ann -n \
+  --limit-tests=NEIGHBORS_ANN_CAGRA_FILTER_BITMAP_TEST \
+  --limit-bench-ann="CUVS_CAGRA_ANN_BENCH;CUVS_BRUTE_FORCE_ANN_BENCH" \
+  --gpu-arch=89-real
+#+end_src
+
+When =cpp/build= is already configured, the exact incremental equivalent is:
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter-retrieve
+cmake --build cpp/build --parallel 32 --target \
+  NEIGHBORS_ANN_CAGRA_FILTER_BITMAP_TEST \
+  CUVS_CAGRA_ANN_BENCH \
+  CUVS_BRUTE_FORCE_ANN_BENCH
+#+end_src
+
+Do not reuse old benchmark binaries after changing the diagnostic schema, benchmark metric code,
+or CAGRA JIT sources.  Schema 7 diagnostic capture explicitly verifies the device-written schema
+and query identity against the host before writing any evidence.
+
+** Required gate
+
+Run the CUDA bitmap-filter test and every static/synthetic pipeline test before production:
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter-retrieve
+env LD_PRELOAD=/home/ubuntu/cuvs-filter-retrieve/cpp/build/libcuvs.so \
+  cpp/build/gtests/NEIGHBORS_ANN_CAGRA_FILTER_BITMAP_TEST --gtest_color=no
+
+/home/ubuntu/micromamba/envs/cuvs/bin/python -m py_compile \
+  benchmarks/retrieve_workshop/gpu_graph/*.py \
+  benchmarks/retrieve_workshop/exact_bitmap/*.py \
+  benchmarks/retrieve_workshop/cpu_context/*.py \
+  benchmarks/retrieve_workshop/evidence/*.py
+
+MPLBACKEND=Agg /home/ubuntu/micromamba/envs/cuvs/bin/python \
+  benchmarks/retrieve_workshop/gpu_graph/test_pipeline.py
+MPLBACKEND=Agg /home/ubuntu/micromamba/envs/cuvs/bin/python \
+  benchmarks/retrieve_workshop/exact_bitmap/test_pipeline.py
+MPLBACKEND=Agg /home/ubuntu/micromamba/envs/cuvs/bin/python \
+  benchmarks/retrieve_workshop/cpu_context/test_pipeline.py
+/home/ubuntu/micromamba/envs/cuvs/bin/python \
+  benchmarks/retrieve_workshop/evidence/test_summarize_bitmap_selectivity.py
+
+bash -n benchmarks/retrieve_workshop/gpu_graph/run_gpu_graph.sh
+bash -n benchmarks/retrieve_workshop/exact_bitmap/run_exact.sh
+bash -n benchmarks/favor/yfcc_udf/run_experiment.sh
+git diff --check
+
+cd /home/ubuntu/retrieve-cagra-paper
+python3 -m py_compile scripts/prepare_current_results.py
+python3 scripts/prepare_current_results.py --self-test
+#+end_src
+
+Every command must exit zero.  The bitmap gtest may report intentional skips for unsupported
+MULTI_KERNEL/persistent combinations; an ordinary failed test is not acceptable.
+
+* Allocate immutable result roots
+
+Set a single UTC tag once.  Do not evaluate =date= independently for related paths, and do not
+place production raw results in a Git checkout.
+
+#+begin_src sh
+export RETRIEVE_RUN_TAG=$(date -u +%Y%m%dT%H%M%SZ)
+export RETRIEVE_DATA_ROOT=/home/ubuntu/cuvs-filter/datasets
+export PYTHON=/home/ubuntu/micromamba/envs/cuvs/bin/python
+
+export RETRIEVE_RESULT_ROOT=/home/ubuntu/retrieve_workshop_runs/gpu_l4_${RETRIEVE_RUN_TAG}
+export RETRIEVE_EXACT_RESULT_ROOT=/home/ubuntu/retrieve_workshop_runs/exact_l4_${RETRIEVE_RUN_TAG}
+export RETRIEVE_EXACT_DATA_ROOT=/home/ubuntu/retrieve_workshop_data/exact_bitmap
+export RETRIEVE_CPU_RESULTS_ROOT=/home/ubuntu/retrieve_workshop_runs/cpu
+export RETRIEVE_CPU_RUN_ID=cpu_context_${RETRIEVE_RUN_TAG}
+export YFCC_DIAGNOSTIC_ROOT=/home/ubuntu/retrieve_workshop_runs/yfcc_schema7_${RETRIEVE_RUN_TAG}
+
+test ! -e "${RETRIEVE_RESULT_ROOT}"
+test ! -e "${RETRIEVE_EXACT_RESULT_ROOT}"
+test ! -e "${RETRIEVE_CPU_RESULTS_ROOT}/${RETRIEVE_CPU_RUN_ID}"
+test ! -e "${YFCC_DIAGNOSTIC_ROOT}"
+#+end_src
+
+Keep these exports in the same shell, or save their literal resolved values in a run note.  The
+GPU and exact provenance files reject a changed benchmark/library hash or changed host/GPU within
+one result root.  CPU execution creates its run directory atomically and refuses an existing ID.
+
+* Corrected YFCC B0 diagnostic (schema 7)
+
+This is supporting evidence, not a throughput point.  It runs the first 1,000 YFCC queries once at
+=(L=512,W=2,B0)= and captures untimed query diagnostics for Base and Retain (plus two historical
+FAVOR controls in the raw configuration).  Recall, output count, underfill, and selection loss use
+distinct valid output IDs: a duplicate ID receives no extra recall credit.
+
+Run it only after the rebuilt CUDA test passes, and use a brand-new diagnostic root because the
+legacy YFCC runner itself does not provide an overwrite guard:
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter-retrieve
+export YFCC_RESULT_ROOT=${YFCC_DIAGNOSTIC_ROOT}
+export YFCC_DATA_ROOT=/home/ubuntu/cuvs-filter/datasets
+export PYTHON=/home/ubuntu/micromamba/envs/cuvs/bin/python
+
+benchmarks/favor/yfcc_udf/run_experiment.sh root_cause_b0_diagnostic
+
+mkdir -p "${YFCC_DIAGNOSTIC_ROOT}/analysis"
+${PYTHON} benchmarks/retrieve_workshop/evidence/summarize_yfcc_recall_diagnostic.py \
+  --result-root "${YFCC_DIAGNOSTIC_ROOT}" \
+  --repo /home/ubuntu/cuvs-filter-retrieve \
+  --data-root /home/ubuntu/cuvs-filter/datasets \
+  --bench-bin /home/ubuntu/cuvs-filter-retrieve/cpp/build/bench/ann/CUVS_CAGRA_ANN_BENCH \
+  --libcuvs /home/ubuntu/cuvs-filter-retrieve/cpp/build/libcuvs.so \
+  --output "${YFCC_DIAGNOSTIC_ROOT}/analysis/yfcc_b0_distinct_output_summary.json"
+#+end_src
+
+The summarizer rejects any schema other than 7, a missing
+=output_set_semantics=distinct_valid_output_ids_v1= marker, an unexpected configuration, a
+raw/trace recall mismatch, changed input identities, filter/sentinel errors, accumulator
+duplicates, a traversal change between Base and Retain, or failure of Retain to preserve every
+seen GT neighbor.
+
+Inspect the generated summary before freezing it.  If it is used by the manuscript, copy it into
+=benchmarks/retrieve_workshop/evidence/=, add its SHA-256 and claim key to
+=diagnostic_manifest.json=, update =evidence/README.org=, and rerun the paper staging check.  Never
+edit a result number by hand or point the paper directly at an unmanifested diagnostic.
+
+* GPU graph experiment
+
+** Correctness and complete B0 sweep
+
+Run these stages serially:
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter-retrieve
+export RETRIEVE_DATA_ROOT=/home/ubuntu/cuvs-filter/datasets
+export RETRIEVE_RESULT_ROOT=/home/ubuntu/retrieve_workshop_runs/gpu_l4_${RETRIEVE_RUN_TAG}
+export PYTHON=/home/ubuntu/micromamba/envs/cuvs/bin/python
+
+benchmarks/retrieve_workshop/gpu_graph/run_gpu_graph.sh generate
+benchmarks/retrieve_workshop/gpu_graph/run_gpu_graph.sh correctness
+benchmarks/retrieve_workshop/gpu_graph/run_gpu_graph.sh b0
+benchmarks/retrieve_workshop/gpu_graph/run_gpu_graph.sh analyze
+#+end_src
+
+The final =analyze= invocation performs full SHA-256 hashing of resident inputs.  Do not pass
+=--skip-full-input-hashes= for paper data.  That option is used internally only for the incremental
+deep-run stop test.
+
+Each reported repetition times the complete cuVS-bench search call.  For bitmap-seeded methods
+this includes the seed-selection kernel and graph-search kernel.  It excludes index loading, host
+configuration parsing, bitmap construction, and installation of the already-resident bitmap.
+Consequently these are resident-bitmap query-time results, not predicate-construction results.
+
+YFCC executes as four 2,048-query shards plus one 1,808-query shard.  For each repetition, its
+aggregate throughput is exactly =10000 / sum(query_count_of_shard / shard_QPS)=.  Only after this
+serial aggregation are the median, minimum, and maximum calculated across three repetitions.
+
+** Optional targeted deep runs
+
+The B0 analyzer writes =${RETRIEVE_RESULT_ROOT}/analysis/deep_candidates.json=.  Review that file
+and retain only workload/method pairs for which a deeper diagnostic answers a paper question.
+Deep search is not an unconditional Cartesian sweep.
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter-retrieve
+benchmarks/retrieve_workshop/gpu_graph/run_gpu_graph.sh generate \
+  --deep-selection "${RETRIEVE_RESULT_ROOT}/analysis/deep_candidates.json"
+benchmarks/retrieve_workshop/gpu_graph/run_gpu_graph.sh deep
+benchmarks/retrieve_workshop/gpu_graph/run_gpu_graph.sh analyze
+#+end_src
+
+For each selected pair, deep search retains only =(64,1)= and =(512,2)= and tries explicit
+=max_iterations={522,1044,2088,4176,7569}=.  It analyzes after each depth and stops that pair when
+either cell reaches recall 0.90.  To make a deliberately preliminary pass stop at 1044, for
+example, set =RETRIEVE_DEEP_MAX_ITERATION=1044=; a later =deep= invocation resumes from complete
+depth groups.  Paper analysis marks only points through the first target-reaching depth as
+eligible, while retaining every measurement in CSV.
+
+** GPU outputs
+
+The publication inputs and audit files are under =${RETRIEVE_RESULT_ROOT}/analysis/=:
+
+- =summary_points.csv=: paper staging input.
+- =raw_points.csv=: each raw benchmark record.
+- =repetition_aggregates.csv=: serial shard aggregation per repetition.
+- =pareto_points.csv=: eligible Pareto points.
+- =deep_candidates.json=: optional deep-run proposal.
+- =summary.json= and =provenance.json=: validation/provenance summaries.
+- Per-workload PNG and PDF figures for the primary and matched-seed comparisons.
+
+The analyzer rejects incomplete workloads, shards, configurations or repetitions; nonzero filter
+violations; invalid sentinels; illegal duplicate output from Retain/NaviX; and missing output-set
+semantics.  Native fused Base (seeded or unseeded) may expose duplicate valid IDs when underfilled;
+the duplicate-query rate remains a reported diagnostic and set-valued recall gives it no extra
+credit.
+
+* Masked-exact GPU control
+
+** Smoke gate
+
+Use a disposable smoke root so it cannot collide with production raw files:
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter-retrieve
+export RETRIEVE_EXACT_RESULT_ROOT=/home/ubuntu/retrieve_workshop_runs/exact_smoke_${RETRIEVE_RUN_TAG}
+test ! -e "${RETRIEVE_EXACT_RESULT_ROOT}"
+benchmarks/retrieve_workshop/exact_bitmap/run_exact.sh smoke
+#+end_src
+
+The smoke test has separate sparse/CSR and dense/tiled fixtures, including underfilled and empty
+predicate rows.
+
+** Production stages
+
+Restore the immutable production root and run the stages in order:
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter-retrieve
+export RETRIEVE_DATA_ROOT=/home/ubuntu/cuvs-filter/datasets
+export RETRIEVE_BITMAP_ROOT=/home/ubuntu/cuvs-filter/datasets/navix_bitmap
+export RETRIEVE_EXACT_DATA_ROOT=/home/ubuntu/retrieve_workshop_data/exact_bitmap
+export RETRIEVE_EXACT_RESULT_ROOT=/home/ubuntu/retrieve_workshop_runs/exact_l4_${RETRIEVE_RUN_TAG}
+
+benchmarks/retrieve_workshop/exact_bitmap/run_exact.sh build
+benchmarks/retrieve_workshop/exact_bitmap/run_exact.sh prepare
+benchmarks/retrieve_workshop/exact_bitmap/run_exact.sh configs
+benchmarks/retrieve_workshop/exact_bitmap/run_exact.sh correctness
+benchmarks/retrieve_workshop/exact_bitmap/run_exact.sh throughput
+benchmarks/retrieve_workshop/exact_bitmap/run_exact.sh analyze
+#+end_src
+
+Preparation converts YFCC uint8 base/query vectors to exact float values and preserves source IDs,
+bitmaps, and GT.  ArXiv remains native float32.  Prepared manifests and conversion sidecars bind
+source and target SHA-256; do not set =RETRIEVE_EXACT_FORCE_PREPARE=1= unless intentionally
+replacing stale preparation state after auditing the reported mismatch.
+
+The timed exact search call includes bitmap population counting, query norms, sparse bitmap-to-CSR
+and CSR-to-COO construction when selected, masked distance evaluation, top-k, and temporary device
+allocations.  Bitmap materialization/upload and vector/index preparation remain outside timing.
+
+Before every benchmark process the runner writes a mandatory GPU-memory decision under
+=provenance/gpu_memory/=.  Do not use =RETRIEVE_EXACT_AVAILABLE_BYTES= in a paper run; it is only a
+test/debug override.  Correctness is 1,000 queries/one repetition, and throughput is all 10,000
+queries/three repetitions.
+
+The publication input is
+=${RETRIEVE_EXACT_RESULT_ROOT}/analysis/exact_summary.csv=.  The adjacent measurement CSVs,
+=exact_results.json=, run provenance, and memory-preflight records form its audit trail.  Exact
+results pass only with valid-GT recall 1.0, zero filter violations, zero sentinel errors, zero
+duplicates, and the expected legal underfill (including ArXiv-EM's one intrinsically underfilled
+query).
+
+* Native CPU context
+
+CPU results are qualitative system context only.  They are not valid evidence for an absolute
+CPU/GPU speedup because the graph families, graph parameters, hardware, implementations, and
+timing boundaries differ.  Native CPU timing excludes packed-bitmap-to-byte-mask conversion.
+
+First run the read-only preflight:
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter-retrieve
+/home/ubuntu/micromamba/envs/cuvs/bin/python \
+  benchmarks/retrieve_workshop/cpu_context/run.py --preflight
+#+end_src
+
+Then launch one production run.  It performs all methods, workloads, shards, ten
+=efSearch={10,15,20,25,30,50,100,250,500,750}= points, and three repetitions serially:
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter-retrieve
+/home/ubuntu/micromamba/envs/cuvs/bin/python \
+  benchmarks/retrieve_workshop/cpu_context/run.py \
+  --results-root "${RETRIEVE_CPU_RESULTS_ROOT}" \
+  --run-id "${RETRIEVE_CPU_RUN_ID}"
+
+/home/ubuntu/micromamba/envs/cuvs/bin/python \
+  benchmarks/retrieve_workshop/cpu_context/analyze.py \
+  "${RETRIEVE_CPU_RESULTS_ROOT}/${RETRIEVE_CPU_RUN_ID}"
+#+end_src
+
+The publication input is
+=${RETRIEVE_CPU_RESULTS_ROOT}/${RETRIEVE_CPU_RUN_ID}/analysis/summary.csv=.  FAISS-NaviX,
+reference ACORN-1, and reference ACORN-gamma appear in the figure.  The two ACORN + NaviX-seed
+controls remain in table/JSON outputs and are intentionally excluded from the native Pareto plot.
+
+* Optional deterministic selectivity evidence
+
+This derives exact selectivity distributions from all 10,000 resident bitmap rows.  It is not a
+sample and is not part of the timed search.  To reproduce it into an untracked result path:
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter-retrieve
+/home/ubuntu/micromamba/envs/cuvs/bin/python \
+  benchmarks/retrieve_workshop/evidence/summarize_bitmap_selectivity.py \
+  --workload yfcc=/home/ubuntu/cuvs-filter/datasets/navix_bitmap/yfcc/throughput_10000/manifest.json \
+  --workload arxiv_em=/home/ubuntu/cuvs-filter/datasets/navix_bitmap/arxiv/em/throughput_10000/manifest.json \
+  --workload arxiv_emis=/home/ubuntu/cuvs-filter/datasets/navix_bitmap/arxiv/emis/throughput_10000/manifest.json \
+  --workload arxiv_r=/home/ubuntu/cuvs-filter/datasets/navix_bitmap/arxiv/r/throughput_10000/manifest.json \
+  --output /home/ubuntu/retrieve_workshop_runs/workload_selectivity_${RETRIEVE_RUN_TAG}.json
+
+sha256sum /home/ubuntu/retrieve_workshop_runs/workload_selectivity_${RETRIEVE_RUN_TAG}.json \
+  benchmarks/retrieve_workshop/evidence/workload_selectivity_summary.json
+#+end_src
+
+The regenerated file should be byte-identical to the frozen evidence when code and inputs have not
+changed.  If it differs, investigate the source-manifest/bitmap hashes rather than replacing the
+checked-in evidence automatically.
+
+* Stage data and build the six-page paper
+
+After all three production analyzers pass, export their exact paths and the checked-in diagnostic
+manifest:
+
+#+begin_src sh
+export RETRIEVE_GPU_SUMMARY="${RETRIEVE_RESULT_ROOT}/analysis/summary_points.csv"
+export RETRIEVE_EXACT_SUMMARY="${RETRIEVE_EXACT_RESULT_ROOT}/analysis/exact_summary.csv"
+export RETRIEVE_CPU_SUMMARY="${RETRIEVE_CPU_RESULTS_ROOT}/${RETRIEVE_CPU_RUN_ID}/analysis/summary.csv"
+export RETRIEVE_DIAGNOSTIC_MANIFEST=/home/ubuntu/cuvs-filter-retrieve/benchmarks/retrieve_workshop/evidence/diagnostic_manifest.json
+
+cd /home/ubuntu/retrieve-cagra-paper
+python3 scripts/prepare_current_results.py --check \
+  --gpu-summary "${RETRIEVE_GPU_SUMMARY}" \
+  --exact-summary "${RETRIEVE_EXACT_SUMMARY}" \
+  --cpu-summary "${RETRIEVE_CPU_SUMMARY}" \
+  --diagnostic-manifest "${RETRIEVE_DIAGNOSTIC_MANIFEST}"
+
+make PYTHON=python3 data
+make PYTHON=python3 paper
+make PYTHON=python3 check
+#+end_src
+
+=make data= validates and stages all inputs, figures, tables, headline macros, and
+=data/provenance.json=.  The final-results sentinel is written last.  =make paper= rebuilds the
+data, compiles =main.pdf=, and records =data/pdf_provenance.json=.  =make check= binds the current
+source inputs, generated outputs, manuscript, bibliography, and PDF by SHA-256; rejects unfinished
+text; and rejects a PDF longer than six pages.
+
+Do not stage the correctness CSV, raw benchmark JSON, a one-repetition legacy aggregate, or the
+optional =--skip-full-input-hashes= analysis.  The staging script requires the strict finalized
+schemas and exact three-repetition/10,000-query contracts.
+
+* Export the long Org report to DOCX
+
+After inserting the validated final plots/results in the long report, export it with Pandoc:
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter-retrieve
+pandoc benchmarks/retrieve_workshop/RETRIEVE_CAGRA_FILTER_AGNOSTIC_REPORT.org \
+  -o benchmarks/retrieve_workshop/RETRIEVE_CAGRA_FILTER_AGNOSTIC_REPORT.docx
+#+end_src
+
+Open the DOCX and manually inspect captions, embedded image paths, table widths, equations, page
+breaks, and unfinished markers.  The DOCX is a handoff/report artifact; the double-blind workshop
+submission remains the checked six-page =/home/ubuntu/retrieve-cagra-paper/main.pdf=.
+
+* Failure, overwrite, and resume rules
+
+** General rule
+
+Preserve every failed or partial root.  Do not delete individual raw files, splice measurements
+from different roots, or enable overwrite for a paper run.  Diagnose the failure, allocate a new
+UTC-tagged root, and rerun the affected production suite from its first stage.  This makes the
+binary, library, hardware, data, and repetition identity auditable.
+
+** GPU graph
+
+- =correctness= and =b0= refuse an existing raw JSON unless =RETRIEVE_ALLOW_OVERWRITE=1=.  Do not
+  set that variable for production; allocate a new GPU result root after a failure.
+- =deep= is the sole resumable exception.  It validates and retains complete earlier depth groups,
+  analyzes after each group, and continues at the next missing depth.  Do not edit a completed
+  group.
+- A changed benchmark binary, =libcuvs.so=, data root, host, or GPU invalidates reuse of the root.
+
+** Masked exact
+
+- Raw output refuses overwrite unless =RETRIEVE_EXACT_OVERWRITE=1=.  Do not set it for production;
+  allocate a new exact result root.
+- Prepared data may be reused only when its resolved source paths and SHA-256 sidecars match.
+  =RETRIEVE_EXACT_FORCE_PREPARE=1= is for an intentional audited replacement, not recovery from a
+  benchmark failure.
+- A failed memory preflight is a real stop.  Free the GPU or move the entire exact run to a new,
+  recorded machine/root; never override available bytes for a paper measurement.
+
+** Native CPU
+
+- The runner creates a run directory atomically, writes =run.failed.json= on failure, and never
+  resumes it silently.
+- Preserve the failed run, choose a new =RETRIEVE_CPU_RUN_ID=, and restart the complete CPU suite.
+  Never merge repetitions or shards across run IDs.
+
+** Corrected YFCC diagnostic
+
+- The legacy diagnostic runner can replace its raw output, so always use a nonexistent
+  =YFCC_DIAGNOSTIC_ROOT= and invoke it once.
+- A schema mismatch usually means host and device/JIT objects were not rebuilt together.  Rebuild
+  the test and both benchmarks, rerun the gate, and use a new diagnostic root.
+
+* Provenance and interpretation checklist
+
+- [ ] Source repos were committed and clean before timed execution.
+- [ ] GPU identity is the intended NVIDIA L4; no production suites overlapped.
+- [ ] Correctness gates passed before throughput.
+- [ ] GPU and exact raw records declare =OutputSetSemanticsVersion=1=.
+- [ ] Recall, underfill, and missing-result accounting use distinct valid output IDs.
+- [ ] Retain, NaviX, and masked exact have zero duplicate-output queries; native Base duplicates are
+  reported rather than credited.
+- [ ] Filter violations and invalid-sentinel errors are zero.
+- [ ] Every reported approximate point has three repetitions and 10,000 queries.
+- [ ] YFCC QPS was aggregated from five serial shards within each repetition, never averaged.
+- [ ] Final GPU analysis performed full resident-input SHA-256 hashing.
+- [ ] Exact memory-preflight records exist and pass for every production shard.
+- [ ] CPU results are described as qualitative context, not absolute CPU/GPU speedup.
+- [ ] Diagnostic claims come only from artifacts listed and SHA-256-verified in
+  =diagnostic_manifest.json=.
+- [ ] Paper staging, PDF provenance, unfinished-text scan, and six-page check all pass.
+- [ ] The manuscript remains double-blind: no names, institutions, acknowledgments, or personally
+  named fork links.

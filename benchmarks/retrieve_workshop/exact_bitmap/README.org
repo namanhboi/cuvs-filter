@@ -72,7 +72,10 @@ Generated files live under =results/= by default:
 - =analysis/exact_summary.csv=: median, minimum, and maximum QPS plus exact recall.
 - =analysis/exact_results.json=: machine-readable timing contract, correctness rules, and summaries.
 
-The analyzer reports =valid_gt_recall= over legal ground-truth IDs.  ArXiv-EM has one intrinsically
+The analyzer reports =valid_gt_recall= over legal ground-truth IDs using distinct output-ID set
+semantics: a repeated output ID can receive match credit at most once.  Raw records must declare
+=OutputSetSemanticsVersion=1= and run provenance must bind the
+=distinct_valid_output_ids_v1= contract, so legacy slot-counted results cannot be staged.  ArXiv-EM has one intrinsically
 underfilled query whose fixed-width GT row contains out-of-range padding IDs; those IDs are not
 neighbors and are excluded from the exact denominator.  A run passes only when valid recall is
 1.0, predicate violations, invalid-sentinel errors, and duplicate-output queries are zero, and

@@ -9,7 +9,9 @@
 
 namespace cuvs::neighbors::cagra::detail::favor_search_diagnostics {
 
-inline constexpr std::uint32_t schema_version    = 6;
+// Schema 7 makes host-populated recall/output_count explicitly set-valued.  The binary layout is
+// unchanged from schema 6, but consumers must not mix the two semantic contracts.
+inline constexpr std::uint32_t schema_version    = 7;
 inline constexpr std::uint32_t ground_truth_k    = 10;
 inline constexpr std::uint32_t invalid_iteration = 0xffffffffu;
 

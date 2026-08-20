@@ -43,6 +43,13 @@ SEED_METHODS = (
     "default_cagra_accumulator_seeded",
     "navix_reference",
 )
+# Native fused CAGRA can emit a repeated valid ID when filtered output is underfilled.  The
+# benchmark's recall counter is explicitly set-valued, so these repeats receive no recall credit.
+# The new retention and NaviX paths must remain duplicate-free.
+BASE_METHODS_WITH_REPORTED_DUPLICATES = {
+    "default_cagra",
+    "default_cagra_seeded",
+}
 COLORS = {
     "default_cagra": "#4c78a8",
     "default_cagra_accumulator": "#e45756",
@@ -104,7 +111,7 @@ class RawPoint:
     seconds: float
     filter_violations: float
     sentinel_errors: float
-    duplicate_output_queries: float
+    duplicate_output_query_rate: float
     underfilled_queries: float
     missing_result_slots: float
     source_file: str
@@ -128,7 +135,7 @@ class RepetitionPoint:
     seconds: float
     filter_violations: float
     sentinel_errors: float
-    duplicate_output_queries: float
+    duplicate_output_query_rate: float
     underfilled_queries: float
     missing_result_slots: float
 
@@ -155,7 +162,7 @@ class SummaryPoint:
     seconds_median: float
     filter_violations: float
     sentinel_errors: float
-    duplicate_output_queries: float
+    duplicate_output_query_rate_max: float
     underfilled_queries_max: float
     missing_result_slots_max: float
     paper_included: bool
@@ -349,7 +356,39 @@ def load_group(path: Path, manifest: dict, raw_root: Path) -> list[RawPoint]:
             sentinels = finite(record, "InvalidSentinelErrors", raw_path)
             # Mandatory for paper data: absence must not masquerade as a successful check.
             duplicates = finite(record, "DuplicateOutputQueries", raw_path)
-            if violations != 0 or sentinels != 0 or duplicates != 0:
+            underfilled = finite(record, "UnderfilledQueries", raw_path)
+            missing_slots = finite(record, "MissingResultSlots", raw_path)
+            output_set_semantics = finite(
+                record, "OutputSetSemanticsVersion", raw_path
+            )
+            if (
+                not 0.0 <= duplicates <= 1.0
+                or not 0.0 <= underfilled <= 1.0
+                or not 0.0 <= missing_slots <= 1.0
+            ):
+                raise ValueError(
+                    f"invalid duplicate/underfill/missing-slot rate in {raw_path}: "
+                    f"duplicate={duplicates}, underfilled={underfilled}, "
+                    f"missing_slots={missing_slots}"
+                )
+            if duplicates > underfilled + 1e-12:
+                raise ValueError(
+                    f"duplicate-query rate exceeds unique-underfill rate in {raw_path}: "
+                    f"duplicate={duplicates}, underfilled={underfilled}"
+                )
+            if not math.isclose(output_set_semantics, 1.0, abs_tol=1e-12):
+                raise ValueError(
+                    f"unsupported output-set semantics in {raw_path}: "
+                    f"{output_set_semantics}"
+                )
+            if (
+                violations != 0
+                or sentinels != 0
+                or (
+                    duplicates != 0
+                    and method not in BASE_METHODS_WITH_REPORTED_DUPLICATES
+                )
+            ):
                 raise ValueError(
                     f"correctness failure in {raw_path}, repetition {repetition}, {key}: "
                     f"filter={violations}, sentinel={sentinels}, duplicate={duplicates}"
@@ -373,13 +412,9 @@ def load_group(path: Path, manifest: dict, raw_root: Path) -> list[RawPoint]:
                     seconds=queries / qps,
                     filter_violations=violations,
                     sentinel_errors=sentinels,
-                    duplicate_output_queries=duplicates,
-                    underfilled_queries=finite(
-                        record, "UnderfilledQueries", raw_path, 0.0
-                    ),
-                    missing_result_slots=finite(
-                        record, "MissingResultSlots", raw_path, 0.0
-                    ),
+                    duplicate_output_query_rate=duplicates,
+                    underfilled_queries=underfilled,
+                    missing_result_slots=missing_slots,
                     source_file=str(raw_path.resolve()),
                 )
             )
@@ -469,9 +504,11 @@ def aggregate_repetitions(points: list[RawPoint]) -> list[RepetitionPoint]:
                     row.filter_violations for row in members
                 ),
                 sentinel_errors=sum(row.sentinel_errors for row in members),
-                duplicate_output_queries=sum(
-                    row.duplicate_output_queries for row in members
-                ),
+                duplicate_output_query_rate=sum(
+                    row.duplicate_output_query_rate * row.queries
+                    for row in members
+                )
+                / total_queries,
                 underfilled_queries=sum(
                     row.underfilled_queries * row.queries for row in members
                 )
@@ -537,8 +574,8 @@ def summarize(
                     row.filter_violations for row in members
                 ),
                 sentinel_errors=sum(row.sentinel_errors for row in members),
-                duplicate_output_queries=sum(
-                    row.duplicate_output_queries for row in members
+                duplicate_output_query_rate_max=max(
+                    row.duplicate_output_query_rate for row in members
                 ),
                 underfilled_queries_max=max(
                     row.underfilled_queries for row in members
@@ -836,6 +873,15 @@ def main() -> None:
             f"paper analysis requires staged run provenance: {run_provenance}"
         )
     run_payload = json.loads(run_provenance.read_text())
+    fixed_contract = run_payload.get("fixed_contract", {})
+    if (
+        run_payload.get("schema_version") != 2
+        or fixed_contract.get("output_set_semantics")
+        != "distinct_valid_output_ids_v1"
+    ):
+        raise ValueError(
+            "run provenance does not certify distinct-output recall/underfill semantics v1"
+        )
     data_root = Path(run_payload["data_root"])
 
     def data_path(value: str) -> Path:
@@ -876,7 +922,7 @@ def main() -> None:
         ]
         input_hash_status = "complete SHA-256 over all unique resident inputs"
     provenance = {
-        "schema_version": 1,
+        "schema_version": 2,
         "experiment": "retrieve_workshop_gpu_graph",
         "generated_utc": datetime.now(timezone.utc).isoformat(),
         "python": platform.python_version(),
@@ -895,6 +941,10 @@ def main() -> None:
         "plot_contract": (
             "Median QPS and recall over three repetitions; B0 and explicit deep points use "
             "different markers; deep series stop in paper outputs after first recall>=target."
+        ),
+        "recall_contract": (
+            "Recall and ValidGTRecall count each distinct output ID at most once. Native Base "
+            "duplicate-query rates are reported; Retain and NaviX must be duplicate-free."
         ),
         "config_manifests": [
             {"path": str(path.resolve()), "sha256": sha256(path)}
@@ -924,6 +974,7 @@ def main() -> None:
         json.dumps(provenance, indent=2) + "\n"
     )
     summary = {
+        "schema_version": 2,
         "raw_points": len(raw_points),
         "repetition_aggregates": len(repetition_points),
         "summary_points": len(summary_points),
@@ -932,8 +983,20 @@ def main() -> None:
         "correctness_error_total": sum(
             row.filter_violations
             + row.sentinel_errors
-            + row.duplicate_output_queries
+            + (
+                row.duplicate_output_query_rate
+                if row.method not in BASE_METHODS_WITH_REPORTED_DUPLICATES
+                else 0
+            )
             for row in raw_points
+        ),
+        "native_base_duplicate_query_rate_max": max(
+            (
+                row.duplicate_output_query_rate
+                for row in raw_points
+                if row.method in BASE_METHODS_WITH_REPORTED_DUPLICATES
+            ),
+            default=0.0,
         ),
         "deep_candidate_pairs": len(candidates["pairs"]),
     }

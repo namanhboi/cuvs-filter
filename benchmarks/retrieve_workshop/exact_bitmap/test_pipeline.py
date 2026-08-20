@@ -144,6 +144,7 @@ def raw_record(
         "FilterViolations": 0.0,
         "InvalidSentinelErrors": 0.0,
         "DuplicateOutputQueries": 0.0,
+        "OutputSetSemanticsVersion": 1,
         "UnderfilledQueries": underfilled,
         "MissingResultSlots": missing,
     }
@@ -343,6 +344,27 @@ class ExactPipelineTest(unittest.TestCase):
                 check=False,
             )
             self.assertNotEqual(result.returncode, 0)
+
+    def test_rejects_legacy_slot_counted_output_semantics(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = create_fixture(root / "fixtures", "sparse")
+            generate(root, manifest, "sparse", "smoke")
+            raw = root / "raw" / "smoke" / "sparse" / "shard_00.json"
+            raw.parent.mkdir(parents=True, exist_ok=True)
+            record = raw_record(0, 0.75, 0.30)
+            record.pop("OutputSetSemanticsVersion")
+            raw.write_text(json.dumps({"benchmarks": [record]}) + "\n")
+            result = run(
+                str(SCRIPT_DIR / "analyze_exact.py"),
+                "--result-root",
+                str(root),
+                "--phase",
+                "smoke",
+                check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("output semantics", result.stderr)
 
     def test_rejects_incomplete_shard_set(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -338,6 +338,9 @@ def main() -> None:
                     duplicate_queries = float(
                         record.get("DuplicateOutputQueries", math.nan)
                     )
+                    output_set_semantics = float(
+                        record.get("OutputSetSemanticsVersion", math.nan)
+                    )
                     if (
                         not math.isfinite(qps)
                         or qps <= 0.0
@@ -345,9 +348,10 @@ def main() -> None:
                         or not 0.0 <= legacy_recall <= 1.0
                         or not math.isfinite(valid_recall)
                         or not 0.0 <= valid_recall <= 1.0
+                        or not close(output_set_semantics, 1.0)
                     ):
                         raise ValueError(
-                            f"invalid exact QPS/recall in {raw_path}: "
+                            f"invalid exact QPS/recall/output semantics in {raw_path}: "
                             f"qps={qps}, legacy={legacy_recall}, valid={valid_recall}"
                         )
                     correct = (
@@ -379,6 +383,7 @@ def main() -> None:
                         "filter_violations": filter_violations,
                         "invalid_sentinel_errors": sentinel_errors,
                         "duplicate_output_queries": duplicate_queries,
+                        "output_set_semantics_version": output_set_semantics,
                         "correct": correct,
                     }
                     shard_rows.append(row)
@@ -486,7 +491,7 @@ def main() -> None:
     write_csv(analysis / "exact_aggregate_measurements.csv", aggregate_rows)
     write_csv(analysis / "exact_summary.csv", summaries)
     result = {
-        "schema_version": 1,
+        "schema_version": 2,
         "method": "cuvs_brute_force_bitmap",
         "timing_contract": {
             "included": [
@@ -506,7 +511,8 @@ def main() -> None:
             "yfcc_aggregation": "10000 / sum(shard wall-search seconds)",
         },
         "correctness": {
-            "recall": "matches divided by valid GT IDs; out-of-range padding IDs are excluded",
+            "recall": "distinct valid output-ID matches divided by valid GT IDs; out-of-range padding IDs are excluded",
+            "output_set_semantics": "distinct_valid_output_ids_v1",
             "requirements": [
                 "valid_gt_recall == 1",
                 "zero predicate violations",
@@ -571,6 +577,17 @@ def main() -> None:
             f"production exact analysis requires run provenance: {run_provenance}"
         )
     if run_provenance.is_file():
+        run_payload = json.loads(run_provenance.read_text())
+        if (
+            run_payload.get("schema_version") != 2
+            or run_payload.get("fixed_contract", {}).get(
+                "output_set_semantics"
+            )
+            != "distinct_valid_output_ids_v1"
+        ):
+            raise ValueError(
+                "exact result root uses legacy output/recall semantics"
+            )
         bound_files.add(run_provenance.resolve())
     bound_files.update(
         path.resolve()
@@ -583,7 +600,7 @@ def main() -> None:
             f"missing files in exact provenance set: {missing}"
         )
     hash_manifest = {
-        "schema_version": 1,
+        "schema_version": 2,
         "algorithm": "sha256",
         "files": [
             {
