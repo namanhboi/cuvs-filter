@@ -19,7 +19,7 @@ sentinel, so stale performance summaries cannot be combined with silently change
   authoritative for the paper's numeric selection-loss claim.  That claim must come from the
   separately generated schema-7, distinct-output YFCC summary.
 - =yfcc_b0_distinct_output_summary.json= is that authoritative 1,000-query B0 diagnostic.  It was
-  generated from clean commit =69c7945899307567cc5a4b026ea68a47508ee51b= and binds the raw JSON,
+  generated from clean commit =59659ec62757255b201801d88a2f558ed52af5ab= and binds the raw JSON,
   schema-7 query summaries/result arrays, benchmark and library, graph, dataset, queries, GT, and
   predicate metadata by SHA-256.  It reports Base GT-seen =0.6647=, Base returned recall
   =0.5414=, and Retain returned recall =0.6647= under distinct-valid-output set semantics.
@@ -55,7 +55,7 @@ final matched-seed sweep is the causal control for that distinction.
 | File | SHA-256 |
 |------+----------|
 | =PASSING_ACCUMULATOR_DESIGN_AND_EVIDENCE_REPORT.org= | =fe9d8f42dcdd2dc884473484b0d9cbb7fd43bb92e1ca3b4a1c6e1f3a6f9a12c0= |
-| =yfcc_b0_distinct_output_summary.json= | =c59b34fcebc8ff34ca9fdd15aa2f5f8303e35d49ccbdfdfc8419e047e528efe1= |
+| =yfcc_b0_distinct_output_summary.json= | =0d025b764276529bcdca0b62676dfdc92534e86ffec65e67622cfa1859965c02= |
 | =summarize_yfcc_recall_diagnostic.py= | =c25acffcc8c20d2b5dba08408f7307f58e7303ed6f750c8236c3614c5f2c9669= |
 | =yfcc_b0_schema7_sources/configs/root_cause_b0_diagnostic.json= | =ea7a0c10403adb7a77d98c1b704febaa707d1ea9e4b7faa27fef50640c60d6f6= |
 | =yfcc_b0_schema7_sources/raw/root_cause_b0_diagnostic.json= | =f7e597775e7010d0221f1296dd500821cb4e5b87741aa85bf06f8ccf7024435d= |

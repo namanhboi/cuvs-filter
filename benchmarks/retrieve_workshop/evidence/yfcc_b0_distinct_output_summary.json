@@ -3,7 +3,7 @@
   "experiment": "yfcc_1000_b0_duplicate_safe_retention_diagnostic",
   "output_set_semantics": "distinct_valid_output_ids_v1",
   "git": {
-    "head": "69c7945899307567cc5a4b026ea68a47508ee51b",
+    "head": "59659ec62757255b201801d88a2f558ed52af5ab",
     "status": ""
   },
   "variants": [
@@ -13,9 +13,11 @@
       "itopk": 512,
       "search_width": 2,
       "configured_max_iterations": 0,
-      "distinct_output_recall": 0.5414000003899999,
-      "gt_seen_rate": 0.6647000000000001,
-      "selection_loss": 0.12329999961000015,
+      "distinct_output_match_count": 5414,
+      "distinct_output_recall": 0.5414,
+      "gt_seen_count": 6647,
+      "gt_seen_rate": 0.6647,
+      "selection_loss": 0.1233,
       "duplicate_output_query_rate": 0.0,
       "mean_unique_output_count": 5.558,
       "mean_distance_evaluations": 8418.171,
@@ -27,9 +29,11 @@
       "itopk": 512,
       "search_width": 2,
       "configured_max_iterations": 0,
-      "distinct_output_recall": 0.664700000284,
-      "gt_seen_rate": 0.6647000000000001,
-      "selection_loss": -2.839999346804234e-10,
+      "distinct_output_match_count": 6647,
+      "distinct_output_recall": 0.6647,
+      "gt_seen_count": 6647,
+      "gt_seen_rate": 0.6647,
+      "selection_loss": 0.0,
       "duplicate_output_query_rate": 0.0,
       "mean_unique_output_count": 7.377,
       "mean_distance_evaluations": 8418.173,
@@ -37,10 +41,10 @@
     }
   ],
   "headline": {
-    "gt_seen_rate": 0.6647000000000001,
-    "base_returned_recall": 0.5414000003899999,
-    "retain_returned_recall": 0.664700000284,
-    "base_selection_loss_percentage_points": 12.329999961000016
+    "gt_seen_rate": 0.6647,
+    "base_returned_recall": 0.5414,
+    "retain_returned_recall": 0.6647,
+    "base_selection_loss_percentage_points": 12.33
   },
   "sources": [
     {
