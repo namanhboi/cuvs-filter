@@ -28,6 +28,24 @@ another substantial CPU/GPU job.  Even though the CPU suite does not launch CUDA
 memory traffic and host scheduling can perturb GPU measurements.  Run one production suite at a
 time on an otherwise idle machine.
 
+** Final executed production snapshot (2026-08-20)
+
+The paper uses these immutable analyzed roots:
+
+| Suite | Final root | Result |
+|-
+| GPU graph | =/home/ubuntu/retrieve_workshop_runs/gpu_l4_20260820T0143Z= | PASS; 128 staged rows; revision =31c13dcf71b93d91fe89f06cfa0d088847094cb3= |
+| Masked exact | =/home/ubuntu/retrieve_workshop_runs/exact_l4_20260820T0255Z= | PASS; four workloads; native-L2 cutoff recall 1.0 |
+| Native CPU | =/home/ubuntu/retrieve_workshop_runs/cpu/cpu_context_20260820T2200Z= | PASS; 120/120 commands; 200 aggregate rows |
+| YFCC mechanism diagnostic | =/home/ubuntu/retrieve_workshop_runs/yfcc_schema7_20260820T0055Z= | PASS; frozen diagnostic-only evidence |
+
+The staged paper is =/home/ubuntu/retrieve-cagra-paper= at commit =40913bb=.  Its =main.pdf= is
+six pages, double-blind, free of unfinished markers, and bound by =data/pdf_provenance.json= to
+the manuscript, bibliography, validated sources, tables, and figures.
+
+Do not stage =/home/ubuntu/retrieve_workshop_runs/exact_l4_20260820T0245Z=.  It is a superseded
+non-final attempt whose canonical-ID threshold did not account for legal rank-=k= ties.
+
 * Prerequisites
 
 ** Repositories and data
@@ -521,24 +539,24 @@ binary, library, hardware, data, and repetition identity auditable.
 
 * Provenance and interpretation checklist
 
-- [ ] Source repos were committed and clean before timed execution.
-- [ ] GPU identity is the intended NVIDIA L4; no production suites overlapped.
-- [ ] Correctness gates passed before throughput.
-- [ ] GPU and exact raw records declare =OutputSetSemanticsVersion=1=.
-- [ ] Recall, underfill, and missing-result accounting use distinct valid output IDs.
-- [ ] Retain, NaviX, and masked exact have zero duplicate-output queries; native Base duplicates are
+- [X] Source repos were committed and clean before timed execution.
+- [X] GPU identity is the intended NVIDIA L4; no production suites overlapped.
+- [X] Correctness gates passed before throughput.
+- [X] GPU and exact raw records declare =OutputSetSemanticsVersion=1=.
+- [X] Recall, underfill, and missing-result accounting use distinct valid output IDs.
+- [X] Retain, NaviX, and masked exact have zero duplicate-output queries; native Base duplicates are
   reported rather than credited.
-- [ ] Filter violations and invalid-sentinel errors are zero.
-- [ ] Every reported approximate point has three repetitions and 10,000 queries.
-- [ ] YFCC QPS was aggregated from five serial shards within each repetition, never averaged.
-- [ ] Final GPU analysis performed full resident-input SHA-256 hashing.
-- [ ] Exact memory-preflight records exist and pass for every production shard.
-- [ ] Masked exact has native-L2 cutoff recall 1.0 and zero cutoff/strict-prefix errors for every
+- [X] Filter violations and invalid-sentinel errors are zero.
+- [X] Every reported approximate point has three repetitions and 10,000 queries.
+- [X] YFCC QPS was aggregated from five serial shards within each repetition, never averaged.
+- [X] Final GPU analysis performed full resident-input SHA-256 hashing.
+- [X] Exact memory-preflight records exist and pass for every production shard.
+- [X] Masked exact has native-L2 cutoff recall 1.0 and zero cutoff/strict-prefix errors for every
   workload; canonical fixed-ID agreement is retained only as a diagnostic and is never used as an
   exactness threshold.
-- [ ] CPU results are described as qualitative context, not absolute CPU/GPU speedup.
-- [ ] Diagnostic claims come only from artifacts listed and SHA-256-verified in
+- [X] CPU results are described as qualitative context, not absolute CPU/GPU speedup.
+- [X] Diagnostic claims come only from artifacts listed and SHA-256-verified in
   =diagnostic_manifest.json=.
-- [ ] Paper staging, PDF provenance, unfinished-text scan, and six-page check all pass.
-- [ ] The manuscript remains double-blind: no names, institutions, acknowledgments, or personally
+- [X] Paper staging, PDF provenance, unfinished-text scan, and six-page check all pass.
+- [X] The manuscript remains double-blind: no names, institutions, acknowledgments, or personally
   named fork links.
