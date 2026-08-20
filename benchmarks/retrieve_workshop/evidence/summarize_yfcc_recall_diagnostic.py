@@ -161,7 +161,7 @@ def independently_verify_outputs(
     num_queries: int,
     topk: int,
     dataset_size: int,
-) -> dict[str, float | int]:
+) -> dict[str, object]:
     result_payload = result_ids_path.read_bytes()
     if len(result_payload) != num_queries * topk * 8:
         raise ValueError(f"result-ID array shape failure: {result_ids_path}")
@@ -184,14 +184,19 @@ def independently_verify_outputs(
     matches = 0
     unique_outputs = 0
     duplicate_queries = 0
+    output_gt_masks: list[int] = []
     for query in range(num_queries):
-        gt_row = set(ground_truth[query * topk : (query + 1) * topk])
+        gt_order = tuple(ground_truth[query * topk : (query + 1) * topk])
+        gt_row = set(gt_order)
         if len(gt_row) != topk or any(node >= dataset_size for node in gt_row):
             raise ValueError(f"YFCC diagnostic GT row is not ten unique legal IDs: {query}")
         candidates = result_ids[query * topk : (query + 1) * topk]
         legal = [node for node in candidates if 0 <= node < dataset_size]
         distinct = set(legal)
         query_matches = len(distinct & gt_row)
+        output_gt_masks.append(
+            sum(1 << rank for rank, node in enumerate(gt_order) if node in distinct)
+        )
         matches += query_matches
         unique_outputs += len(distinct)
         duplicate_queries += len(legal) != len(distinct)
@@ -214,6 +219,7 @@ def independently_verify_outputs(
         "mean_unique_output_count": unique_outputs / num_queries,
         "duplicate_query_count": duplicate_queries,
         "duplicate_query_rate": duplicate_queries / num_queries,
+        "output_gt_masks": tuple(output_gt_masks),
     }
 
 
@@ -270,6 +276,14 @@ def summarize_variant(
         int(manifest["topk"]),
         int(manifest["dataset_size"]),
     )
+    output_gt_masks = tuple(int(mask) for mask in independent["output_gt_masks"])
+    if any(
+        output_mask & ~seen_mask
+        for output_mask, seen_mask in zip(output_gt_masks, gt_seen_masks)
+    ):
+        raise ValueError(f"output contains a GT neighbor not marked seen for {variant}")
+    if variant == "default_accumulator_b0" and output_gt_masks != gt_seen_masks:
+        raise ValueError("accumulator did not retain every seen GT neighbor per query")
     raw_recall = finite(raw, "ValidGTRecall")
     label = str(raw.get("label", ""))
     name_match = re.search(r"/(\d+)/process_time/", str(raw.get("name", "")))
