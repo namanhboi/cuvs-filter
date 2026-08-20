@@ -27,8 +27,13 @@ def main() -> None:
         parser.error("the frozen exact-control contract requires --k=10")
 
     manifest = json.loads(args.exact_manifest.read_text())
-    if manifest.get("method") != "cuvs_brute_force_bitmap":
-        raise ValueError("unsupported exact-workload manifest")
+    if (
+        manifest.get("method") != "cuvs_brute_force_bitmap"
+        or manifest.get("timed_invalid_sentinel_normalization") is not True
+        or "invalid-sentinel normalization"
+        not in str(manifest.get("timing_contract", ""))
+    ):
+        raise ValueError("unsupported or stale exact-workload manifest")
     if manifest.get("search_dtype") != "float32":
         raise ValueError(
             "cuVS exact-control configs require float32 search vectors"

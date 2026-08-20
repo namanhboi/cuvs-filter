@@ -18,6 +18,12 @@ BITMAP_HEADER = struct.Struct("<8sIIQQQ")
 BITMAP_MAGIC = b"CUVSBMAP"
 K = 10
 CONVERSION_SCHEMA_VERSION = 1
+TIMING_CONTRACT = (
+    "resident bitmap; timed search includes bitmap counting, query norms, optional "
+    "bitmap-to-CSR and CSR-to-COO construction, masked/tiled distance evaluation, "
+    "distance/top-k epilogues, invalid-sentinel normalization, and temporary "
+    "allocation/deallocation"
+)
 
 
 def sha256(path: Path) -> str:
@@ -219,6 +225,8 @@ def validate_cached_manifest(
 ) -> None:
     if (
         cached.get("method") != "cuvs_brute_force_bitmap"
+        or cached.get("timing_contract") != TIMING_CONTRACT
+        or cached.get("timed_invalid_sentinel_normalization") is not True
         or cached.get("preparation") != preparation
         or cached.get("source_dtype") != source_dtype
         or cached.get("search_dtype") != "float32"
@@ -479,12 +487,8 @@ def main() -> None:
     output_manifest: dict[str, object] = {
         "schema_version": 1,
         "method": "cuvs_brute_force_bitmap",
-        "timing_contract": (
-            "resident bitmap; timed search includes bitmap counting, query norms, optional "
-            "bitmap-to-CSR and CSR-to-COO construction, masked/tiled distance evaluation, "
-            "distance/top-k epilogues, invalid-sentinel normalization, and temporary "
-            "allocation/deallocation"
-        ),
+        "timing_contract": TIMING_CONTRACT,
+        "timed_invalid_sentinel_normalization": True,
         "source_bitmap_manifest": str(args.bitmap_manifest),
         "preparation": preparation,
         "source_dtype": args.source_dtype,

@@ -128,6 +128,15 @@ def main() -> None:
             exact_manifest = json.loads(
                 Path(config_manifest["exact_manifest"]).read_text()
             )
+            if (
+                exact_manifest.get("timed_invalid_sentinel_normalization")
+                is not True
+                or "invalid-sentinel normalization"
+                not in str(exact_manifest.get("timing_contract", ""))
+            ):
+                raise ValueError(
+                    "exact workload manifest does not bind the timed sentinel normalization"
+                )
             base_rows = int(exact_manifest["base_rows"])
             exact_shards = {
                 int(row["shard_number"]): row

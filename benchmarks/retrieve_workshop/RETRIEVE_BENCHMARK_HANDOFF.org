@@ -330,6 +330,21 @@ bitmaps, and GT.  ArXiv remains native float32.  Prepared manifests and conversi
 source and target SHA-256; do not set =RETRIEVE_EXACT_FORCE_PREPARE=1= unless intentionally
 replacing stale preparation state after auditing the reported mismatch.
 
+Each prepared manifest must also contain =timed_invalid_sentinel_normalization=true= and timing
+text naming that normalization.  Preparation reuse, config generation, and analysis reject older
+manifests without both markers.  If this precise legacy-contract failure is encountered, audit the
+unchanged source/conversion hashes first, then perform one explicit refresh with
+=RETRIEVE_EXACT_FORCE_PREPARE=1= before creating a new immutable result root.
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter-retrieve
+RETRIEVE_EXACT_FORCE_PREPARE=1 \
+  benchmarks/retrieve_workshop/exact_bitmap/run_exact.sh prepare
+#+end_src
+
+Do not leave that override set for routine reuse: subsequent preparation must validate the refreshed
+cache without =--force=.
+
 The timed exact search call includes bitmap population counting, query norms, sparse bitmap-to-CSR
 and CSR-to-COO construction when selected, masked distance evaluation, top-k, q-by-k output
 normalization to stable invalid-sentinel tails, and temporary device allocations.  Bitmap

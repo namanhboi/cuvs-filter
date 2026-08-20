@@ -120,6 +120,7 @@ def main() -> None:
             "distance/top-k epilogues, invalid-sentinel normalization, and temporary "
             "allocation/deallocation"
         ),
+        "timed_invalid_sentinel_normalization": True,
         "source_bitmap_manifest": None,
         "source_dtype": "float32",
         "search_dtype": "float32",

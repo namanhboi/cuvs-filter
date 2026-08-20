@@ -52,7 +52,7 @@ SINGLE_CTA path and a set of benchmark controls.  Any paper language must preser
 These are implementation/preflight facts, not search-performance results:
 
 - The GPU graph Python pipeline ran 6 tests and passed all 6.
-- The exact-control Python pipeline ran 6 tests and passed all 6.
+- The exact-control Python pipeline ran 7 tests and passed all 7.
 - The CPU context standalone test program passed.  It covers one valid synthetic aggregation/plot
   scenario and one negative scenario proving that a filter violation is rejected.
 - The native CPU read-only preflight passed with 8 graph artifacts, 5 methods, 4 workloads, and
@@ -418,12 +418,15 @@ Preparation additionally enforces:
 - legal bitmap shape and zero unused tail bits;
 - exact per-shard bitmap population counts;
 - a valid conservative GPU-memory estimate for every shard.
+- an explicit marker and timing-contract string proving q-by-k invalid-sentinel normalization is
+  part of the timed search call.
 
-The six-test exact pipeline verifies the cache contract rather than only its happy path.  It
+The seven-test exact pipeline verifies the cache contract rather than only its happy path.  It
 accepts byte-identical reuse, rejects a same-shaped source whose contents changed, rejects a
 changed source bitmap manifest, permits explicit refresh with =--force=, validates conversion
-sidecars, rejects GT width 11 when =k=10=, and checks the memory gate at exactly the required byte
-count and at one byte below it.  The prepared production snapshot is rooted at
+sidecars, rejects stale timing-contract manifests at preparation, configuration, and analysis,
+rejects GT width 11 when =k=10=, and checks the memory gate at exactly the required byte count and
+at one byte below it.  The prepared production snapshot is rooted at
 =/home/ubuntu/retrieve_workshop_data/exact_bitmap/= and contains all eight manifests listed in the
 static validation snapshot above.
 
@@ -567,7 +570,7 @@ remains a separate gate and is intentionally not inferred from Python success:
 |-
 | GPU Python pipeline tests | 2026-08-20 | PASS: 6/6 tests | =benchmarks/retrieve_workshop/gpu_graph/test_pipeline.py= |
 | CUDA bitmap tests/build | 2026-08-20 | PASS: 44 tests; 2 intentional unsupported-mode skips; clean no-op rebuild | =cpp/build/gtests/NEIGHBORS_ANN_CAGRA_FILTER_BITMAP_TEST= |
-| Exact Python pipeline tests | 2026-08-20 | PASS: 6/6 tests | =benchmarks/retrieve_workshop/exact_bitmap/test_pipeline.py= |
+| Exact Python pipeline tests | 2026-08-20 | PASS: 7/7 tests | =benchmarks/retrieve_workshop/exact_bitmap/test_pipeline.py= |
 | Bitmap-selectivity derivation tests | 2026-08-20 | PASS: 4/4 tests; all-workload artifact regenerated from bound inputs | =benchmarks/retrieve_workshop/evidence/test_summarize_bitmap_selectivity.py= |
 | Exact sparse/dense smoke | 2026-08-20 | PASS: CSR and tiled paths; recall 1.0; all five correctness counters zero | =/home/ubuntu/retrieve_workshop_runs/exact_smoke_final_20260820T0132Z= |
 | CPU pipeline test program | 2026-08-19 | PASS: 1 program / 2 synthetic scenarios | =benchmarks/retrieve_workshop/cpu_context/test_pipeline.py= |

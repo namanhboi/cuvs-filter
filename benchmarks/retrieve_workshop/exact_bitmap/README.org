@@ -17,6 +17,8 @@ preparation occur before timing.
 Every generated =exact_summary.csv= row records
 =timed_invalid_sentinel_normalization=True=.  Paper staging requires this flag, so a run that
 omitted the benchmark-private q-by-k normalization cannot be mistaken for the timed exact control.
+Prepared workload manifests carry the same Boolean marker and exact timing-contract text.  Cache
+reuse, config generation, and analysis all reject a legacy manifest that lacks either binding.
 
 YFCC is stored as =uint8=, while public cuVS brute force is instantiated for =float=/=half=.  The
 preparation step converts both its base and every query shard to =float32=.  Every byte coordinate

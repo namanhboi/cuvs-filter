@@ -192,7 +192,22 @@ class ExactPipelineTest(unittest.TestCase):
                 ],
                 0,
             )
+            self.assertIs(
+                first["timed_invalid_sentinel_normalization"], True
+            )
+            self.assertIn(
+                "invalid-sentinel normalization", first["timing_contract"]
+            )
             run(*command)  # Provenance-identical cache reuse is accepted.
+
+            stale_timing = dict(first)
+            stale_timing["timed_invalid_sentinel_normalization"] = False
+            (output / "manifest.json").write_text(
+                json.dumps(stale_timing, indent=2) + "\n"
+            )
+            stale = run(*command, check=False)
+            self.assertNotEqual(stale.returncode, 0)
+            run(*command, "--force")
 
             with base.open("r+b") as stream:
                 stream.seek(MATRIX_HEADER.size)
@@ -379,6 +394,49 @@ class ExactPipelineTest(unittest.TestCase):
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("output semantics", result.stderr)
+
+    def test_rejects_stale_workload_timing_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = create_fixture(root / "fixtures", "sparse")
+            generate(root, manifest, "sparse", "smoke")
+            raw = root / "raw" / "smoke" / "sparse" / "shard_00.json"
+            raw.parent.mkdir(parents=True, exist_ok=True)
+            raw.write_text(
+                json.dumps(
+                    {"benchmarks": [raw_record(0, 0.75, 0.30)]}
+                )
+                + "\n"
+            )
+
+            stale = json.loads(manifest.read_text())
+            stale["timed_invalid_sentinel_normalization"] = False
+            manifest.write_text(json.dumps(stale, indent=2) + "\n")
+            rejected_config = run(
+                str(SCRIPT_DIR / "generate_configs.py"),
+                "--exact-manifest",
+                str(manifest),
+                "--workload",
+                "stale",
+                "--phase",
+                "smoke",
+                "--output",
+                str(root / "stale-config"),
+                "--index-marker",
+                str(root / "marker.index"),
+                check=False,
+            )
+            self.assertNotEqual(rejected_config.returncode, 0)
+            rejected_analysis = run(
+                str(SCRIPT_DIR / "analyze_exact.py"),
+                "--result-root",
+                str(root),
+                "--phase",
+                "smoke",
+                check=False,
+            )
+            self.assertNotEqual(rejected_analysis.returncode, 0)
+            self.assertIn("timed sentinel normalization", rejected_analysis.stderr)
 
     def test_rejects_incomplete_shard_set(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
