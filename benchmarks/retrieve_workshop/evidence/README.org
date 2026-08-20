@@ -19,14 +19,15 @@ sentinel, so stale performance summaries cannot be combined with silently change
   authoritative for the paper's numeric selection-loss claim.  That claim must come from the
   separately generated schema-7, distinct-output YFCC summary.
 - =yfcc_b0_distinct_output_summary.json= is that authoritative 1,000-query B0 diagnostic.  It was
-  generated from clean commit =59659ec62757255b201801d88a2f558ed52af5ab= and binds the raw JSON,
+  generated from clean commit =dcf34ef58dc32385264118f6116a22f4a817a913= and binds the raw JSON,
   schema-7 query summaries/result arrays, benchmark and library, graph, dataset, queries, GT, and
   predicate metadata by SHA-256.  It reports Base GT-seen =0.6647=, Base returned recall
   =0.5414=, and Retain returned recall =0.6647= under distinct-valid-output set semantics.
   =summarize_yfcc_recall_diagnostic.py= enforces the corresponding configuration, schema,
   correctness, per-query GT-discovery equivalence, and accumulator-completeness gates before
-  hashing inputs.  It independently recomputes distinct recall, duplicate rate, and output count
-  from the archived result-ID arrays and GT, rather than trusting benchmark counters alone.
+  hashing inputs.  It independently reconstructs each output's GT-rank mask and requires Retain's
+  mask to equal its seen-GT mask query by query; it also recomputes distinct recall, duplicate rate,
+  and output count from the archived result-ID arrays and GT rather than trusting counters alone.
   =yfcc_b0_schema7_sources/= is the 876-KiB durable source bundle: raw/config JSON, both schema-7
   manifests and query summaries, both result-ID arrays, and the exact 1,000-query GT matrix.  Each
   file is individually hashed in =diagnostic_manifest.json=.
@@ -55,8 +56,8 @@ final matched-seed sweep is the causal control for that distinction.
 | File | SHA-256 |
 |------+----------|
 | =PASSING_ACCUMULATOR_DESIGN_AND_EVIDENCE_REPORT.org= | =fe9d8f42dcdd2dc884473484b0d9cbb7fd43bb92e1ca3b4a1c6e1f3a6f9a12c0= |
-| =yfcc_b0_distinct_output_summary.json= | =0d025b764276529bcdca0b62676dfdc92534e86ffec65e67622cfa1859965c02= |
-| =summarize_yfcc_recall_diagnostic.py= | =c25acffcc8c20d2b5dba08408f7307f58e7303ed6f750c8236c3614c5f2c9669= |
+| =yfcc_b0_distinct_output_summary.json= | =8322669e38cf83c03e009318b132deb6a79849c4e00a07a663a07684a5d07fd2= |
+| =summarize_yfcc_recall_diagnostic.py= | =4ee59c5a9d68c2ce9336c1121dca01af1e9e271fa12e9a6fa03c9cb81219159d= |
 | =yfcc_b0_schema7_sources/configs/root_cause_b0_diagnostic.json= | =ea7a0c10403adb7a77d98c1b704febaa707d1ea9e4b7faa27fef50640c60d6f6= |
 | =yfcc_b0_schema7_sources/raw/root_cause_b0_diagnostic.json= | =f7e597775e7010d0221f1296dd500821cb4e5b87741aa85bf06f8ccf7024435d= |
 | =yfcc_b0_schema7_sources/inputs/groundtruth.ibin= | =fba2e290fae0e88c5f8b8e6a41b357d2c4248b68e93e6c3235bdc2aff003fe1a= |

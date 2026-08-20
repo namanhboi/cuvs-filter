@@ -3,7 +3,7 @@
   "experiment": "yfcc_1000_b0_duplicate_safe_retention_diagnostic",
   "output_set_semantics": "distinct_valid_output_ids_v1",
   "git": {
-    "head": "59659ec62757255b201801d88a2f558ed52af5ab",
+    "head": "dcf34ef58dc32385264118f6116a22f4a817a913",
     "status": ""
   },
   "variants": [

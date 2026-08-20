@@ -5,7 +5,7 @@
     "branch": "favor-filtered-search",
     "git_commit": "9d8820ef9b12649067cfa858a9d6a169a1b6880e",
     "note": "Historical compact diagnostics are copied byte-for-byte from the source checkout; deterministic workload statistics and the duplicate-safe YFCC diagnostic are generated from SHA-256-bound inputs in the isolated experiment checkout. Artifact SHA-256 values define this mixed-source snapshot.",
-    "generated_diagnostic_git_commit": "59659ec62757255b201801d88a2f558ed52af5ab"
+    "generated_diagnostic_git_commit": "dcf34ef58dc32385264118f6116a22f4a817a913"
   },
   "artifacts": [
     {
@@ -15,12 +15,12 @@
     },
     {
       "path": "yfcc_b0_distinct_output_summary.json",
-      "sha256": "0d025b764276529bcdca0b62676dfdc92534e86ffec65e67622cfa1859965c02",
+      "sha256": "8322669e38cf83c03e009318b132deb6a79849c4e00a07a663a07684a5d07fd2",
       "supports": ["yfcc_gt_seen_and_returned_recall"]
     },
     {
       "path": "summarize_yfcc_recall_diagnostic.py",
-      "sha256": "c25acffcc8c20d2b5dba08408f7307f58e7303ed6f750c8236c3614c5f2c9669",
+      "sha256": "4ee59c5a9d68c2ce9336c1121dca01af1e9e271fa12e9a6fa03c9cb81219159d",
       "supports": ["yfcc_gt_seen_and_returned_recall_derivation"]
     },
     {
