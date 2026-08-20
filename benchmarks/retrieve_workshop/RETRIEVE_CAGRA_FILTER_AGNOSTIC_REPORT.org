@@ -418,7 +418,7 @@ Preparation additionally enforces:
 - exact per-shard bitmap population counts;
 - a valid conservative GPU-memory estimate for every shard.
 
-The five-test exact pipeline verifies the cache contract rather than only its happy path.  It
+The six-test exact pipeline verifies the cache contract rather than only its happy path.  It
 accepts byte-identical reuse, rejects a same-shaped source whose contents changed, rejects a
 changed source bitmap manifest, permits explicit refresh with =--force=, validates conversion
 sidecars, rejects GT width 11 when =k=10=, and checks the memory gate at exactly the required byte
@@ -730,7 +730,7 @@ sample or the final strict bitmap-seeded method.
 | =benchmarks/retrieve_workshop/evidence/diagnostic_manifest.json= | Machine-readable artifact hashes and claim-coverage keys consumed by the paper staging gate. |
 | =benchmarks/retrieve_workshop/evidence/PASSING_ACCUMULATOR_DESIGN_AND_EVIDENCE_REPORT.org= | Accumulator design; its historical slot-counted recall is not the paper's numeric evidence. |
 | =benchmarks/retrieve_workshop/evidence/yfcc_b0_distinct_output_summary.json= | Authoritative schema-7 YFCC B0 GT-seen/returned-recall result under distinct-output semantics. |
-| =benchmarks/retrieve_workshop/evidence/summarize_yfcc_recall_diagnostic.py= | Configuration, schema, correctness, traversal-equivalence, and full-input provenance gate for that summary. |
+| =benchmarks/retrieve_workshop/evidence/summarize_yfcc_recall_diagnostic.py= | Configuration, schema, correctness, per-query GT-discovery equivalence, compact-source archival, and full-input provenance gate for that summary. |
 | =benchmarks/retrieve_workshop/evidence/YFCC_RECALL_ROOT_CAUSE_REPORT.org= | YFCC B0-versus-continuous-depth diagnostic provenance. |
 | =benchmarks/retrieve_workshop/evidence/workload_selectivity_summary.json= | Exact 10,000-query selectivity distributions derived from resident bitmaps and bound to source files by SHA-256. |
 | =benchmarks/retrieve_workshop/evidence/summarize_bitmap_selectivity.py= | Bounded-memory selectivity derivation and bitmap-contract validation. |
@@ -759,10 +759,10 @@ All cells remain placeholders until the final analyzers complete.
 | ArXiv-EMIS | 100,000 | 4,096 | float32 | membership | 15.242937% | 13.226000% | 27.645000% | 1.15% | 100,000 |
 | ArXiv-R | 100,000 | 4,096 | float32 | range | 44.552398% | 43.787500% | 73.778400% | 0.13% | 100,000 |
 
-Selectivity source: =evidence/workload_selectivity_summary.json=, derived from all 10,000 bitmap
-rows by =evidence/summarize_bitmap_selectivity.py= and bound to every source bitmap by SHA-256.
-Valid GT slots are counted after excluding out-of-range sentinels; ArXiv-EM contains one query with
-only one legal result.
+Selectivity and valid-GT source: =evidence/workload_selectivity_summary.json=, derived from all
+10,000 bitmap rows by =evidence/summarize_bitmap_selectivity.py= and bound to every source bitmap
+and fixed-width GT file by SHA-256.  Its =valid_ground_truth= fields exclude out-of-range
+sentinels; ArXiv-EM contains one query with only one legal result.
 
 ** Table 2: Frozen GPU configuration
 

@@ -9,6 +9,7 @@ import hashlib
 import json
 import math
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -110,6 +111,8 @@ def validate_config(
     missing = [str(candidate) for candidate in inputs if not candidate.is_file()]
     if missing:
         raise FileNotFoundError(f"missing diagnostic inputs: {missing}")
+    for configured in result.values():
+        configured["groundtruth_path"] = inputs[2]
     return result, inputs
 
 
@@ -144,7 +147,12 @@ def summarize_variant(
     variant: str,
     raw: dict[str, object],
     configured: dict[str, object],
-) -> tuple[dict[str, object], list[dict[str, object]]]:
+) -> tuple[
+    dict[str, object],
+    list[dict[str, object]],
+    tuple[int, ...],
+    dict[str, Path],
+]:
     directory = result_root / "diagnostics" / "root_cause" / variant
     manifest_path = directory / "manifest.json"
     summary_path = directory / "query_summary.csv"
@@ -179,6 +187,7 @@ def summarize_variant(
     gt_seen = sum(int(row["gt_seen_mask"]).bit_count() / 10 for row in rows) / len(
         rows
     )
+    gt_seen_masks = tuple(int(row["gt_seen_mask"]) for row in rows)
     raw_recall = finite(raw, "ValidGTRecall")
     label = str(raw.get("label", ""))
     name_match = re.search(r"/(\d+)/process_time/", str(raw.get("name", "")))
@@ -191,6 +200,9 @@ def summarize_variant(
         or label_value(label, "algo") != "single_cta"
         or label_value(label, "filter_mode") != "default"
         or label_value(label, "favor_diagnostics_variant") != variant
+        or label_value(label, "favor_diagnostics_dataset") != "yfcc10m"
+        or Path(label_value(label, "favor_diagnostics_groundtruth")).resolve()
+        != Path(configured["groundtruth_path"]).resolve()
         or int(finite(raw, "itopk")) != int(search["itopk"])
         or int(finite(raw, "search_width")) != int(search["search_width"])
         or int(finite(raw, "max_iterations"))
@@ -238,7 +250,48 @@ def summarize_variant(
         )
         / len(rows),
     }
-    return result, [source(manifest_path), source(summary_path), source(result_ids_path)]
+    return (
+        result,
+        [source(manifest_path), source(summary_path), source(result_ids_path)],
+        gt_seen_masks,
+        {
+            f"diagnostics/{variant}/manifest.json": manifest_path,
+            f"diagnostics/{variant}/query_summary.csv": summary_path,
+            f"diagnostics/{variant}/result_indices.i64bin": result_ids_path,
+        },
+    )
+
+
+def archive_compact_sources(
+    archive_dir: Path, paths: dict[str, Path]
+) -> list[dict[str, object]]:
+    archive_dir = archive_dir.resolve()
+    partial = archive_dir.with_name(f"{archive_dir.name}.partial")
+    if archive_dir.exists() or partial.exists():
+        raise FileExistsError(
+            f"refusing to replace diagnostic archive: {archive_dir} (or {partial})"
+        )
+    partial.mkdir(parents=True)
+    archived: list[dict[str, object]] = []
+    for relative, original in sorted(paths.items()):
+        destination = partial / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(original, destination)
+        original_hash = sha256(original)
+        archived_hash = sha256(destination)
+        if original_hash != archived_hash:
+            raise ValueError(f"diagnostic archive copy mismatch: {original}")
+        archived.append(
+            {
+                "path": str((archive_dir / relative).resolve()),
+                "relative_path": relative,
+                "bytes": destination.stat().st_size,
+                "sha256": archived_hash,
+                "original_path": str(original.resolve()),
+            }
+        )
+    partial.rename(archive_dir)
+    return archived
 
 
 def main() -> None:
@@ -248,10 +301,18 @@ def main() -> None:
     parser.add_argument("--data-root", type=Path, required=True)
     parser.add_argument("--bench-bin", type=Path, required=True)
     parser.add_argument("--libcuvs", type=Path, required=True)
+    parser.add_argument("--archive-dir", type=Path)
+    parser.add_argument("--require-clean-repo", action="store_true")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     result_root = args.result_root.resolve()
     repo = args.repo.resolve()
+    git_provenance = {
+        "head": git(repo, "rev-parse", "HEAD"),
+        "status": git(repo, "status", "--short"),
+    }
+    if args.require_clean_repo and git_provenance["status"]:
+        raise ValueError("diagnostic generation requires a clean source repository")
     raw_path = result_root / "raw" / "root_cause_b0_diagnostic.json"
     config_path = result_root / "configs" / "root_cause_b0_diagnostic.json"
     configured, input_paths = validate_config(
@@ -260,23 +321,26 @@ def main() -> None:
     records = raw_records(raw_path)
     variants: list[dict[str, object]] = []
     variant_sources: list[dict[str, object]] = []
+    gt_seen_masks: dict[str, tuple[int, ...]] = {}
+    compact_paths: dict[str, Path] = {
+        "raw/root_cause_b0_diagnostic.json": raw_path,
+        "configs/root_cause_b0_diagnostic.json": config_path,
+        "inputs/groundtruth.ibin": input_paths[2],
+    }
     for variant in VARIANTS:
-        summary, current_sources = summarize_variant(
+        summary, current_sources, current_masks, current_compact_paths = summarize_variant(
             result_root, variant, records[variant], configured[variant]
         )
         variants.append(summary)
         variant_sources.extend(current_sources)
+        gt_seen_masks[variant] = current_masks
+        compact_paths.update(current_compact_paths)
 
     by_variant = {str(row["variant"]): row for row in variants}
     base = by_variant["default_b0"]
     retain = by_variant["default_accumulator_b0"]
-    if not math.isclose(
-        float(base["gt_seen_rate"]),
-        float(retain["gt_seen_rate"]),
-        rel_tol=0.0,
-        abs_tol=1e-7,
-    ):
-        raise ValueError("accumulator changed traversal GT-seen rate")
+    if gt_seen_masks["default_b0"] != gt_seen_masks["default_accumulator_b0"]:
+        raise ValueError("accumulator changed a per-query traversal GT-seen mask")
     if not math.isclose(
         float(retain["distinct_output_recall"]),
         float(retain["gt_seen_rate"]),
@@ -295,15 +359,17 @@ def main() -> None:
     ]
     sources.extend(source(path) for path in input_paths)
     sources.extend(variant_sources)
+    archived_sources = (
+        archive_compact_sources(args.archive_dir, compact_paths)
+        if args.archive_dir is not None
+        else []
+    )
 
     payload = {
         "schema_version": 1,
         "experiment": "yfcc_1000_b0_duplicate_safe_retention_diagnostic",
         "output_set_semantics": "distinct_valid_output_ids_v1",
-        "git": {
-            "head": git(repo, "rev-parse", "HEAD"),
-            "status": git(repo, "status", "--short"),
-        },
+        "git": git_provenance,
         "variants": variants,
         "headline": {
             "gt_seen_rate": float(base["gt_seen_rate"]),
@@ -313,6 +379,7 @@ def main() -> None:
             * float(base["selection_loss"]),
         },
         "sources": sources,
+        "archived_sources": archived_sources,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(payload, indent=2) + "\n")

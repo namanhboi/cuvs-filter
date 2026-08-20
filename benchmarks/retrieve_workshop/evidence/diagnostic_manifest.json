@@ -20,7 +20,7 @@
     },
     {
       "path": "summarize_yfcc_recall_diagnostic.py",
-      "sha256": "42f91d3801a504447f7b98cb8c20d9b68ee086fa77a99b4e7424115103a12f14",
+      "sha256": "144c4319e8499a26a48bb53b1d1becec9e8f9049ca9cca82e2406a292558da5b",
       "supports": ["yfcc_gt_seen_and_returned_recall_derivation"]
     },
     {
@@ -35,12 +35,12 @@
     },
     {
       "path": "summarize_bitmap_selectivity.py",
-      "sha256": "ef08f1f23eefb503760cb0265a06240d640f6bafd1cdf6d6913dac61d70144cb",
+      "sha256": "858264d7afd30728726dc5bbaa79b8eb286b8aa1c1f8bfee6c332d2b93e7379f",
       "supports": ["workload_selectivity_derivation"]
     },
     {
       "path": "test_summarize_bitmap_selectivity.py",
-      "sha256": "2fd36cc5dd7cde1f78ae43454525d991b4fce695942a8e6303a540474c6dd65f",
+      "sha256": "90d8e22e25ccdaf9b7b32911203f78bfea6e173e574f0cc025c4e0dd51ef68d4",
       "supports": ["workload_selectivity_derivation_test"]
     },
     {

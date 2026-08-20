@@ -202,19 +202,23 @@ ${PYTHON} benchmarks/retrieve_workshop/evidence/summarize_yfcc_recall_diagnostic
   --data-root /home/ubuntu/cuvs-filter/datasets \
   --bench-bin /home/ubuntu/cuvs-filter-retrieve/cpp/build/bench/ann/CUVS_CAGRA_ANN_BENCH \
   --libcuvs /home/ubuntu/cuvs-filter-retrieve/cpp/build/libcuvs.so \
+  --archive-dir /home/ubuntu/cuvs-filter-retrieve/benchmarks/retrieve_workshop/evidence/yfcc_b0_schema7_sources \
+  --require-clean-repo \
   --output "${YFCC_DIAGNOSTIC_ROOT}/analysis/yfcc_b0_distinct_output_summary.json"
 #+end_src
 
 The summarizer rejects any schema other than 7, a missing
 =output_set_semantics=distinct_valid_output_ids_v1= marker, an unexpected configuration, a
 raw/trace recall mismatch, changed input identities, filter/sentinel errors, accumulator
-duplicates, a traversal change between Base and Retain, or failure of Retain to preserve every
-seen GT neighbor.
+duplicates, a per-query GT-discovery-mask difference between Base and Retain, or failure of Retain
+to preserve every seen GT neighbor.
 
-Inspect the generated summary before freezing it.  If it is used by the manuscript, copy it into
-=benchmarks/retrieve_workshop/evidence/=, add its SHA-256 and claim key to
-=diagnostic_manifest.json=, update =evidence/README.org=, and rerun the paper staging check.  Never
-edit a result number by hand or point the paper directly at an unmanifested diagnostic.
+Inspect the generated summary and archive before freezing them.  If used by the manuscript, copy
+the summary into =benchmarks/retrieve_workshop/evidence/=, add its SHA-256, every archive-file
+SHA-256, and the claim keys to =diagnostic_manifest.json=, update =evidence/README.org=, and rerun
+the paper staging check.  Never edit a result number by hand or point the paper directly at an
+unmanifested diagnostic.  Use a new versioned archive directory for any later regeneration; the
+summarizer refuses to replace an existing archive.
 
 * GPU graph experiment
 

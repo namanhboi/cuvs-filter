@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 
 BITMAP_HEADER = struct.Struct("<8sIIQQQ")
+MATRIX_HEADER = struct.Struct("<II")
 
 
 def sha256(path: Path) -> str:
@@ -27,6 +28,45 @@ def parse_workload(value: str) -> tuple[str, Path]:
     if not separator or not name or not path:
         raise argparse.ArgumentTypeError("expected WORKLOAD=/path/to/manifest.json")
     return name, Path(path).resolve()
+
+
+def resolve_source(manifest_path: Path, value: object) -> Path:
+    candidate = Path(str(value))
+    if not candidate.is_absolute():
+        candidate = manifest_path.parent / candidate
+    return candidate.resolve()
+
+
+def shard_source(
+    manifest_path: Path, shard: dict[str, object], key: str, default_name: str
+) -> Path:
+    value = shard.get(key)
+    if value is None:
+        value = Path(str(shard["directory"])) / default_name
+    return resolve_source(manifest_path, value)
+
+
+def count_valid_ground_truth(
+    path: Path, expected_rows: int, expected_k: int, base_rows: int
+) -> tuple[int, str]:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        header = stream.read(MATRIX_HEADER.size)
+        digest.update(header)
+        if len(header) != MATRIX_HEADER.size:
+            raise ValueError(f"truncated ground-truth header: {path}")
+        rows, columns = MATRIX_HEADER.unpack(header)
+        expected_bytes = MATRIX_HEADER.size + rows * columns * 4
+        if (
+            rows != expected_rows
+            or columns != expected_k
+            or path.stat().st_size != expected_bytes
+        ):
+            raise ValueError(f"ground-truth matrix violates manifest contract: {path}")
+        payload = stream.read()
+        digest.update(payload)
+    values = np.frombuffer(payload, dtype="<u4")
+    return int(np.count_nonzero(values < base_rows)), digest.hexdigest()
 
 
 def count_bitmap_rows(
@@ -116,22 +156,34 @@ def count_bitmap_rows(
 
 def summarize(name: str, manifest_path: Path) -> dict[str, object]:
     manifest = json.loads(manifest_path.read_text())
-    if manifest.get("bitmap_schema") != "CUVSBMAP/v1/u32/row-major":
+    if (
+        manifest.get("schema_version") != 1
+        or manifest.get("bitmap_schema") != "CUVSBMAP/v1/u32/row-major"
+    ):
         raise ValueError(f"unsupported bitmap schema: {manifest_path}")
     base_rows = int(manifest["base_rows"])
     query_rows = int(manifest["query_rows"])
     all_counts: list[np.ndarray] = []
     bitmap_sources: list[dict[str, object]] = []
+    ground_truth_sources: list[dict[str, object]] = []
+    valid_gt_slots = 0
     cursor = 0
     for shard_number, shard in enumerate(manifest["shards"]):
         first_query = int(shard["first_query"])
         shard_queries = int(shard["query_count"])
         if first_query != cursor or shard_queries <= 0:
             raise ValueError(f"noncontiguous query shards in {manifest_path}")
-        bitmap_path = Path(shard["bitmap"]).resolve()
+        bitmap_path = shard_source(manifest_path, shard, "bitmap", "filter.bitmap")
         counts, bitmap_hash = count_bitmap_rows(
             bitmap_path, shard_queries, base_rows
         )
+        ground_truth_path = shard_source(
+            manifest_path, shard, "groundtruth", "groundtruth.ibin"
+        )
+        shard_valid_gt, ground_truth_hash = count_valid_ground_truth(
+            ground_truth_path, shard_queries, 10, base_rows
+        )
+        valid_gt_slots += shard_valid_gt
         if int(counts.min()) != int(shard["min_passing"]):
             raise ValueError(f"min-passing mismatch for {bitmap_path}")
         if int(counts.max()) != int(shard["max_passing"]):
@@ -152,6 +204,16 @@ def summarize(name: str, manifest_path: Path) -> dict[str, object]:
                 "path": str(bitmap_path),
                 "bytes": bitmap_path.stat().st_size,
                 "sha256": bitmap_hash,
+            }
+        )
+        ground_truth_sources.append(
+            {
+                "shard_number": shard_number,
+                "first_query": first_query,
+                "query_count": shard_queries,
+                "path": str(ground_truth_path),
+                "bytes": ground_truth_path.stat().st_size,
+                "sha256": ground_truth_hash,
             }
         )
         cursor += shard_queries
@@ -177,12 +239,18 @@ def summarize(name: str, manifest_path: Path) -> dict[str, object]:
             "fraction_below_1_percent": float(np.mean(selectivity < 0.01)),
             "fraction_at_most_1_percent": float(np.mean(selectivity <= 0.01)),
         },
+        "valid_ground_truth": {
+            "k": 10,
+            "slots": valid_gt_slots,
+            "fraction": valid_gt_slots / (query_rows * 10),
+        },
         "source_manifest": {
             "path": str(manifest_path),
             "bytes": manifest_path.stat().st_size,
             "sha256": sha256(manifest_path),
         },
         "source_bitmaps": bitmap_sources,
+        "source_ground_truth": ground_truth_sources,
     }
 
 
