@@ -25,8 +25,11 @@ preparation step converts both its base and every query shard to =float32=.  Eve
 is represented exactly, and source IDs, bitmaps, and ground truth are unchanged.  This is still a
 float32 =L2Expanded= control rather than a native-uint8 throughput baseline: norm/dot
 intermediates can exceed =2^24=, so distance ties/order are validated empirically against the
-original ground truth, and vector traffic is four times the native uint8 footprint.  ArXiv uses
-its native float32 files.
+original ground truth, and vector traffic is four times the native uint8 footprint.  The
+post-timing validator recomputes squared L2 with wide accumulation from the prepared coordinates;
+because the converted coordinates are exact byte values, this recovers the native-uint8 squared-
+L2 ordering without adding work to the reported QPS interval.  ArXiv uses its native float32
+files.
 
 * Commands
 
@@ -79,13 +82,23 @@ Generated files live under =results/= by default:
 - =analysis/exact_summary.csv=: median, minimum, and maximum QPS plus exact recall.
 - =analysis/exact_results.json=: machine-readable timing contract, correctness rules, and summaries.
 
-The analyzer reports =valid_gt_recall= over legal ground-truth IDs using distinct output-ID set
-semantics: a repeated output ID can receive match credit at most once.  Raw records must declare
-=OutputSetSemanticsVersion=1= and run provenance must bind the
-=distinct_valid_output_ids_v1= contract, so legacy slot-counted results cannot be staged.  ArXiv-EM has one intrinsically
-underfilled query whose fixed-width GT row contains out-of-range padding IDs; those IDs are not
-neighbors and are excluded from the exact denominator.  A run passes only when valid recall is
-1.0, predicate violations, invalid-sentinel ID/distance/ordering errors, and duplicate-output
-queries are zero, and observed underfilled/missing output slots exactly match legal GT cardinality.  The analyzer also
+The analyzer reports =valid_gt_recall= as canonical fixed-ID agreement over legal ground-truth IDs
+using distinct output-ID set semantics: a repeated output ID can receive match credit at most once.
+Raw records must declare =OutputSetSemanticsVersion=1= and run provenance must bind the
+=distinct_valid_output_ids_v1= contract, so legacy slot-counted results cannot be staged.  This
+fixed-ID metric is not by itself a valid exactness gate when the legal rank-=k= boundary is tied.
+In YFCC, 55 of the 1,000 correctness queries have a non-unique legal tenth-distance cutoff; a
+correct exact result can therefore choose a different tied ID and report 0.9974 canonical-ID
+agreement.  Non-YFCC workloads still require canonical =valid_gt_recall= equal to 1.0.
+
+The tie-aware exactness gate instead requires =native_l2_cutoff_recall= equal to 1.0,
+=native_l2_cutoff_errors= equal to zero, and =native_l2_strict_prefix_errors= equal to zero.  Thus every unique legal
+output is within the official native squared-L2 rank-=k= cutoff, and every official GT ID strictly
+closer than that cutoff is retained; only IDs tied at the cutoff may be exchanged.  The native-L2
+validator runs after the timed search and is excluded from QPS.  Predicate violations,
+invalid-sentinel ID/distance/ordering errors, and duplicate-output queries must also be zero, and
+observed underfilled/missing output slots must exactly match legal GT cardinality.  ArXiv-EM has
+one intrinsically underfilled query whose fixed-width GT row contains out-of-range padding IDs;
+those IDs are not neighbors and are excluded from all exact denominators.  The analyzer also
 requires the exact configured shard/repetition sets and a passing memory-preflight record for every
 production shard, and exits nonzero on any violation.

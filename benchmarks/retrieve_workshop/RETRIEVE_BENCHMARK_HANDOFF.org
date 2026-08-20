@@ -350,7 +350,8 @@ and CSR-to-COO construction when selected, masked distance evaluation, top-k, q-
 normalization to stable invalid-sentinel tails, and temporary device allocations.  Bitmap
 materialization/upload and vector/index preparation remain outside timing.  The publication CSV
 must state =timed_invalid_sentinel_normalization=True=; paper staging rejects a missing or false
-flag.
+flag.  The native squared-L2 cutoff validator runs after this timed region and is excluded from
+reported QPS.
 
 Before every benchmark process the runner writes a mandatory GPU-memory decision under
 =provenance/gpu_memory/=.  Do not use =RETRIEVE_EXACT_AVAILABLE_BYTES= in a paper run; it is only a
@@ -360,9 +361,13 @@ queries/three repetitions.
 The publication input is
 =${RETRIEVE_EXACT_RESULT_ROOT}/analysis/exact_summary.csv=.  The adjacent measurement CSVs,
 =exact_results.json=, run provenance, and memory-preflight records form its audit trail.  Exact
-results pass only with valid-GT recall 1.0, zero filter violations, zero sentinel-ID,
+results pass only with =native_l2_cutoff_recall= equal to 1.0, zero native-L2 cutoff errors, and zero
+native-L2 strict-prefix errors, together with zero filter violations, zero sentinel-ID,
 sentinel-order, and sentinel-distance errors, zero duplicates, and the expected legal underfill
-(including ArXiv-EM's one intrinsically underfilled query).
+(including ArXiv-EM's one intrinsically underfilled query).  =valid_gt_recall= records canonical
+fixed-ID agreement and must remain 1.0 for non-YFCC workloads.  YFCC may report 0.9974 canonical-ID
+agreement because its official rank-10 boundary is tied for 55 of the 1,000 correctness queries;
+exchanging IDs only at that cutoff is exact under the native-distance gate.
 
 * Native CPU context
 
@@ -524,6 +529,8 @@ binary, library, hardware, data, and repetition identity auditable.
 - [ ] YFCC QPS was aggregated from five serial shards within each repetition, never averaged.
 - [ ] Final GPU analysis performed full resident-input SHA-256 hashing.
 - [ ] Exact memory-preflight records exist and pass for every production shard.
+- [ ] Masked exact has native-L2 cutoff recall 1.0 and zero cutoff/strict-prefix errors; non-YFCC
+  canonical fixed-ID recall is 1.0, while any YFCC fixed-ID mismatch is confined to rank-10 ties.
 - [ ] CPU results are described as qualitative context, not absolute CPU/GPU speedup.
 - [ ] Diagnostic claims come only from artifacts listed and SHA-256-verified in
   =diagnostic_manifest.json=.

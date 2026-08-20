@@ -140,6 +140,7 @@ def raw_record(
         "Recall": 1.0,
         "ValidGTRecall": 1.0,
         "ValidGTFraction": 1.0 - missing,
+        "native_l2_cutoff_validation": 1.0,
         "resident_bitmap": 1.0,
         "label": 'exact_control="bitmap_count_csr_search"',
         "FilterViolations": 0.0,
@@ -147,6 +148,10 @@ def raw_record(
         "SentinelOrderErrors": 0.0,
         "InvalidSentinelDistanceErrors": 0.0,
         "DuplicateOutputQueries": 0.0,
+        "NativeL2CutoffRecall": 1.0,
+        "NativeL2CutoffErrors": 0.0,
+        "NativeL2StrictPrefixErrors": 0.0,
+        "NativeL2CutoffValidated": 1.0,
         "OutputSetSemanticsVersion": 1,
         "UnderfilledQueries": underfilled,
         "MissingResultSlots": missing,
@@ -316,13 +321,24 @@ class ExactPipelineTest(unittest.TestCase):
                 ("dense", 0.50, 0.45),
             ):
                 manifest = create_fixture(root / "fixtures", mode)
-                generate(root, manifest, mode, "smoke")
-                raw = root / "raw" / "smoke" / mode / "shard_00.json"
+                workload = "yfcc" if mode == "sparse" else mode
+                generate(root, manifest, workload, "smoke")
+                raw = (
+                    root
+                    / "raw"
+                    / "smoke"
+                    / workload
+                    / "shard_00.json"
+                )
                 raw.parent.mkdir(parents=True, exist_ok=True)
+                record = raw_record(0, underfilled, missing)
+                if workload == "yfcc":
+                    # Fixed-width GT names only one valid tied-ID choice.  Exactness is
+                    # determined by the native-distance cutoff, while canonical overlap remains
+                    # a diagnostic.
+                    record["ValidGTRecall"] = 0.9
                 raw.write_text(
-                    json.dumps(
-                        {"benchmarks": [raw_record(0, underfilled, missing)]}
-                    )
+                    json.dumps({"benchmarks": [record]})
                     + "\n"
                 )
             run(
@@ -343,6 +359,30 @@ class ExactPipelineTest(unittest.TestCase):
                 self.assertEqual(
                     row["timed_invalid_sentinel_normalization"], "True"
                 )
+
+    def test_rejects_native_l2_cutoff_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = create_fixture(root / "fixtures", "sparse")
+            generate(root, manifest, "yfcc", "smoke")
+            raw = root / "raw" / "smoke" / "yfcc" / "shard_00.json"
+            raw.parent.mkdir(parents=True, exist_ok=True)
+            record = raw_record(0, 0.75, 0.30)
+            record["ValidGTRecall"] = 0.9
+            record["NativeL2CutoffRecall"] = 0.9
+            record["NativeL2CutoffErrors"] = 0.1
+            record["NativeL2StrictPrefixErrors"] = 0.1
+            raw.write_text(json.dumps({"benchmarks": [record]}) + "\n")
+            result = run(
+                str(SCRIPT_DIR / "analyze_exact.py"),
+                "--result-root",
+                str(root),
+                "--phase",
+                "smoke",
+                check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("exact-control correctness failed", result.stderr)
 
     def test_rejects_missing_and_duplicate_repetitions(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

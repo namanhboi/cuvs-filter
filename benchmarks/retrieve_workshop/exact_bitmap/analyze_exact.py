@@ -274,6 +274,7 @@ def main() -> None:
                     or index[0]["search_params"][0]
                     != {
                         "exact_control": "bitmap_count_csr_search",
+                        "native_l2_cutoff_validation": True,
                         "resident_bitmap": True,
                     }
                 ):
@@ -328,6 +329,14 @@ def main() -> None:
                         or not close(
                             float(record.get("resident_bitmap", math.nan)), 1.0
                         )
+                        or not close(
+                            float(
+                                record.get(
+                                    "native_l2_cutoff_validation", math.nan
+                                )
+                            ),
+                            1.0,
+                        )
                     ):
                         raise ValueError(
                             f"raw exact record disagrees with config in {raw_path}"
@@ -353,6 +362,18 @@ def main() -> None:
                     duplicate_queries = float(
                         record.get("DuplicateOutputQueries", math.nan)
                     )
+                    native_l2_cutoff_recall = float(
+                        record.get("NativeL2CutoffRecall", math.nan)
+                    )
+                    native_l2_cutoff_errors = float(
+                        record.get("NativeL2CutoffErrors", math.nan)
+                    )
+                    native_l2_strict_prefix_errors = float(
+                        record.get("NativeL2StrictPrefixErrors", math.nan)
+                    )
+                    native_l2_cutoff_validated = float(
+                        record.get("NativeL2CutoffValidated", math.nan)
+                    )
                     output_set_semantics = float(
                         record.get("OutputSetSemanticsVersion", math.nan)
                     )
@@ -363,6 +384,13 @@ def main() -> None:
                         or not 0.0 <= legacy_recall <= 1.0
                         or not math.isfinite(valid_recall)
                         or not 0.0 <= valid_recall <= 1.0
+                        or not math.isfinite(native_l2_cutoff_recall)
+                        or not 0.0 <= native_l2_cutoff_recall <= 1.0
+                        or not math.isfinite(native_l2_cutoff_errors)
+                        or native_l2_cutoff_errors < 0.0
+                        or not math.isfinite(native_l2_strict_prefix_errors)
+                        or native_l2_strict_prefix_errors < 0.0
+                        or not close(native_l2_cutoff_validated, 1.0)
                         or not close(output_set_semantics, 1.0)
                     ):
                         raise ValueError(
@@ -370,7 +398,13 @@ def main() -> None:
                             f"qps={qps}, legacy={legacy_recall}, valid={valid_recall}"
                         )
                     correct = (
-                        close(valid_recall, 1.0, 1e-7)
+                        close(native_l2_cutoff_recall, 1.0, 1e-7)
+                        and close(native_l2_cutoff_errors, 0.0)
+                        and close(native_l2_strict_prefix_errors, 0.0)
+                        and (
+                            workload == "yfcc"
+                            or close(valid_recall, 1.0, 1e-7)
+                        )
                         and close(valid_fraction, expected_valid_fraction)
                         and close(filter_violations, 0.0)
                         and close(sentinel_errors, 0.0)
@@ -391,6 +425,14 @@ def main() -> None:
                         "seconds": query_count / qps,
                         "legacy_recall": legacy_recall,
                         "valid_gt_recall": valid_recall,
+                        "native_l2_cutoff_recall": native_l2_cutoff_recall,
+                        "native_l2_cutoff_errors": native_l2_cutoff_errors,
+                        "native_l2_strict_prefix_errors": (
+                            native_l2_strict_prefix_errors
+                        ),
+                        "native_l2_cutoff_validated": (
+                            native_l2_cutoff_validated
+                        ),
                         "valid_gt_fraction": valid_fraction,
                         "valid_gt_slots": valid_slots,
                         "underfilled_queries": observed_underfilled,
@@ -447,6 +489,11 @@ def main() -> None:
             float(row["valid_gt_recall"]) * int(row["valid_gt_slots"])
             for row in rows
         )
+        native_l2_matched = sum(
+            float(row["native_l2_cutoff_recall"])
+            * int(row["valid_gt_slots"])
+            for row in rows
+        )
         aggregate_rows.append(
             {
                 "workload": workload,
@@ -457,6 +504,14 @@ def main() -> None:
                 "qps": total_queries / total_seconds,
                 "seconds": total_seconds,
                 "valid_gt_recall": matched / total_valid,
+                "native_l2_cutoff_recall": native_l2_matched / total_valid,
+                "native_l2_cutoff_errors": max(
+                    float(row["native_l2_cutoff_errors"]) for row in rows
+                ),
+                "native_l2_strict_prefix_errors": max(
+                    float(row["native_l2_strict_prefix_errors"])
+                    for row in rows
+                ),
                 "filter_violations": max(
                     float(row["filter_violations"]) for row in rows
                 ),
@@ -510,6 +565,16 @@ def main() -> None:
                 "valid_gt_recall": min(
                     float(row["valid_gt_recall"]) for row in rows
                 ),
+                "native_l2_cutoff_recall": min(
+                    float(row["native_l2_cutoff_recall"]) for row in rows
+                ),
+                "native_l2_cutoff_errors": max(
+                    float(row["native_l2_cutoff_errors"]) for row in rows
+                ),
+                "native_l2_strict_prefix_errors": max(
+                    float(row["native_l2_strict_prefix_errors"])
+                    for row in rows
+                ),
                 "sentinel_order_errors": max(
                     float(row["sentinel_order_errors"]) for row in rows
                 ),
@@ -544,15 +609,23 @@ def main() -> None:
                 "bitmap materialization",
                 "bitmap upload",
                 "uint8-to-float conversion",
+                "post-timing native squared-L2 cutoff validation",
             ],
             "yfcc_aggregation": "10000 / sum(shard wall-search seconds)",
             "timed_invalid_sentinel_normalization": True,
         },
         "correctness": {
-            "recall": "distinct valid output-ID matches divided by valid GT IDs; out-of-range padding IDs are excluded",
+            "recall": (
+                "native_l2_cutoff_recall accepts each distinct passing output at or below the "
+                "official k-th native squared-L2 distance; valid_gt_recall separately reports "
+                "agreement with the fixed-width canonical GT IDs"
+            ),
             "output_set_semantics": "distinct_valid_output_ids_v1",
             "requirements": [
-                "valid_gt_recall == 1",
+                "native_l2_cutoff_recall == 1",
+                "native_l2_cutoff_errors == 0",
+                "native_l2_strict_prefix_errors == 0",
+                "valid_gt_recall == 1 for non-YFCC workloads",
                 "zero predicate violations",
                 "zero invalid-sentinel errors",
                 "zero sentinel-order errors",
@@ -626,6 +699,10 @@ def main() -> None:
             != "distinct_valid_output_ids_v1"
             or run_payload.get("fixed_contract", {}).get(
                 "timed_invalid_sentinel_normalization"
+            )
+            is not True
+            or run_payload.get("fixed_contract", {}).get(
+                "native_l2_cutoff_validation"
             )
             is not True
         ):

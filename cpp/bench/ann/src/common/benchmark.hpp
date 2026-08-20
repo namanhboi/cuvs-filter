@@ -22,9 +22,11 @@
 #include <memory>
 #include <mutex>
 #include <numeric>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <thread>
+#include <type_traits>
 #include <vector>
 
 namespace cuvs::bench {
@@ -186,7 +188,8 @@ void bench_search(::benchmark::State& state,
   cuvs::bench::benchmark_n_threads = state.threads();
   std::size_t queries_processed    = 0;
 
-  const auto& sp_json = index.search_params[search_param_ix];
+  const auto& sp_json                  = index.search_params[search_param_ix];
+  const bool validate_native_l2_cutoff = sp_json.value("native_l2_cutoff_validation", false);
 
   if (state.thread_index() == 0) { dump_parameters(state, sp_json); }
 
@@ -370,10 +373,75 @@ void bench_search(::benchmark::State& state,
     std::size_t sentinel_order_errors            = 0;
     std::size_t invalid_sentinel_distance_errors = 0;
     std::size_t duplicate_output_queries         = 0;
+    std::size_t native_l2_cutoff_matches         = 0;
+    std::size_t native_l2_cutoff_total           = 0;
+    std::size_t native_l2_cutoff_errors          = 0;
+    std::size_t native_l2_strict_prefix_errors   = 0;
     auto* validation_algo                        = dynamic_cast<algo<T>*>(current_algo.get());
     const bool validate_filter =
       validation_algo != nullptr && validation_algo->supports_filter_validation();
     const auto base_set_size = dataset->base_set_size();
+
+    // The paper's masked-exact control validates mathematical squared-L2 membership at the
+    // official k-th-distance cutoff in addition to reporting fixed-ID GT overlap.  The latter is
+    // not an exactness oracle when several legal candidates tie at rank k.  Map independent host
+    // views here, after timing, so this check neither enters QPS nor migrates the device-resident
+    // blobs backing the algorithm under test.
+    std::optional<blob<T>> native_l2_base;
+    std::optional<blob<T>> native_l2_queries;
+    std::optional<blob<std::uint32_t>> native_l2_groundtruth;
+    const T* native_l2_base_ptr           = nullptr;
+    const T* native_l2_query_ptr          = nullptr;
+    const std::uint32_t* native_l2_gt_ptr = nullptr;
+    std::uint32_t native_l2_gt_width      = 0;
+    if (validate_native_l2_cutoff) {
+      const auto& dataset_conf = configuration::singleton().get_dataset_conf();
+      if (dataset->distance() != "euclidean" || !dataset_conf.groundtruth_neighbors_file ||
+          dataset_conf.subset_first_row != 0 || dataset_conf.subset_size != 0) {
+        state.SkipWithError(
+          "native_l2_cutoff_validation requires full-dataset Euclidean search with GT");
+        return;
+      }
+      try {
+        native_l2_base.emplace(dataset_conf.base_file);
+        native_l2_queries.emplace(dataset_conf.query_file);
+        native_l2_groundtruth.emplace(*dataset_conf.groundtruth_neighbors_file);
+        if (native_l2_base->n_rows() != base_set_size ||
+            native_l2_base->n_cols() != static_cast<std::uint32_t>(dataset->dim()) ||
+            native_l2_queries->n_rows() != dataset->query_set_size() ||
+            native_l2_queries->n_cols() != static_cast<std::uint32_t>(dataset->dim()) ||
+            native_l2_groundtruth->n_rows() != dataset->query_set_size() ||
+            native_l2_groundtruth->n_cols() < k) {
+          state.SkipWithError("native L2 cutoff inputs have incompatible shapes");
+          return;
+        }
+        native_l2_base_ptr  = native_l2_base->data(MemoryType::kHostMmap);
+        native_l2_query_ptr = native_l2_queries->data(MemoryType::kHostMmap);
+        native_l2_gt_ptr    = native_l2_groundtruth->data(MemoryType::kHostMmap);
+        native_l2_gt_width  = native_l2_groundtruth->n_cols();
+      } catch (const std::exception& error) {
+        state.SkipWithError("native L2 cutoff setup: " + std::string(error.what()));
+        return;
+      }
+    }
+
+    const auto native_squared_l2 = [&](std::size_t query_id, std::size_t candidate_id) {
+      const auto* query = native_l2_query_ptr + query_id * dataset->dim();
+      const auto* base  = native_l2_base_ptr + candidate_id * dataset->dim();
+      double distance{0.0};
+      const auto to_double = [](T value) {
+        if constexpr (std::is_same_v<T, half>) {
+          return static_cast<double>(static_cast<float>(value));
+        } else {
+          return static_cast<double>(value);
+        }
+      };
+      for (int column = 0; column < dataset->dim(); ++column) {
+        const double delta = to_double(query[column]) - to_double(base[column]);
+        distance += delta * delta;
+      }
+      return distance;
+    };
 
     // We go through the groundtruth with same stride as the benchmark loop.
     size_t out_offset   = 0;
@@ -404,6 +472,14 @@ void bench_search(::benchmark::State& state,
       std::vector<std::size_t> local_invalid_sentinel_distance_errors(
         num_recall_calculation_worker_threads + 1);
       std::vector<std::size_t> local_duplicate_output_queries(
+        num_recall_calculation_worker_threads + 1);
+      std::vector<std::size_t> local_native_l2_cutoff_matches(
+        num_recall_calculation_worker_threads + 1);
+      std::vector<std::size_t> local_native_l2_cutoff_total(num_recall_calculation_worker_threads +
+                                                            1);
+      std::vector<std::size_t> local_native_l2_cutoff_errors(num_recall_calculation_worker_threads +
+                                                             1);
+      std::vector<std::size_t> local_native_l2_strict_prefix_errors(
         num_recall_calculation_worker_threads + 1);
       int chunk_size =
         n_queries / (num_recall_calculation_worker_threads + 1);  // +1 for the main thread
@@ -449,6 +525,43 @@ void bench_search(::benchmark::State& state,
               local_missing_result_count[tid] += k - valid_results;
             }
             local_duplicate_output_queries[tid] += has_duplicate;
+
+            if (validate_native_l2_cutoff) {
+              bool has_cutoff    = false;
+              double cutoff_l2   = -std::numeric_limits<double>::infinity();
+              const auto* gt_row = native_l2_gt_ptr + i_orig_idx * native_l2_gt_width;
+              for (std::uint32_t rank = 0; rank < k; ++rank) {
+                const auto gt_id = static_cast<std::size_t>(gt_row[rank]);
+                if (gt_id >= base_set_size) { continue; }
+                cutoff_l2  = std::max(cutoff_l2, native_squared_l2(i_orig_idx, gt_id));
+                has_cutoff = true;
+              }
+              local_native_l2_cutoff_total[tid] += valid_total;
+              for (std::uint32_t rank = 0; rank < k; ++rank) {
+                const auto candidate = candidates[rank];
+                const bool valid =
+                  candidate >= 0 && static_cast<std::size_t>(candidate) < base_set_size;
+                if (!valid || !detail::is_first_output_occurrence(candidates, rank)) { continue; }
+                const auto candidate_l2 =
+                  native_squared_l2(i_orig_idx, static_cast<std::size_t>(candidate));
+                if (has_cutoff && candidate_l2 <= cutoff_l2) {
+                  ++local_native_l2_cutoff_matches[tid];
+                } else {
+                  ++local_native_l2_cutoff_errors[tid];
+                }
+              }
+              for (std::uint32_t gt_rank = 0; gt_rank < k; ++gt_rank) {
+                const auto gt_id = static_cast<std::size_t>(gt_row[gt_rank]);
+                if (gt_id >= base_set_size || native_squared_l2(i_orig_idx, gt_id) >= cutoff_l2) {
+                  continue;
+                }
+                bool found = false;
+                for (std::uint32_t output_rank = 0; output_rank < k; ++output_rank) {
+                  found |= candidates[output_rank] == static_cast<index_type>(gt_id);
+                }
+                local_native_l2_strict_prefix_errors[tid] += !found;
+              }
+            }
           }
         }
       };
@@ -488,6 +601,16 @@ void bench_search(::benchmark::State& state,
                         0);
       duplicate_output_queries += std::accumulate(
         local_duplicate_output_queries.begin(), local_duplicate_output_queries.end(), 0);
+      native_l2_cutoff_matches += std::accumulate(
+        local_native_l2_cutoff_matches.begin(), local_native_l2_cutoff_matches.end(), 0);
+      native_l2_cutoff_total += std::accumulate(
+        local_native_l2_cutoff_total.begin(), local_native_l2_cutoff_total.end(), 0);
+      native_l2_cutoff_errors += std::accumulate(
+        local_native_l2_cutoff_errors.begin(), local_native_l2_cutoff_errors.end(), 0);
+      native_l2_strict_prefix_errors +=
+        std::accumulate(local_native_l2_strict_prefix_errors.begin(),
+                        local_native_l2_strict_prefix_errors.end(),
+                        0);
 
       out_offset += n_queries;
       batch_offset = (batch_offset + queries_stride) % query_set_size;
@@ -520,6 +643,23 @@ void bench_search(::benchmark::State& state,
        {static_cast<double>(duplicate_output_queries) / static_cast<double>(rows),
         benchmark::Counter::kAvgThreads}});
     state.counters.insert({"OutputSetSemanticsVersion", {1.0, benchmark::Counter::kAvgThreads}});
+    if (validate_native_l2_cutoff) {
+      const double native_l2_cutoff_recall = native_l2_cutoff_total == 0
+                                               ? 1.0
+                                               : static_cast<double>(native_l2_cutoff_matches) /
+                                                   static_cast<double>(native_l2_cutoff_total);
+      state.counters.insert(
+        {"NativeL2CutoffRecall", {native_l2_cutoff_recall, benchmark::Counter::kAvgThreads}});
+      state.counters.insert(
+        {"NativeL2CutoffErrors",
+         {static_cast<double>(native_l2_cutoff_errors) / static_cast<double>(rows * k),
+          benchmark::Counter::kAvgThreads}});
+      state.counters.insert(
+        {"NativeL2StrictPrefixErrors",
+         {static_cast<double>(native_l2_strict_prefix_errors) / static_cast<double>(rows * k),
+          benchmark::Counter::kAvgThreads}});
+      state.counters.insert({"NativeL2CutoffValidated", {1.0, benchmark::Counter::kAvgThreads}});
+    }
     if (validate_filter) {
       state.counters.insert(
         {"FilterViolations",

@@ -59,6 +59,10 @@ def main() -> None:
                 "timed_invalid_sentinel_normalization"
             )
             is not True
+            or payload.get("fixed_contract", {}).get(
+                "native_l2_cutoff_validation"
+            )
+            is not True
         ):
             raise ValueError("result root uses legacy output/recall semantics")
         old_hashes = (
@@ -93,6 +97,7 @@ def main() -> None:
             "fixed_contract": {
                 "output_set_semantics": "distinct_valid_output_ids_v1",
                 "timed_invalid_sentinel_normalization": True,
+                "native_l2_cutoff_validation": True,
             },
             "events": [],
         }

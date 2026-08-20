@@ -77,6 +77,7 @@ def main() -> None:
                     "search_params": [
                         {
                             "exact_control": "bitmap_count_csr_search",
+                            "native_l2_cutoff_validation": True,
                             "resident_bitmap": True,
                         }
                     ],

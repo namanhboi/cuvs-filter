@@ -52,7 +52,8 @@ SINGLE_CTA path and a set of benchmark controls.  Any paper language must preser
 These are implementation/preflight facts, not search-performance results:
 
 - The GPU graph Python pipeline ran 6 tests and passed all 6.
-- The exact-control Python pipeline ran 7 tests and passed all 7.
+- The exact-control Python pipeline ran 8 tests and passed all 8, including rejection of a native-
+  L2 cutoff or strict-prefix violation.
 - The CPU context standalone test program passed.  It covers one valid synthetic aggregation/plot
   scenario and one negative scenario proving that a filter violation is rejected.
 - The native CPU read-only preflight passed with 8 graph artifacts, 5 methods, 4 workloads, and
@@ -282,7 +283,9 @@ native uint8 vector traffic.  ArXiv remains native float32.
 The exact-control timed call includes bitmap counting, query norms, optional CSR/COO construction,
 distance evaluation, distance/top-k epilogues, stable q-by-k output normalization to invalid-
 sentinel tails, and temporary device allocation/deallocation.  It excludes bitmap
-materialization/upload, predicate evaluation, and uint8 conversion.
+materialization/upload, predicate evaluation, and uint8 conversion.  A post-timing validator
+recomputes native squared-L2 cutoff membership and strict-prefix preservation with wide
+accumulation; this correctness-only work is excluded from reported QPS.
 
 ** Native CPU context
 
@@ -421,12 +424,14 @@ Preparation additionally enforces:
 - an explicit marker and timing-contract string proving q-by-k invalid-sentinel normalization is
   part of the timed search call.
 
-The seven-test exact pipeline verifies the cache contract rather than only its happy path.  It
+The eight-test exact pipeline verifies the cache and exactness contracts rather than only their
+happy paths.  It
 accepts byte-identical reuse, rejects a same-shaped source whose contents changed, rejects a
 changed source bitmap manifest, permits explicit refresh with =--force=, validates conversion
 sidecars, rejects stale timing-contract manifests at preparation, configuration, and analysis,
-rejects GT width 11 when =k=10=, and checks the memory gate at exactly the required byte count and
-at one byte below it.  The prepared production snapshot is rooted at
+rejects GT width 11 when =k=10=, rejects a native-L2 cutoff or strict-prefix error, and checks the
+memory gate at exactly the required byte count and at one byte below it.  The prepared production
+snapshot is rooted at
 =/home/ubuntu/retrieve_workshop_data/exact_bitmap/= and contains all eight manifests listed in the
 static validation snapshot above.
 
@@ -471,7 +476,11 @@ The worst prepared YFCC shard observed in this validation pass was:
 
 For each workload, the exact analyzer requires:
 
-- valid-GT recall exactly 1.0;
+- native squared-L2 cutoff recall exactly 1.0;
+- zero native-L2 cutoff errors and zero strict-prefix errors: each unique legal output is no
+  farther than the official rank-=k= cutoff, and every official GT ID strictly closer than that
+  cutoff is retained;
+- canonical fixed-ID =valid_gt_recall= exactly 1.0 for every non-YFCC workload;
 - zero predicate violations;
 - zero invalid-sentinel errors;
 - zero sentinel-order and invalid-sentinel-distance errors;
@@ -481,7 +490,13 @@ For each workload, the exact analyzer requires:
 - a matching PASS memory-preflight record for every production shard.
 
 The summary additionally records =timed_invalid_sentinel_normalization=True=, which the paper
-staging gate requires explicitly.
+staging gate requires explicitly.  Native-L2 validation is post-timing and excluded from QPS.
+
+YFCC is the one fixed-ID exception: its official rank-10 boundary is non-unique for 55 of the
+1,000 correctness queries, so a correct exact result can exchange IDs tied at that cutoff and
+report 0.9974 canonical-ID agreement.  The cutoff and strict-prefix checks distinguish this legal
+tie choice from a true error; fixed-ID recall remains a reported diagnostic rather than YFCC's
+exactness criterion.
 
 ArXiv fixed-width GT may contain out-of-range padding for an intrinsically underfilled query.
 Those values are excluded from the denominator; they are not accepted as neighbors.
@@ -570,9 +585,9 @@ remains a separate gate and is intentionally not inferred from Python success:
 |-
 | GPU Python pipeline tests | 2026-08-20 | PASS: 6/6 tests | =benchmarks/retrieve_workshop/gpu_graph/test_pipeline.py= |
 | CUDA bitmap tests/build | 2026-08-20 | PASS: 44 tests; 2 intentional unsupported-mode skips; clean no-op rebuild | =cpp/build/gtests/NEIGHBORS_ANN_CAGRA_FILTER_BITMAP_TEST= |
-| Exact Python pipeline tests | 2026-08-20 | PASS: 7/7 tests | =benchmarks/retrieve_workshop/exact_bitmap/test_pipeline.py= |
+| Exact Python pipeline tests | 2026-08-20 | PASS: 8/8 tests | =benchmarks/retrieve_workshop/exact_bitmap/test_pipeline.py= |
 | Bitmap-selectivity derivation tests | 2026-08-20 | PASS: 4/4 tests; all-workload artifact regenerated from bound inputs | =benchmarks/retrieve_workshop/evidence/test_summarize_bitmap_selectivity.py= |
-| Exact sparse/dense smoke | 2026-08-20 | PASS: CSR and tiled paths; recall 1.0; all five correctness counters zero | =/home/ubuntu/retrieve_workshop_runs/exact_smoke_final_20260820T0132Z= |
+| Exact sparse/dense smoke | 2026-08-20 | Legacy pre-native-L2 schema only; replace with a fresh tie-aware smoke before final staging | =/home/ubuntu/retrieve_workshop_runs/exact_smoke_final_20260820T0132Z= |
 | CPU pipeline test program | 2026-08-19 | PASS: 1 program / 2 synthetic scenarios | =benchmarks/retrieve_workshop/cpu_context/test_pipeline.py= |
 | CPU artifact preflight | 2026-08-19 | PASS: 8 graphs / 5 methods / 4 workloads | =benchmarks/retrieve_workshop/cpu_context/run.py --preflight= |
 
@@ -952,7 +967,9 @@ or attribute differences solely to the search policy because graph construction 
   structure still differs from single-call ArXiv.
 - *Exact memory:* the preflight estimate is conservative and not a measured allocator peak.
 - *Exact YFCC arithmetic:* byte coordinates convert exactly to float, but large expanded-L2
-  intermediates can exceed float's exact-integer range; correctness must be established against GT.
+  intermediates can exceed float's exact-integer range.  Correctness is therefore established by
+  the post-timing wide-accumulator native-L2 cutoff/strict-prefix gate; canonical fixed-ID
+  agreement alone is not decisive at a tied rank-10 boundary.
 - *CPU context:* CPU and GPU use different graph families, construction parameters, resource
   counts, adapters, and timing regions.
 - *Dataset coverage:* two dataset families and four predicate workloads cannot establish universal
