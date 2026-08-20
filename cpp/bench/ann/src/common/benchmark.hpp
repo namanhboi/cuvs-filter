@@ -537,14 +537,17 @@ void bench_search(::benchmark::State& state,
         {"InvalidSentinelDistanceErrors",
          {static_cast<double>(invalid_sentinel_distance_errors) / static_cast<double>(rows * k),
           benchmark::Counter::kAvgThreads}});
+      // Invalid-ID ordering is part of the common filtered-output contract.  Invalid-slot
+      // distances are only canonicalized by methods that promise that stronger contract; their
+      // analyzers must reject a nonzero diagnostic counter.
       if (filter_violation_count != 0 || invalid_sentinel_errors != 0 ||
-          sentinel_order_errors != 0 || invalid_sentinel_distance_errors != 0) {
+          sentinel_order_errors != 0) {
         state.SkipWithError("Filtered search produced " + std::to_string(filter_violation_count) +
                             " predicate violations and " + std::to_string(invalid_sentinel_errors) +
                             " invalid sentinels, " + std::to_string(sentinel_order_errors) +
-                            " sentinel-order errors, and " +
+                            " sentinel-order errors (and reported " +
                             std::to_string(invalid_sentinel_distance_errors) +
-                            " invalid-sentinel distance errors");
+                            " invalid-sentinel distance errors)");
       }
     }
   }
