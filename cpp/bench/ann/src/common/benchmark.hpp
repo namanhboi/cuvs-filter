@@ -357,17 +357,20 @@ void bench_search(::benchmark::State& state,
     const auto& gt_maps = dataset->gt_maps();
     result_buf.transfer_data(MemoryType::kHost, current_algo_props->query_memory_type);
     auto* neighbors_host    = reinterpret_cast<index_type*>(result_buf.data(MemoryType::kHost));
+    auto* distances_host    = reinterpret_cast<float*>(neighbors_host + result_elem_count);
     std::size_t rows        = std::min(queries_processed, query_set_size);
     std::size_t match_count = 0;
     std::size_t total_count = 0;
-    std::size_t valid_match_count        = 0;
-    std::size_t valid_total_count        = 0;
-    std::size_t underfilled_query_count  = 0;
-    std::size_t missing_result_count     = 0;
-    std::size_t filter_violation_count   = 0;
-    std::size_t invalid_sentinel_errors  = 0;
-    std::size_t duplicate_output_queries = 0;
-    auto* validation_algo                = dynamic_cast<algo<T>*>(current_algo.get());
+    std::size_t valid_match_count                = 0;
+    std::size_t valid_total_count                = 0;
+    std::size_t underfilled_query_count          = 0;
+    std::size_t missing_result_count             = 0;
+    std::size_t filter_violation_count           = 0;
+    std::size_t invalid_sentinel_errors          = 0;
+    std::size_t sentinel_order_errors            = 0;
+    std::size_t invalid_sentinel_distance_errors = 0;
+    std::size_t duplicate_output_queries         = 0;
+    auto* validation_algo                        = dynamic_cast<algo<T>*>(current_algo.get());
     const bool validate_filter =
       validation_algo != nullptr && validation_algo->supports_filter_validation();
     const auto base_set_size = dataset->base_set_size();
@@ -396,6 +399,10 @@ void bench_search(::benchmark::State& state,
                                                             1);
       std::vector<std::size_t> local_invalid_sentinel_errors(num_recall_calculation_worker_threads +
                                                              1);
+      std::vector<std::size_t> local_sentinel_order_errors(num_recall_calculation_worker_threads +
+                                                           1);
+      std::vector<std::size_t> local_invalid_sentinel_distance_errors(
+        num_recall_calculation_worker_threads + 1);
       std::vector<std::size_t> local_duplicate_output_queries(
         num_recall_calculation_worker_threads + 1);
       int chunk_size =
@@ -406,8 +413,9 @@ void bench_search(::benchmark::State& state,
           size_t i_orig_idx = batch_offset + i;
           size_t i_out_idx  = out_offset + i;
           if (i_out_idx < rows) {
-            auto* candidates       = neighbors_host + i_out_idx * k;
-            auto [matching, total] = gt_maps->count_matches(i_orig_idx, candidates, k);
+            auto* candidates          = neighbors_host + i_out_idx * k;
+            auto* candidate_distances = distances_host + i_out_idx * k;
+            auto [matching, total]    = gt_maps->count_matches(i_orig_idx, candidates, k);
             local_match_count[tid] += matching;
             local_total_count[tid] += total;
             auto [valid_matching, valid_total] =
@@ -416,19 +424,24 @@ void bench_search(::benchmark::State& state,
             local_valid_total_count[tid] += valid_total;
             std::size_t valid_results = 0;
             bool has_duplicate        = false;
+            bool saw_invalid          = false;
             for (std::uint32_t rank = 0; rank < k; ++rank) {
               const bool valid =
                 candidates[rank] >= 0 && static_cast<std::size_t>(candidates[rank]) < base_set_size;
-              const bool first_occurrence =
-                detail::is_first_output_occurrence(candidates, rank);
+              const bool first_occurrence = detail::is_first_output_occurrence(candidates, rank);
               valid_results += valid && first_occurrence;
               has_duplicate |= valid && !first_occurrence;
+              if (valid && saw_invalid) { ++local_sentinel_order_errors[tid]; }
+              saw_invalid |= !valid;
               if (valid && validate_filter &&
                   !validation_algo->is_filter_valid(i_orig_idx, candidates[rank])) {
                 ++local_filter_violation_count[tid];
               }
               if (!valid && candidates[rank] != std::numeric_limits<index_type>::max()) {
                 ++local_invalid_sentinel_errors[tid];
+              }
+              if (!valid && candidate_distances[rank] != std::numeric_limits<float>::max()) {
+                ++local_invalid_sentinel_distance_errors[tid];
               }
             }
             if (valid_results < k) {
@@ -467,6 +480,12 @@ void bench_search(::benchmark::State& state,
         local_filter_violation_count.begin(), local_filter_violation_count.end(), 0);
       invalid_sentinel_errors += std::accumulate(
         local_invalid_sentinel_errors.begin(), local_invalid_sentinel_errors.end(), 0);
+      sentinel_order_errors +=
+        std::accumulate(local_sentinel_order_errors.begin(), local_sentinel_order_errors.end(), 0);
+      invalid_sentinel_distance_errors +=
+        std::accumulate(local_invalid_sentinel_distance_errors.begin(),
+                        local_invalid_sentinel_distance_errors.end(),
+                        0);
       duplicate_output_queries += std::accumulate(
         local_duplicate_output_queries.begin(), local_duplicate_output_queries.end(), 0);
 
@@ -485,10 +504,9 @@ void bench_search(::benchmark::State& state,
     */
     state.counters.insert({"Recall", {actual_recall, benchmark::Counter::kAvgThreads}});
     state.counters.insert({"ValidGTRecall", {valid_gt_recall, benchmark::Counter::kAvgThreads}});
-    state.counters.insert(
-      {"ValidGTFraction",
-       {static_cast<double>(valid_total_count) / static_cast<double>(rows * k),
-        benchmark::Counter::kAvgThreads}});
+    state.counters.insert({"ValidGTFraction",
+                           {static_cast<double>(valid_total_count) / static_cast<double>(rows * k),
+                            benchmark::Counter::kAvgThreads}});
     state.counters.insert(
       {"UnderfilledQueries",
        {static_cast<double>(underfilled_query_count) / static_cast<double>(rows),
@@ -501,8 +519,7 @@ void bench_search(::benchmark::State& state,
       {"DuplicateOutputQueries",
        {static_cast<double>(duplicate_output_queries) / static_cast<double>(rows),
         benchmark::Counter::kAvgThreads}});
-    state.counters.insert(
-      {"OutputSetSemanticsVersion", {1.0, benchmark::Counter::kAvgThreads}});
+    state.counters.insert({"OutputSetSemanticsVersion", {1.0, benchmark::Counter::kAvgThreads}});
     if (validate_filter) {
       state.counters.insert(
         {"FilterViolations",
@@ -512,10 +529,22 @@ void bench_search(::benchmark::State& state,
         {"InvalidSentinelErrors",
          {static_cast<double>(invalid_sentinel_errors) / static_cast<double>(rows * k),
           benchmark::Counter::kAvgThreads}});
-      if (filter_violation_count != 0 || invalid_sentinel_errors != 0) {
+      state.counters.insert(
+        {"SentinelOrderErrors",
+         {static_cast<double>(sentinel_order_errors) / static_cast<double>(rows * k),
+          benchmark::Counter::kAvgThreads}});
+      state.counters.insert(
+        {"InvalidSentinelDistanceErrors",
+         {static_cast<double>(invalid_sentinel_distance_errors) / static_cast<double>(rows * k),
+          benchmark::Counter::kAvgThreads}});
+      if (filter_violation_count != 0 || invalid_sentinel_errors != 0 ||
+          sentinel_order_errors != 0 || invalid_sentinel_distance_errors != 0) {
         state.SkipWithError("Filtered search produced " + std::to_string(filter_violation_count) +
                             " predicate violations and " + std::to_string(invalid_sentinel_errors) +
-                            " invalid sentinels");
+                            " invalid sentinels, " + std::to_string(sentinel_order_errors) +
+                            " sentinel-order errors, and " +
+                            std::to_string(invalid_sentinel_distance_errors) +
+                            " invalid-sentinel distance errors");
       }
     }
   }

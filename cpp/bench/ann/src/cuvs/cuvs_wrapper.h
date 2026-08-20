@@ -10,10 +10,14 @@
 
 #include <cuvs/distance/distance.hpp>
 #include <cuvs/neighbors/brute_force.hpp>
+#include <raft/core/bitmap.cuh>
 #include <raft/core/device_resources.hpp>
+#include <raft/core/resource/cuda_stream.hpp>
+#include <raft/util/cudart_utils.hpp>
 
 #include <cassert>
 #include <fstream>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <stdint.h>
@@ -33,6 +37,73 @@ inline auto parse_metric_type(cuvs::bench::Metric metric) -> cuvs::distance::Dis
 }  // namespace raft_temp
 
 namespace cuvs::bench {
+
+namespace detail {
+
+/**
+ * Normalize underfilled bitmap-filtered brute-force rows for the benchmark contract.
+ *
+ * The public brute-force implementation intentionally leaves sparse select-k output slots
+ * untouched and may return masked candidates from the tiled path when a bitmap row has fewer
+ * than k set bits.  The exact-control benchmark requires those non-results to use the same
+ * explicit sentinel convention as the graph-search controls.  Keep this repair private to the
+ * benchmark wrapper rather than changing the public brute-force API's established behavior.
+ */
+template <typename IndexT, typename DistanceT>
+RAFT_KERNEL normalize_bitmap_brute_force_results(
+  cuvs::core::bitmap_view<std::uint32_t, std::int64_t> bitmap,
+  IndexT* neighbors,
+  DistanceT* distances,
+  std::int64_t num_queries,
+  std::int64_t dataset_size,
+  std::int64_t k)
+{
+  const auto query = static_cast<std::int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (query >= num_queries) { return; }
+
+  const auto row = query * k;
+  std::int64_t write_rank{0};
+  for (std::int64_t read_rank = 0; read_rank < k; ++read_rank) {
+    const auto candidate = neighbors[row + read_rank];
+    const bool valid_id  = candidate >= IndexT{0} && candidate < static_cast<IndexT>(dataset_size);
+    bool keep            = valid_id && bitmap.test(query, static_cast<std::int64_t>(candidate));
+    for (std::int64_t previous = 0; keep && previous < write_rank; ++previous) {
+      keep = neighbors[row + previous] != candidate;
+    }
+    if (keep) {
+      neighbors[row + write_rank] = candidate;
+      distances[row + write_rank] = distances[row + read_rank];
+      ++write_rank;
+    }
+  }
+  for (; write_rank < k; ++write_rank) {
+    neighbors[row + write_rank] = std::numeric_limits<IndexT>::max();
+    distances[row + write_rank] = std::numeric_limits<DistanceT>::max();
+  }
+}
+
+template <typename IndexT, typename DistanceT>
+void normalize_bitmap_brute_force_results(
+  raft::resources const& res,
+  cuvs::neighbors::filtering::bitmap_filter<std::uint32_t, std::int64_t> const& filter,
+  IndexT* neighbors,
+  DistanceT* distances,
+  std::int64_t num_queries,
+  std::int64_t dataset_size,
+  std::int64_t k)
+{
+  constexpr int block_size = 256;
+  if (num_queries == 0 || k == 0) { return; }
+  const auto grid_size = static_cast<unsigned>((num_queries + block_size - 1) / block_size);
+  normalize_bitmap_brute_force_results<<<grid_size,
+                                         block_size,
+                                         0,
+                                         raft::resource::get_cuda_stream(res)>>>(
+    filter.view(), neighbors, distances, num_queries, dataset_size, k);
+  RAFT_CUDA_TRY(cudaPeekAtLastError());
+}
+
+}  // namespace detail
 
 // brute force KNN - RAFT
 template <typename T>
@@ -189,6 +260,15 @@ void cuvs_gpu<T>::search(
 
   cuvs::neighbors::brute_force::search(
     handle_, *index_, queries_view, neighbors_view, distances_view, *filter_);
+  if (bitmap_filter_adapter_) {
+    detail::normalize_bitmap_brute_force_results(handle_,
+                                                 bitmap_filter_adapter_->filter(),
+                                                 neighbors,
+                                                 distances,
+                                                 batch_size,
+                                                 static_cast<std::int64_t>(index_->size()),
+                                                 k);
+  }
 }
 
 template <typename T>

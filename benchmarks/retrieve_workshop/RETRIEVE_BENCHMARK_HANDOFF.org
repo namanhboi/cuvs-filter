@@ -331,8 +331,11 @@ source and target SHA-256; do not set =RETRIEVE_EXACT_FORCE_PREPARE=1= unless in
 replacing stale preparation state after auditing the reported mismatch.
 
 The timed exact search call includes bitmap population counting, query norms, sparse bitmap-to-CSR
-and CSR-to-COO construction when selected, masked distance evaluation, top-k, and temporary device
-allocations.  Bitmap materialization/upload and vector/index preparation remain outside timing.
+and CSR-to-COO construction when selected, masked distance evaluation, top-k, q-by-k output
+normalization to stable invalid-sentinel tails, and temporary device allocations.  Bitmap
+materialization/upload and vector/index preparation remain outside timing.  The publication CSV
+must state =timed_invalid_sentinel_normalization=True=; paper staging rejects a missing or false
+flag.
 
 Before every benchmark process the runner writes a mandatory GPU-memory decision under
 =provenance/gpu_memory/=.  Do not use =RETRIEVE_EXACT_AVAILABLE_BYTES= in a paper run; it is only a
@@ -342,9 +345,9 @@ queries/three repetitions.
 The publication input is
 =${RETRIEVE_EXACT_RESULT_ROOT}/analysis/exact_summary.csv=.  The adjacent measurement CSVs,
 =exact_results.json=, run provenance, and memory-preflight records form its audit trail.  Exact
-results pass only with valid-GT recall 1.0, zero filter violations, zero sentinel errors, zero
-duplicates, and the expected legal underfill (including ArXiv-EM's one intrinsically underfilled
-query).
+results pass only with valid-GT recall 1.0, zero filter violations, zero sentinel-ID,
+sentinel-order, and sentinel-distance errors, zero duplicates, and the expected legal underfill
+(including ArXiv-EM's one intrinsically underfilled query).
 
 * Native CPU context
 

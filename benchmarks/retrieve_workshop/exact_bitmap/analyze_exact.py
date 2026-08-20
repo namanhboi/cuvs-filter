@@ -329,6 +329,12 @@ def main() -> None:
                     sentinel_errors = float(
                         record.get("InvalidSentinelErrors", math.nan)
                     )
+                    sentinel_order_errors = float(
+                        record.get("SentinelOrderErrors", math.nan)
+                    )
+                    invalid_sentinel_distance_errors = float(
+                        record.get("InvalidSentinelDistanceErrors", math.nan)
+                    )
                     observed_underfilled = float(
                         record.get("UnderfilledQueries", math.nan)
                     )
@@ -359,6 +365,8 @@ def main() -> None:
                         and close(valid_fraction, expected_valid_fraction)
                         and close(filter_violations, 0.0)
                         and close(sentinel_errors, 0.0)
+                        and close(sentinel_order_errors, 0.0)
+                        and close(invalid_sentinel_distance_errors, 0.0)
                         and close(observed_underfilled, expected_underfilled)
                         and close(observed_missing, expected_missing)
                         and close(duplicate_queries, 0.0)
@@ -382,6 +390,10 @@ def main() -> None:
                         "expected_missing_result_slots": expected_missing,
                         "filter_violations": filter_violations,
                         "invalid_sentinel_errors": sentinel_errors,
+                        "sentinel_order_errors": sentinel_order_errors,
+                        "invalid_sentinel_distance_errors": (
+                            invalid_sentinel_distance_errors
+                        ),
                         "duplicate_output_queries": duplicate_queries,
                         "output_set_semantics_version": output_set_semantics,
                         "correct": correct,
@@ -442,6 +454,13 @@ def main() -> None:
                 "invalid_sentinel_errors": max(
                     float(row["invalid_sentinel_errors"]) for row in rows
                 ),
+                "sentinel_order_errors": max(
+                    float(row["sentinel_order_errors"]) for row in rows
+                ),
+                "invalid_sentinel_distance_errors": max(
+                    float(row["invalid_sentinel_distance_errors"])
+                    for row in rows
+                ),
                 "duplicate_output_queries": max(
                     float(row["duplicate_output_queries"]) for row in rows
                 ),
@@ -482,6 +501,14 @@ def main() -> None:
                 "valid_gt_recall": min(
                     float(row["valid_gt_recall"]) for row in rows
                 ),
+                "sentinel_order_errors": max(
+                    float(row["sentinel_order_errors"]) for row in rows
+                ),
+                "invalid_sentinel_distance_errors": max(
+                    float(row["invalid_sentinel_distance_errors"])
+                    for row in rows
+                ),
+                "timed_invalid_sentinel_normalization": True,
                 "correct": all(bool(row["correct"]) for row in rows),
             }
         )
@@ -500,6 +527,7 @@ def main() -> None:
                 "bitmap-to-CSR and CSR-to-COO construction when sparse path is selected",
                 "masked sparse or tiled dense distance evaluation",
                 "distance and top-k epilogues",
+                "invalid-sentinel normalization over the q-by-k output",
                 "temporary device allocation and deallocation",
             ],
             "excluded": [
@@ -509,6 +537,7 @@ def main() -> None:
                 "uint8-to-float conversion",
             ],
             "yfcc_aggregation": "10000 / sum(shard wall-search seconds)",
+            "timed_invalid_sentinel_normalization": True,
         },
         "correctness": {
             "recall": "distinct valid output-ID matches divided by valid GT IDs; out-of-range padding IDs are excluded",
@@ -517,6 +546,8 @@ def main() -> None:
                 "valid_gt_recall == 1",
                 "zero predicate violations",
                 "zero invalid-sentinel errors",
+                "zero sentinel-order errors",
+                "zero invalid-sentinel distance errors",
                 "zero duplicate-output queries",
                 "underfill and missing slots match legal GT cardinality",
             ],
@@ -584,6 +615,10 @@ def main() -> None:
                 "output_set_semantics"
             )
             != "distinct_valid_output_ids_v1"
+            or run_payload.get("fixed_contract", {}).get(
+                "timed_invalid_sentinel_normalization"
+            )
+            is not True
         ):
             raise ValueError(
                 "exact result root uses legacy output/recall semantics"

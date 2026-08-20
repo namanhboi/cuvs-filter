@@ -55,6 +55,10 @@ def main() -> None:
             payload.get("schema_version") != 2
             or payload.get("fixed_contract", {}).get("output_set_semantics")
             != "distinct_valid_output_ids_v1"
+            or payload.get("fixed_contract", {}).get(
+                "timed_invalid_sentinel_normalization"
+            )
+            is not True
         ):
             raise ValueError("result root uses legacy output/recall semantics")
         old_hashes = (
@@ -88,6 +92,7 @@ def main() -> None:
             },
             "fixed_contract": {
                 "output_set_semantics": "distinct_valid_output_ids_v1",
+                "timed_invalid_sentinel_normalization": True,
             },
             "events": [],
         }

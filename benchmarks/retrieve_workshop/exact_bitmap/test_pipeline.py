@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import shutil
 import struct
@@ -143,6 +144,8 @@ def raw_record(
         "label": 'exact_control="bitmap_count_csr_search"',
         "FilterViolations": 0.0,
         "InvalidSentinelErrors": 0.0,
+        "SentinelOrderErrors": 0.0,
+        "InvalidSentinelDistanceErrors": 0.0,
         "DuplicateOutputQueries": 0.0,
         "OutputSetSemanticsVersion": 1,
         "UnderfilledQueries": underfilled,
@@ -314,6 +317,17 @@ class ExactPipelineTest(unittest.TestCase):
                 "--phase",
                 "smoke",
             )
+            with (root / "analysis" / "exact_summary.csv").open() as stream:
+                summary = list(csv.DictReader(stream))
+            self.assertEqual(len(summary), 2)
+            for row in summary:
+                self.assertEqual(row["sentinel_order_errors"], "0.0")
+                self.assertEqual(
+                    row["invalid_sentinel_distance_errors"], "0.0"
+                )
+                self.assertEqual(
+                    row["timed_invalid_sentinel_normalization"], "True"
+                )
 
     def test_rejects_missing_and_duplicate_repetitions(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

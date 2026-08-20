@@ -482,7 +482,8 @@ def main() -> None:
         "timing_contract": (
             "resident bitmap; timed search includes bitmap counting, query norms, optional "
             "bitmap-to-CSR and CSR-to-COO construction, masked/tiled distance evaluation, "
-            "distance/top-k epilogues, and temporary allocation/deallocation"
+            "distance/top-k epilogues, invalid-sentinel normalization, and temporary "
+            "allocation/deallocation"
         ),
         "source_bitmap_manifest": str(args.bitmap_manifest),
         "preparation": preparation,

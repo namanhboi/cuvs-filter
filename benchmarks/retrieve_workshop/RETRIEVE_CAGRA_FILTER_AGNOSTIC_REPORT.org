@@ -47,12 +47,12 @@ SINGLE_CTA path and a set of benchmark controls.  Any paper language must preser
 | Exact-control result root | TODO |
 | CPU-context result root | TODO or N/A |
 
-** Completed static validation snapshot (2026-08-19)
+** Completed static validation snapshot (2026-08-20)
 
 These are implementation/preflight facts, not search-performance results:
 
-- The GPU graph Python pipeline ran 4 tests and passed all 4.
-- The exact-control Python pipeline ran 5 tests and passed all 5.
+- The GPU graph Python pipeline ran 6 tests and passed all 6.
+- The exact-control Python pipeline ran 6 tests and passed all 6.
 - The CPU context standalone test program passed.  It covers one valid synthetic aggregation/plot
   scenario and one negative scenario proving that a filter violation is rejected.
 - The native CPU read-only preflight passed with 8 graph artifacts, 5 methods, 4 workloads, and
@@ -280,8 +280,9 @@ coordinate values, but the resulting exact throughput is a float32 control with 
 native uint8 vector traffic.  ArXiv remains native float32.
 
 The exact-control timed call includes bitmap counting, query norms, optional CSR/COO construction,
-distance evaluation, distance/top-k epilogues, and temporary device allocation/deallocation.  It
-excludes bitmap materialization/upload, predicate evaluation, and uint8 conversion.
+distance evaluation, distance/top-k epilogues, stable q-by-k output normalization to invalid-
+sentinel tails, and temporary device allocation/deallocation.  It excludes bitmap
+materialization/upload, predicate evaluation, and uint8 conversion.
 
 ** Native CPU context
 
@@ -470,10 +471,14 @@ For each workload, the exact analyzer requires:
 - valid-GT recall exactly 1.0;
 - zero predicate violations;
 - zero invalid-sentinel errors;
+- zero sentinel-order and invalid-sentinel-distance errors;
 - zero duplicate-output queries;
 - observed underfill and missing slots exactly matching legal GT cardinality;
 - the complete configured shard/repetition sets;
 - a matching PASS memory-preflight record for every production shard.
+
+The summary additionally records =timed_invalid_sentinel_normalization=True=, which the paper
+staging gate requires explicitly.
 
 ArXiv fixed-width GT may contain out-of-range padding for an intrinsically underfilled query.
 Those values are excluded from the denominator; they are not accepted as neighbors.
@@ -564,7 +569,7 @@ remains a separate gate and is intentionally not inferred from Python success:
 | CUDA bitmap tests/build | 2026-08-20 | PASS: 44 tests; 2 intentional unsupported-mode skips; clean no-op rebuild | =cpp/build/gtests/NEIGHBORS_ANN_CAGRA_FILTER_BITMAP_TEST= |
 | Exact Python pipeline tests | 2026-08-20 | PASS: 6/6 tests | =benchmarks/retrieve_workshop/exact_bitmap/test_pipeline.py= |
 | Bitmap-selectivity derivation tests | 2026-08-20 | PASS: 4/4 tests; all-workload artifact regenerated from bound inputs | =benchmarks/retrieve_workshop/evidence/test_summarize_bitmap_selectivity.py= |
-| Exact sparse/dense smoke | TODO | TODO | TODO |
+| Exact sparse/dense smoke | 2026-08-20 | PASS: CSR and tiled paths; recall 1.0; all five correctness counters zero | =/home/ubuntu/retrieve_workshop_runs/exact_smoke_final_20260820T0132Z= |
 | CPU pipeline test program | 2026-08-19 | PASS: 1 program / 2 synthetic scenarios | =benchmarks/retrieve_workshop/cpu_context/test_pipeline.py= |
 | CPU artifact preflight | 2026-08-19 | PASS: 8 graphs / 5 methods / 4 workloads | =benchmarks/retrieve_workshop/cpu_context/run.py --preflight= |
 

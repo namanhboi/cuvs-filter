@@ -9,9 +9,14 @@ EMIS, and R graph-search experiments; it does not add or change a public cuVS AP
 The benchmark-private brute-force wrapper recognizes the same =filter.kind=bitmap= configuration
 used by CAGRA.  Each timed =brute_force::search= call includes bitmap population counting, query
 norm computation, optional bitmap-to-CSR and CSR-to-COO construction for sparse masks,
-masked-sparse or tiled-dense distance evaluation, the distance/top-k epilogues, and temporary
-device allocation/deallocation.  Bitmap materialization, host-to-device bitmap upload, and
-vector/index preparation occur before timing.
+masked-sparse or tiled-dense distance evaluation, the distance/top-k epilogues,
+invalid-sentinel normalization over the q-by-k output, and temporary device
+allocation/deallocation.  Bitmap materialization, host-to-device bitmap upload, and vector/index
+preparation occur before timing.
+
+Every generated =exact_summary.csv= row records
+=timed_invalid_sentinel_normalization=True=.  Paper staging requires this flag, so a run that
+omitted the benchmark-private q-by-k normalization cannot be mistaken for the timed exact control.
 
 YFCC is stored as =uint8=, while public cuVS brute force is instantiated for =float=/=half=.  The
 preparation step converts both its base and every query shard to =float32=.  Every byte coordinate
@@ -78,7 +83,7 @@ semantics: a repeated output ID can receive match credit at most once.  Raw reco
 =distinct_valid_output_ids_v1= contract, so legacy slot-counted results cannot be staged.  ArXiv-EM has one intrinsically
 underfilled query whose fixed-width GT row contains out-of-range padding IDs; those IDs are not
 neighbors and are excluded from the exact denominator.  A run passes only when valid recall is
-1.0, predicate violations, invalid-sentinel errors, and duplicate-output queries are zero, and
-observed underfilled/missing output slots exactly match legal GT cardinality.  The analyzer also
+1.0, predicate violations, invalid-sentinel ID/distance/ordering errors, and duplicate-output
+queries are zero, and observed underfilled/missing output slots exactly match legal GT cardinality.  The analyzer also
 requires the exact configured shard/repetition sets and a passing memory-preflight record for every
 production shard, and exits nonzero on any violation.
