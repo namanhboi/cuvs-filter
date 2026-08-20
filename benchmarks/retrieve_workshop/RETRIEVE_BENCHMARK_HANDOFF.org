@@ -365,9 +365,13 @@ results pass only with =native_l2_cutoff_recall= equal to 1.0, zero native-L2 cu
 native-L2 strict-prefix errors, together with zero filter violations, zero sentinel-ID,
 sentinel-order, and sentinel-distance errors, zero duplicates, and the expected legal underfill
 (including ArXiv-EM's one intrinsically underfilled query).  =valid_gt_recall= records canonical
-fixed-ID agreement and must remain 1.0 for non-YFCC workloads.  YFCC may report 0.9974 canonical-ID
-agreement because its official rank-10 boundary is tied for 55 of the 1,000 correctness queries;
-exchanging IDs only at that cutoff is exact under the native-distance gate.
+fixed-ID agreement as a diagnostic for every workload; it is not an exactness threshold because
+any workload can have a non-unique legal rank-10 boundary.  Observed tie-aware checks include YFCC
+canonical-ID agreement of 0.9974 on the 1,000-query correctness set and 0.99726 over the full
+10,000-query set, plus ArXiv-R agreement of 0.99999 over 100,000 reported slots.  All of those
+results have native-L2 cutoff recall 1.0 and zero cutoff/strict-prefix errors, so the differing IDs
+are legal cutoff-tie choices.  The native-distance gate, not canonical ID identity, is
+authoritative for every workload.
 
 * Native CPU context
 
@@ -529,8 +533,9 @@ binary, library, hardware, data, and repetition identity auditable.
 - [ ] YFCC QPS was aggregated from five serial shards within each repetition, never averaged.
 - [ ] Final GPU analysis performed full resident-input SHA-256 hashing.
 - [ ] Exact memory-preflight records exist and pass for every production shard.
-- [ ] Masked exact has native-L2 cutoff recall 1.0 and zero cutoff/strict-prefix errors; non-YFCC
-  canonical fixed-ID recall is 1.0, while any YFCC fixed-ID mismatch is confined to rank-10 ties.
+- [ ] Masked exact has native-L2 cutoff recall 1.0 and zero cutoff/strict-prefix errors for every
+  workload; canonical fixed-ID agreement is retained only as a diagnostic and is never used as an
+  exactness threshold.
 - [ ] CPU results are described as qualitative context, not absolute CPU/GPU speedup.
 - [ ] Diagnostic claims come only from artifacts listed and SHA-256-verified in
   =diagnostic_manifest.json=.

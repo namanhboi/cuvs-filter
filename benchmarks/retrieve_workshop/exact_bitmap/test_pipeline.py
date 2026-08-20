@@ -332,11 +332,10 @@ class ExactPipelineTest(unittest.TestCase):
                 )
                 raw.parent.mkdir(parents=True, exist_ok=True)
                 record = raw_record(0, underfilled, missing)
-                if workload == "yfcc":
-                    # Fixed-width GT names only one valid tied-ID choice.  Exactness is
-                    # determined by the native-distance cutoff, while canonical overlap remains
-                    # a diagnostic.
-                    record["ValidGTRecall"] = 0.9
+                # Fixed-width GT names only one valid tied-ID choice.  Exactness is determined by
+                # the native-distance cutoff for every workload, while canonical overlap remains
+                # a diagnostic.  Exercise that rule for both YFCC and a non-YFCC fixture.
+                record["ValidGTRecall"] = 0.9
                 raw.write_text(
                     json.dumps({"benchmarks": [record]})
                     + "\n"

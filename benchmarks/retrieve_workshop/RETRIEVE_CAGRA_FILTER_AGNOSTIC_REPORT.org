@@ -480,7 +480,6 @@ For each workload, the exact analyzer requires:
 - zero native-L2 cutoff errors and zero strict-prefix errors: each unique legal output is no
   farther than the official rank-=k= cutoff, and every official GT ID strictly closer than that
   cutoff is retained;
-- canonical fixed-ID =valid_gt_recall= exactly 1.0 for every non-YFCC workload;
 - zero predicate violations;
 - zero invalid-sentinel errors;
 - zero sentinel-order and invalid-sentinel-distance errors;
@@ -492,11 +491,13 @@ For each workload, the exact analyzer requires:
 The summary additionally records =timed_invalid_sentinel_normalization=True=, which the paper
 staging gate requires explicitly.  Native-L2 validation is post-timing and excluded from QPS.
 
-YFCC is the one fixed-ID exception: its official rank-10 boundary is non-unique for 55 of the
-1,000 correctness queries, so a correct exact result can exchange IDs tied at that cutoff and
-report 0.9974 canonical-ID agreement.  The cutoff and strict-prefix checks distinguish this legal
-tie choice from a true error; fixed-ID recall remains a reported diagnostic rather than YFCC's
-exactness criterion.
+Canonical fixed-ID =valid_gt_recall= remains a diagnostic for every workload, not an exactness
+threshold.  A legal rank-=k= boundary can be tied in any dataset, so exact search need not reproduce
+the GT producer's arbitrary choice among equal-distance IDs.  The observed canonical agreements
+are 0.9974 for YFCC correctness, 0.99726 for full-query YFCC, and 0.99999 for ArXiv-R (one differing
+ID among 100,000 output slots).  Each has native-L2 cutoff recall 1.0 with zero cutoff and
+strict-prefix errors.  These universal cutoff/strict-prefix checks distinguish a legal tie choice
+from a true omission or farther replacement and are the authoritative exactness gate.
 
 ArXiv fixed-width GT may contain out-of-range padding for an intrinsically underfilled query.
 Those values are excluded from the denominator; they are not accepted as neighbors.
@@ -588,6 +589,7 @@ remains a separate gate and is intentionally not inferred from Python success:
 | Exact Python pipeline tests | 2026-08-20 | PASS: 8/8 tests | =benchmarks/retrieve_workshop/exact_bitmap/test_pipeline.py= |
 | Bitmap-selectivity derivation tests | 2026-08-20 | PASS: 4/4 tests; all-workload artifact regenerated from bound inputs | =benchmarks/retrieve_workshop/evidence/test_summarize_bitmap_selectivity.py= |
 | Exact sparse/dense smoke | 2026-08-20 | Legacy pre-native-L2 schema only; replace with a fresh tie-aware smoke before final staging | =/home/ubuntu/retrieve_workshop_runs/exact_smoke_final_20260820T0132Z= |
+| Exact production attempt | 2026-08-20 | NON-FINAL / DO NOT STAGE: failed under a superseded canonical-ID threshold; contains provisional timing only | =/home/ubuntu/retrieve_workshop_runs/exact_l4_20260820T0245Z= |
 | CPU pipeline test program | 2026-08-19 | PASS: 1 program / 2 synthetic scenarios | =benchmarks/retrieve_workshop/cpu_context/test_pipeline.py= |
 | CPU artifact preflight | 2026-08-19 | PASS: 8 graphs / 5 methods / 4 workloads | =benchmarks/retrieve_workshop/cpu_context/run.py --preflight= |
 
@@ -966,10 +968,11 @@ or attribute differences solely to the search policy because graph construction 
 - *Sharding:* YFCC uses five serial calls.  QPS is corrected by total elapsed search time, but launch
   structure still differs from single-call ArXiv.
 - *Exact memory:* the preflight estimate is conservative and not a measured allocator peak.
-- *Exact YFCC arithmetic:* byte coordinates convert exactly to float, but large expanded-L2
-  intermediates can exceed float's exact-integer range.  Correctness is therefore established by
-  the post-timing wide-accumulator native-L2 cutoff/strict-prefix gate; canonical fixed-ID
-  agreement alone is not decisive at a tied rank-10 boundary.
+- *Exact arithmetic and ties:* YFCC byte coordinates convert exactly to float, but large expanded-
+  L2 intermediates can exceed float's exact-integer range.  More generally, any workload can have a
+  tied legal rank-10 boundary.  Correctness is therefore established universally by the post-
+  timing wide-accumulator native-L2 cutoff/strict-prefix gate; canonical fixed-ID agreement alone
+  is never decisive.
 - *CPU context:* CPU and GPU use different graph families, construction parameters, resource
   counts, adapters, and timing regions.
 - *Dataset coverage:* two dataset families and four predicate workloads cannot establish universal

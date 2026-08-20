@@ -86,10 +86,13 @@ The analyzer reports =valid_gt_recall= as canonical fixed-ID agreement over lega
 using distinct output-ID set semantics: a repeated output ID can receive match credit at most once.
 Raw records must declare =OutputSetSemanticsVersion=1= and run provenance must bind the
 =distinct_valid_output_ids_v1= contract, so legacy slot-counted results cannot be staged.  This
-fixed-ID metric is not by itself a valid exactness gate when the legal rank-=k= boundary is tied.
-In YFCC, 55 of the 1,000 correctness queries have a non-unique legal tenth-distance cutoff; a
-correct exact result can therefore choose a different tied ID and report 0.9974 canonical-ID
-agreement.  Non-YFCC workloads still require canonical =valid_gt_recall= equal to 1.0.
+fixed-ID metric is not by itself a valid exactness gate because the legal rank-=k= boundary can be
+tied in any workload.  For example, YFCC reports 0.9974 canonical-ID agreement on the 1,000-query
+correctness set and 0.99726 over the full 10,000-query set; 55 correctness queries have a
+non-unique legal tenth-distance cutoff.  ArXiv-R likewise reports 0.99999 canonical agreement over
+100,000 output slots because one returned ID differs at a legal cutoff tie.  These values remain
+useful diagnostics, but no workload is required to reproduce one arbitrary canonical choice among
+equal-distance IDs.
 
 The tie-aware exactness gate instead requires =native_l2_cutoff_recall= equal to 1.0,
 =native_l2_cutoff_errors= equal to zero, and =native_l2_strict_prefix_errors= equal to zero.  Thus every unique legal
@@ -102,3 +105,7 @@ one intrinsically underfilled query whose fixed-width GT row contains out-of-ran
 those IDs are not neighbors and are excluded from all exact denominators.  The analyzer also
 requires the exact configured shard/repetition sets and a passing memory-preflight record for every
 production shard, and exits nonzero on any violation.
+
+Consequently, the native-L2 cutoff and strict-prefix conditions above are the authoritative
+exactness gate for every workload.  Canonical =valid_gt_recall= is always reported, but it is never
+used as a pass/fail threshold.
