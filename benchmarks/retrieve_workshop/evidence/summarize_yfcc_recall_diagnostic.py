@@ -161,7 +161,7 @@ def independently_verify_outputs(
     num_queries: int,
     topk: int,
     dataset_size: int,
-) -> dict[str, float]:
+) -> dict[str, float | int]:
     result_payload = result_ids_path.read_bytes()
     if len(result_payload) != num_queries * topk * 8:
         raise ValueError(f"result-ID array shape failure: {result_ids_path}")
@@ -208,8 +208,11 @@ def independently_verify_outputs(
                 f"query summary disagrees with result IDs/GT for query {query}"
             )
     return {
+        "match_count": matches,
         "recall": matches / (num_queries * topk),
+        "unique_output_count": unique_outputs,
         "mean_unique_output_count": unique_outputs / num_queries,
+        "duplicate_query_count": duplicate_queries,
         "duplicate_query_rate": duplicate_queries / num_queries,
     }
 
@@ -256,10 +259,9 @@ def summarize_variant(
         raise ValueError(f"diagnostic query coverage failure: {summary_path}")
 
     recall = sum(float(row["recall"]) for row in rows) / len(rows)
-    gt_seen = sum(int(row["gt_seen_mask"]).bit_count() / 10 for row in rows) / len(
-        rows
-    )
     gt_seen_masks = tuple(int(row["gt_seen_mask"]) for row in rows)
+    gt_seen_count = sum(mask.bit_count() for mask in gt_seen_masks)
+    gt_seen = gt_seen_count / (len(rows) * 10)
     independent = independently_verify_outputs(
         result_ids_path,
         Path(configured["groundtruth_path"]),
@@ -325,9 +327,14 @@ def summarize_variant(
         "itopk": int(manifest["itopk"]),
         "search_width": int(manifest["search_width"]),
         "configured_max_iterations": int(manifest["configured_max_iterations"]),
+        "distinct_output_match_count": int(independent["match_count"]),
         "distinct_output_recall": independent["recall"],
+        "gt_seen_count": gt_seen_count,
         "gt_seen_rate": gt_seen,
-        "selection_loss": gt_seen - independent["recall"],
+        "selection_loss": (
+            gt_seen_count - int(independent["match_count"])
+        )
+        / (len(rows) * 10),
         "duplicate_output_query_rate": duplicates,
         "mean_unique_output_count": independent["mean_unique_output_count"],
         "mean_distance_evaluations": sum(

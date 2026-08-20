@@ -20,7 +20,7 @@
     },
     {
       "path": "summarize_yfcc_recall_diagnostic.py",
-      "sha256": "7842ec246290d96339b5cbe63f823fb39363bd6f2caa0db0c57b064b67839ed4",
+      "sha256": "c25acffcc8c20d2b5dba08408f7307f58e7303ed6f750c8236c3614c5f2c9669",
       "supports": ["yfcc_gt_seen_and_returned_recall_derivation"]
     },
     {
