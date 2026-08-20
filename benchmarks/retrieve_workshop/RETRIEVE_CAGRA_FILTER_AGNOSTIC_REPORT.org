@@ -716,7 +716,8 @@ Before a number appears in the paper:
 
 Supporting diagnostics that are not recomputed by the final three-repetition QPS--recall sweep are
 frozen under =benchmarks/retrieve_workshop/evidence/=.  The bundle README records a full SHA-256
-for every evidence file and the 2026-08-19 copy provenance.  The machine-readable
+for every evidence file, the 2026-08-19 historical-copy provenance, and the 2026-08-20 clean-commit
+generation provenance for the duplicate-safe YFCC diagnostic.  The machine-readable
 =diagnostic_manifest.json= is verified by the paper staging script before it publishes the final
 results sentinel.  These artifacts must remain separate
 from production performance points: diagnostic instrumentation is untimed, and the older YFCC
@@ -727,7 +728,9 @@ sample or the final strict bitmap-seeded method.
 |-
 | =benchmarks/retrieve_workshop/evidence/README.org= | Canonical inventory, origin statement, interpretation limits, and SHA-256 table. |
 | =benchmarks/retrieve_workshop/evidence/diagnostic_manifest.json= | Machine-readable artifact hashes and claim-coverage keys consumed by the paper staging gate. |
-| =benchmarks/retrieve_workshop/evidence/PASSING_ACCUMULATOR_DESIGN_AND_EVIDENCE_REPORT.org= | Accumulator design plus GT-seen versus returned-recall diagnostic provenance. |
+| =benchmarks/retrieve_workshop/evidence/PASSING_ACCUMULATOR_DESIGN_AND_EVIDENCE_REPORT.org= | Accumulator design; its historical slot-counted recall is not the paper's numeric evidence. |
+| =benchmarks/retrieve_workshop/evidence/yfcc_b0_distinct_output_summary.json= | Authoritative schema-7 YFCC B0 GT-seen/returned-recall result under distinct-output semantics. |
+| =benchmarks/retrieve_workshop/evidence/summarize_yfcc_recall_diagnostic.py= | Configuration, schema, correctness, traversal-equivalence, and full-input provenance gate for that summary. |
 | =benchmarks/retrieve_workshop/evidence/YFCC_RECALL_ROOT_CAUSE_REPORT.org= | YFCC B0-versus-continuous-depth diagnostic provenance. |
 | =benchmarks/retrieve_workshop/evidence/workload_selectivity_summary.json= | Exact 10,000-query selectivity distributions derived from resident bitmaps and bound to source files by SHA-256. |
 | =benchmarks/retrieve_workshop/evidence/summarize_bitmap_selectivity.py= | Bounded-memory selectivity derivation and bitmap-contract validation. |
@@ -998,8 +1001,8 @@ Fill this only after all gates pass.
 - [ ] Decide whether exact control is a table or figure.
 - [ ] Decide whether CPU context fits within six pages; if retained, preserve its interpretation
   boundary in the caption and body.
-- [ ] Decide whether a separately frozen GT-seen/returned diagnostic is essential to the core
-  retention argument.
+- [X] Retain the separately frozen, duplicate-safe GT-seen/returned diagnostic as the core
+  retention-mechanism evidence.
 - [ ] Verify every dataset/predicate statistic and correlation claim from reproducible analysis.
 - [ ] Confirm graph construction provenance for both CAGRA indices.
 - [ ] Replace all =TODO= markers and run =rg -n 'TODO|VERIFY' THIS_FILE= before export.

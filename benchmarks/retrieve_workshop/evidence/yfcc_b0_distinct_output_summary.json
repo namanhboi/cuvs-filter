@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "experiment": "yfcc_1000_b0_duplicate_safe_retention_diagnostic",
+  "output_set_semantics": "distinct_valid_output_ids_v1",
+  "git": {
+    "head": "d610c2ffcc46d8c60267da374789d6390717161f",
+    "status": ""
+  },
+  "variants": [
+    {
+      "variant": "default_b0",
+      "queries": 1000,
+      "itopk": 512,
+      "search_width": 2,
+      "configured_max_iterations": 0,
+      "distinct_output_recall": 0.5414000003899999,
+      "gt_seen_rate": 0.6647000000000001,
+      "selection_loss": 0.12329999961000015,
+      "duplicate_output_query_rate": 0.0,
+      "mean_unique_output_count": 5.558,
+      "mean_distance_evaluations": 8418.171,
+      "mean_passing_discoveries": 220.529
+    },
+    {
+      "variant": "default_accumulator_b0",
+      "queries": 1000,
+      "itopk": 512,
+      "search_width": 2,
+      "configured_max_iterations": 0,
+      "distinct_output_recall": 0.664700000284,
+      "gt_seen_rate": 0.6647000000000001,
+      "selection_loss": -2.839999346804234e-10,
+      "duplicate_output_query_rate": 0.0,
+      "mean_unique_output_count": 7.377,
+      "mean_distance_evaluations": 8418.173,
+      "mean_passing_discoveries": 220.526
+    }
+  ],
+  "headline": {
+    "gt_seen_rate": 0.6647000000000001,
+    "base_returned_recall": 0.5414000003899999,
+    "retain_returned_recall": 0.664700000284,
+    "base_selection_loss_percentage_points": 12.329999961000016
+  },
+  "sources": [
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/yfcc_schema7_20260820T0055Z/raw/root_cause_b0_diagnostic.json",
+      "bytes": 10648,
+      "sha256": "f7e597775e7010d0221f1296dd500821cb4e5b87741aa85bf06f8ccf7024435d"
+    },
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/yfcc_schema7_20260820T0055Z/configs/root_cause_b0_diagnostic.json",
+      "bytes": 4209,
+      "sha256": "ea7a0c10403adb7a77d98c1b704febaa707d1ea9e4b7faa27fef50640c60d6f6"
+    },
+    {
+      "path": "/home/ubuntu/cuvs-filter-retrieve/cpp/build/bench/ann/CUVS_CAGRA_ANN_BENCH",
+      "bytes": 5462456,
+      "sha256": "153ae78ddd3a6295564e66371b1bfc091f6ad910accc7e0adec2da07bd617fe2"
+    },
+    {
+      "path": "/home/ubuntu/cuvs-filter-retrieve/cpp/build/libcuvs.so",
+      "bytes": 112534320,
+      "sha256": "f07f6fc273fd96ef21d95a368ca2398372e589555376f8eed1b6f39ed7a8c173"
+    },
+    {
+      "path": "/home/ubuntu/big-ann-benchmarks/data/yfcc100M/base.10M.u8bin",
+      "bytes": 1920000008,
+      "sha256": "589030afcbcc44a50ff798cec935f0980815a02eb7075b224d4f7c12febe96bf"
+    },
+    {
+      "path": "/home/ubuntu/cuvs-filter/datasets/yfcc-10M/workloads/correctness_1000/query.u8bin",
+      "bytes": 192008,
+      "sha256": "b48830f9888be33a589cb4dba7fe8b4196d9829f57a3ecda71a83c2f3ddf18f6"
+    },
+    {
+      "path": "/home/ubuntu/cuvs-filter/datasets/yfcc-10M/workloads/correctness_1000/groundtruth.ibin",
+      "bytes": 40008,
+      "sha256": "fba2e290fae0e88c5f8b8e6a41b357d2c4248b68e93e6c3235bdc2aff003fe1a"
+    },
+    {
+      "path": "/home/ubuntu/big-ann-benchmarks/data/yfcc100M/base.metadata.10M.spmat",
+      "bytes": 945683840,
+      "sha256": "2f9c9a533fde31cb062edfdf5c9410f088bb5d7bf4a721ab98c47e3d2954287d"
+    },
+    {
+      "path": "/home/ubuntu/cuvs-filter/datasets/yfcc-10M/workloads/correctness_1000/query.metadata.spmat",
+      "bytes": 20032,
+      "sha256": "7a56bd99bc72827852a358edfdc8b3ea415bdf52e02dad2c851d741551b2946c"
+    },
+    {
+      "path": "/home/ubuntu/FAVOR/.artifacts/yfcc/yfcc10m.cagra_g32_ig64.index",
+      "bytes": 1280000924,
+      "sha256": "9b7bc1d6131117af0a46b56a2879c5da8d373763b3bd5d679e84ee7b406da324"
+    },
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/yfcc_schema7_20260820T0055Z/diagnostics/root_cause/default_b0/manifest.json",
+      "bytes": 876,
+      "sha256": "c5c14e3c9e3277797b57e0541e4f7b79ebbf1ee194fc5949cfd442a43617a6b5"
+    },
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/yfcc_schema7_20260820T0055Z/diagnostics/root_cause/default_b0/query_summary.csv",
+      "bytes": 313010,
+      "sha256": "3611be2795fc612679483b500dd9459f1fa8834091b1fce0eda08ac45ee4fa0a"
+    },
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/yfcc_schema7_20260820T0055Z/diagnostics/root_cause/default_b0/result_indices.i64bin",
+      "bytes": 80000,
+      "sha256": "842bb6627902494afea0c43cb5b9e5bbf792790c3efca6a196eb48968d3717f1"
+    },
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/yfcc_schema7_20260820T0055Z/diagnostics/root_cause/default_accumulator_b0/manifest.json",
+      "bytes": 888,
+      "sha256": "5c5501ca269d2c3e7a2d6e19d850b43513296bab366553c4ea3f6af5db2ab256"
+    },
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/yfcc_schema7_20260820T0055Z/diagnostics/root_cause/default_accumulator_b0/query_summary.csv",
+      "bytes": 317092,
+      "sha256": "9d7de6137c8ff6864f3d216b4b7409244ede2176c82b69ee61c74a8fed5c4e5e"
+    },
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/yfcc_schema7_20260820T0055Z/diagnostics/root_cause/default_accumulator_b0/result_indices.i64bin",
+      "bytes": 80000,
+      "sha256": "a17c40c44995e6d67bbf57d046c0ab54e586ec563742cdf100edba03311cdbc3"
+    }
+  ]
+}

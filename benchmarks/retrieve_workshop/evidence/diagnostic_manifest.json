@@ -1,16 +1,27 @@
 {
   "schema_version": 1,
-  "snapshot_date_utc": "2026-08-19",
+  "snapshot_date_utc": "2026-08-20",
   "source": {
     "branch": "favor-filtered-search",
     "git_commit": "9d8820ef9b12649067cfa858a9d6a169a1b6880e",
-    "note": "Historical compact diagnostics are copied byte-for-byte from the source checkout; deterministic workload statistics are derived from SHA-256-bound resident bitmaps in the isolated experiment checkout. Artifact SHA-256 values define this snapshot."
+    "note": "Historical compact diagnostics are copied byte-for-byte from the source checkout; deterministic workload statistics and the duplicate-safe YFCC diagnostic are generated from SHA-256-bound inputs in the isolated experiment checkout. Artifact SHA-256 values define this mixed-source snapshot.",
+    "generated_diagnostic_git_commit": "d610c2ffcc46d8c60267da374789d6390717161f"
   },
   "artifacts": [
     {
       "path": "PASSING_ACCUMULATOR_DESIGN_AND_EVIDENCE_REPORT.org",
       "sha256": "fe9d8f42dcdd2dc884473484b0d9cbb7fd43bb92e1ca3b4a1c6e1f3a6f9a12c0",
       "supports": ["accumulator_design"]
+    },
+    {
+      "path": "yfcc_b0_distinct_output_summary.json",
+      "sha256": "a1eed97c1f881020f49daf96540a3876cccea28fc2f4479815cc1188022d30d9",
+      "supports": ["yfcc_gt_seen_and_returned_recall"]
+    },
+    {
+      "path": "summarize_yfcc_recall_diagnostic.py",
+      "sha256": "42f91d3801a504447f7b98cb8c20d9b68ee086fa77a99b4e7424115103a12f14",
+      "supports": ["yfcc_gt_seen_and_returned_recall_derivation"]
     },
     {
       "path": "YFCC_RECALL_ROOT_CAUSE_REPORT.org",
