@@ -563,7 +563,7 @@ remains a separate gate and is intentionally not inferred from Python success:
 | GPU Python pipeline tests | 2026-08-20 | PASS: 6/6 tests | =benchmarks/retrieve_workshop/gpu_graph/test_pipeline.py= |
 | CUDA bitmap tests/build | 2026-08-20 | PASS: 44 tests; 2 intentional unsupported-mode skips; clean no-op rebuild | =cpp/build/gtests/NEIGHBORS_ANN_CAGRA_FILTER_BITMAP_TEST= |
 | Exact Python pipeline tests | 2026-08-20 | PASS: 6/6 tests | =benchmarks/retrieve_workshop/exact_bitmap/test_pipeline.py= |
-| Bitmap-selectivity derivation tests | 2026-08-20 | PASS: 2/2 tests; all-workload artifact reproduced byte-for-byte | =benchmarks/retrieve_workshop/evidence/test_summarize_bitmap_selectivity.py= |
+| Bitmap-selectivity derivation tests | 2026-08-20 | PASS: 4/4 tests; all-workload artifact regenerated from bound inputs | =benchmarks/retrieve_workshop/evidence/test_summarize_bitmap_selectivity.py= |
 | Exact sparse/dense smoke | TODO | TODO | TODO |
 | CPU pipeline test program | 2026-08-19 | PASS: 1 program / 2 synthetic scenarios | =benchmarks/retrieve_workshop/cpu_context/test_pipeline.py= |
 | CPU artifact preflight | 2026-08-19 | PASS: 8 graphs / 5 methods / 4 workloads | =benchmarks/retrieve_workshop/cpu_context/run.py --preflight= |

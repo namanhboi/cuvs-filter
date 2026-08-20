@@ -19,6 +19,17 @@
         "fraction_below_1_percent": 0.7116,
         "fraction_at_most_1_percent": 0.7116
       },
+      "valid_ground_truth": {
+        "k": 10,
+        "slots": 100000,
+        "fraction": 1.0,
+        "min_per_query": 10,
+        "max_per_query": 10,
+        "underfilled_queries": 0,
+        "per_query_count_histogram": {
+          "10": 10000
+        }
+      },
       "source_manifest": {
         "path": "/home/ubuntu/cuvs-filter/datasets/navix_bitmap/yfcc/throughput_10000/manifest.json",
         "bytes": 2253,
@@ -65,6 +76,48 @@
           "bytes": 2260000040,
           "sha256": "eabd81d66ce0471379b3218aaf86275f00a366e34bb70911958fac9f86fab124"
         }
+      ],
+      "source_ground_truth": [
+        {
+          "shard_number": 0,
+          "first_query": 0,
+          "query_count": 2048,
+          "path": "/home/ubuntu/cuvs-filter/datasets/navix_bitmap/yfcc/throughput_10000/shard_00000_02048/groundtruth.ibin",
+          "bytes": 81928,
+          "sha256": "7df955ee66df1418b2705fb960fcb17bd872f4da8cb818604d160328da6065ac"
+        },
+        {
+          "shard_number": 1,
+          "first_query": 2048,
+          "query_count": 2048,
+          "path": "/home/ubuntu/cuvs-filter/datasets/navix_bitmap/yfcc/throughput_10000/shard_02048_04096/groundtruth.ibin",
+          "bytes": 81928,
+          "sha256": "2eed3d356ba9871dfcf59d11b3c3057d20c25ee0a458213ff4f1b1747f8d5965"
+        },
+        {
+          "shard_number": 2,
+          "first_query": 4096,
+          "query_count": 2048,
+          "path": "/home/ubuntu/cuvs-filter/datasets/navix_bitmap/yfcc/throughput_10000/shard_04096_06144/groundtruth.ibin",
+          "bytes": 81928,
+          "sha256": "5bcb881d5ba0432f736bcfa23d0f63be18930167fe67897985f6975f6d39e8a8"
+        },
+        {
+          "shard_number": 3,
+          "first_query": 6144,
+          "query_count": 2048,
+          "path": "/home/ubuntu/cuvs-filter/datasets/navix_bitmap/yfcc/throughput_10000/shard_06144_08192/groundtruth.ibin",
+          "bytes": 81928,
+          "sha256": "eefca10e40cfba2d1a860d7fc05413223c05d684f81bce90bc5cac40b0cff279"
+        },
+        {
+          "shard_number": 4,
+          "first_query": 8192,
+          "query_count": 1808,
+          "path": "/home/ubuntu/cuvs-filter/datasets/navix_bitmap/yfcc/throughput_10000/shard_08192_10000/groundtruth.ibin",
+          "bytes": 72328,
+          "sha256": "5d74c7ce09311547d4b15124087dfdedf4c0fe4837044366ebd755fe386ed613"
+        }
       ]
     },
     {
@@ -84,6 +137,18 @@
         "fraction_below_1_percent": 0.003,
         "fraction_at_most_1_percent": 0.003
       },
+      "valid_ground_truth": {
+        "k": 10,
+        "slots": 99991,
+        "fraction": 0.99991,
+        "min_per_query": 1,
+        "max_per_query": 10,
+        "underfilled_queries": 1,
+        "per_query_count_histogram": {
+          "1": 1,
+          "10": 9999
+        }
+      },
       "source_manifest": {
         "path": "/home/ubuntu/cuvs-filter/datasets/navix_bitmap/arxiv/em/throughput_10000/manifest.json",
         "bytes": 556,
@@ -97,6 +162,16 @@
           "path": "/home/ubuntu/cuvs-filter/datasets/navix_bitmap/arxiv/em/throughput_10000/shard_00000_10000/filter.bitmap",
           "bytes": 125000040,
           "sha256": "d30133a2665114eb4e8317432bf8f5f9dcc12193126aacf4404f7f427eb9759c"
+        }
+      ],
+      "source_ground_truth": [
+        {
+          "shard_number": 0,
+          "first_query": 0,
+          "query_count": 10000,
+          "path": "/home/ubuntu/cuvs-filter/datasets/navix_bitmap/arxiv/em/throughput_10000/shard_00000_10000/groundtruth.ibin",
+          "bytes": 400008,
+          "sha256": "aa25c37415b5171e3a5e7d6d73e36f8c57bf275523caf04b8707d46d130c95e0"
         }
       ]
     },
@@ -117,6 +192,17 @@
         "fraction_below_1_percent": 0.0115,
         "fraction_at_most_1_percent": 0.0115
       },
+      "valid_ground_truth": {
+        "k": 10,
+        "slots": 100000,
+        "fraction": 1.0,
+        "min_per_query": 10,
+        "max_per_query": 10,
+        "underfilled_queries": 0,
+        "per_query_count_histogram": {
+          "10": 10000
+        }
+      },
       "source_manifest": {
         "path": "/home/ubuntu/cuvs-filter/datasets/navix_bitmap/arxiv/emis/throughput_10000/manifest.json",
         "bytes": 561,
@@ -130,6 +216,16 @@
           "path": "/home/ubuntu/cuvs-filter/datasets/navix_bitmap/arxiv/emis/throughput_10000/shard_00000_10000/filter.bitmap",
           "bytes": 125000040,
           "sha256": "48e297adad8f9847a5f0f42cdec273f24bf416649f24ccc45f392c6b158f031b"
+        }
+      ],
+      "source_ground_truth": [
+        {
+          "shard_number": 0,
+          "first_query": 0,
+          "query_count": 10000,
+          "path": "/home/ubuntu/cuvs-filter/datasets/navix_bitmap/arxiv/emis/throughput_10000/shard_00000_10000/groundtruth.ibin",
+          "bytes": 400008,
+          "sha256": "c2f5a823c2a833e7476c74c40f7e4180b92f26bdc3160402b34cb67cc9517030"
         }
       ]
     },
@@ -150,6 +246,17 @@
         "fraction_below_1_percent": 0.0013,
         "fraction_at_most_1_percent": 0.0013
       },
+      "valid_ground_truth": {
+        "k": 10,
+        "slots": 100000,
+        "fraction": 1.0,
+        "min_per_query": 10,
+        "max_per_query": 10,
+        "underfilled_queries": 0,
+        "per_query_count_histogram": {
+          "10": 10000
+        }
+      },
       "source_manifest": {
         "path": "/home/ubuntu/cuvs-filter/datasets/navix_bitmap/arxiv/r/throughput_10000/manifest.json",
         "bytes": 556,
@@ -163,6 +270,16 @@
           "path": "/home/ubuntu/cuvs-filter/datasets/navix_bitmap/arxiv/r/throughput_10000/shard_00000_10000/filter.bitmap",
           "bytes": 125000040,
           "sha256": "e78cc2b309b9972d582825b07659ba407a38c82340fea398273d96a621dd22b7"
+        }
+      ],
+      "source_ground_truth": [
+        {
+          "shard_number": 0,
+          "first_query": 0,
+          "query_count": 10000,
+          "path": "/home/ubuntu/cuvs-filter/datasets/navix_bitmap/arxiv/r/throughput_10000/shard_00000_10000/groundtruth.ibin",
+          "bytes": 400008,
+          "sha256": "866c202841686b3c7942b4aa548c74e95da655c720a8ec9235f2bbab68106382"
         }
       ]
     }

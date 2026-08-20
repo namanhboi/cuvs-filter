@@ -4,16 +4,20 @@
 from __future__ import annotations
 
 import argparse
+import array
 import csv
 import hashlib
 import json
 import math
 import re
 import shutil
+import struct
 import subprocess
+import sys
 from pathlib import Path
 
 VARIANTS = ("default_b0", "default_accumulator_b0")
+MATRIX_HEADER = struct.Struct("<II")
 
 
 def sha256(path: Path) -> str:
@@ -142,6 +146,74 @@ def finite(row: dict[str, object], key: str) -> float:
     return value
 
 
+def little_endian_array(typecode: str, payload: bytes) -> array.array:
+    values = array.array(typecode)
+    values.frombytes(payload)
+    if sys.byteorder != "little":
+        values.byteswap()
+    return values
+
+
+def independently_verify_outputs(
+    result_ids_path: Path,
+    ground_truth_path: Path,
+    rows: list[dict[str, str]],
+    num_queries: int,
+    topk: int,
+    dataset_size: int,
+) -> dict[str, float]:
+    result_payload = result_ids_path.read_bytes()
+    if len(result_payload) != num_queries * topk * 8:
+        raise ValueError(f"result-ID array shape failure: {result_ids_path}")
+    result_ids = little_endian_array("q", result_payload)
+
+    with ground_truth_path.open("rb") as stream:
+        header = stream.read(MATRIX_HEADER.size)
+        payload = stream.read()
+    if len(header) != MATRIX_HEADER.size:
+        raise ValueError(f"truncated ground-truth header: {ground_truth_path}")
+    gt_rows, gt_columns = MATRIX_HEADER.unpack(header)
+    if (
+        gt_rows != num_queries
+        or gt_columns != topk
+        or len(payload) != gt_rows * gt_columns * 4
+    ):
+        raise ValueError(f"ground-truth matrix shape failure: {ground_truth_path}")
+    ground_truth = little_endian_array("I", payload)
+
+    matches = 0
+    unique_outputs = 0
+    duplicate_queries = 0
+    for query in range(num_queries):
+        gt_row = set(ground_truth[query * topk : (query + 1) * topk])
+        if len(gt_row) != topk or any(node >= dataset_size for node in gt_row):
+            raise ValueError(f"YFCC diagnostic GT row is not ten unique legal IDs: {query}")
+        candidates = result_ids[query * topk : (query + 1) * topk]
+        legal = [node for node in candidates if 0 <= node < dataset_size]
+        distinct = set(legal)
+        query_matches = len(distinct & gt_row)
+        matches += query_matches
+        unique_outputs += len(distinct)
+        duplicate_queries += len(legal) != len(distinct)
+        if (
+            not math.isclose(
+                float(rows[query]["recall"]),
+                query_matches / topk,
+                rel_tol=0.0,
+                abs_tol=1e-7,
+            )
+            or int(rows[query]["output_count"]) != len(distinct)
+        ):
+            raise ValueError(
+                f"query summary disagrees with result IDs/GT for query {query}"
+            )
+    return {
+        "recall": matches / (num_queries * topk),
+        "mean_unique_output_count": unique_outputs / num_queries,
+        "duplicate_query_rate": duplicate_queries / num_queries,
+    }
+
+
 def summarize_variant(
     result_root: Path,
     variant: str,
@@ -188,6 +260,14 @@ def summarize_variant(
         rows
     )
     gt_seen_masks = tuple(int(row["gt_seen_mask"]) for row in rows)
+    independent = independently_verify_outputs(
+        result_ids_path,
+        Path(configured["groundtruth_path"]),
+        rows,
+        int(manifest["num_queries"]),
+        int(manifest["topk"]),
+        int(manifest["dataset_size"]),
+    )
     raw_recall = finite(raw, "ValidGTRecall")
     label = str(raw.get("label", ""))
     name_match = re.search(r"/(\d+)/process_time/", str(raw.get("name", "")))
@@ -218,6 +298,10 @@ def summarize_variant(
         raise ValueError(
             f"raw/diagnostic recall mismatch for {variant}: {raw_recall} != {recall}"
         )
+    if not math.isclose(
+        recall, independent["recall"], rel_tol=0.0, abs_tol=1e-7
+    ):
+        raise ValueError(f"independent output recall mismatch for {variant}")
     semantics = finite(raw, "OutputSetSemanticsVersion")
     duplicates = finite(raw, "DuplicateOutputQueries")
     if (
@@ -225,6 +309,12 @@ def summarize_variant(
         or not 0.0 <= duplicates <= 1.0
         or finite(raw, "FilterViolations") != 0.0
         or finite(raw, "InvalidSentinelErrors") != 0.0
+        or not math.isclose(
+            duplicates,
+            independent["duplicate_query_rate"],
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        )
         or (variant == "default_accumulator_b0" and duplicates != 0.0)
     ):
         raise ValueError(f"raw correctness contract failure for {variant}")
@@ -235,12 +325,11 @@ def summarize_variant(
         "itopk": int(manifest["itopk"]),
         "search_width": int(manifest["search_width"]),
         "configured_max_iterations": int(manifest["configured_max_iterations"]),
-        "distinct_output_recall": recall,
+        "distinct_output_recall": independent["recall"],
         "gt_seen_rate": gt_seen,
-        "selection_loss": gt_seen - recall,
+        "selection_loss": gt_seen - independent["recall"],
         "duplicate_output_query_rate": duplicates,
-        "mean_unique_output_count": sum(float(row["output_count"]) for row in rows)
-        / len(rows),
+        "mean_unique_output_count": independent["mean_unique_output_count"],
         "mean_distance_evaluations": sum(
             float(row["candidate_evaluations"]) for row in rows
         )
@@ -263,20 +352,36 @@ def summarize_variant(
 
 
 def archive_compact_sources(
-    archive_dir: Path, paths: dict[str, Path]
+    archive_dir: Path, paths: dict[str, Path], reuse_existing: bool
 ) -> list[dict[str, object]]:
     archive_dir = archive_dir.resolve()
     partial = archive_dir.with_name(f"{archive_dir.name}.partial")
-    if archive_dir.exists() or partial.exists():
+    if partial.exists():
         raise FileExistsError(
-            f"refusing to replace diagnostic archive: {archive_dir} (or {partial})"
+            f"incomplete diagnostic archive already exists: {partial}"
         )
-    partial.mkdir(parents=True)
+    if archive_dir.exists() and not reuse_existing:
+        raise FileExistsError(f"refusing to replace diagnostic archive: {archive_dir}")
+    if not archive_dir.exists() and reuse_existing:
+        raise FileNotFoundError(f"diagnostic archive does not exist: {archive_dir}")
+    if archive_dir.exists():
+        actual = {
+            str(path.relative_to(archive_dir))
+            for path in archive_dir.rglob("*")
+            if path.is_file()
+        }
+        if actual != set(paths):
+            raise ValueError(
+                f"diagnostic archive membership mismatch: {archive_dir}"
+            )
+    else:
+        partial.mkdir(parents=True)
     archived: list[dict[str, object]] = []
     for relative, original in sorted(paths.items()):
-        destination = partial / relative
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(original, destination)
+        destination = archive_dir / relative if archive_dir.exists() else partial / relative
+        if not archive_dir.exists():
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(original, destination)
         original_hash = sha256(original)
         archived_hash = sha256(destination)
         if original_hash != archived_hash:
@@ -290,7 +395,8 @@ def archive_compact_sources(
                 "original_path": str(original.resolve()),
             }
         )
-    partial.rename(archive_dir)
+    if not archive_dir.exists():
+        partial.rename(archive_dir)
     return archived
 
 
@@ -302,6 +408,7 @@ def main() -> None:
     parser.add_argument("--bench-bin", type=Path, required=True)
     parser.add_argument("--libcuvs", type=Path, required=True)
     parser.add_argument("--archive-dir", type=Path)
+    parser.add_argument("--reuse-existing-archive", action="store_true")
     parser.add_argument("--require-clean-repo", action="store_true")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
@@ -360,7 +467,9 @@ def main() -> None:
     sources.extend(source(path) for path in input_paths)
     sources.extend(variant_sources)
     archived_sources = (
-        archive_compact_sources(args.archive_dir, compact_paths)
+        archive_compact_sources(
+            args.archive_dir, compact_paths, args.reuse_existing_archive
+        )
         if args.archive_dir is not None
         else []
     )

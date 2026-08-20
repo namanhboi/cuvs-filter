@@ -98,6 +98,13 @@ class BitmapSelectivityTest(unittest.TestCase):
             )
             result = summarize("fixture", manifest)
             self.assertEqual(result["valid_ground_truth"]["slots"], 19)
+            self.assertEqual(result["valid_ground_truth"]["min_per_query"], 9)
+            self.assertEqual(result["valid_ground_truth"]["max_per_query"], 10)
+            self.assertEqual(result["valid_ground_truth"]["underfilled_queries"], 1)
+            self.assertEqual(
+                result["valid_ground_truth"]["per_query_count_histogram"],
+                {"9": 1, "10": 1},
+            )
             self.assertEqual(result["source_bitmaps"][0]["path"], str(bitmap))
             self.assertEqual(
                 result["source_ground_truth"][0]["path"], str(ground_truth)

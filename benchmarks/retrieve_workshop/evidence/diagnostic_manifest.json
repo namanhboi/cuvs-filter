@@ -5,7 +5,7 @@
     "branch": "favor-filtered-search",
     "git_commit": "9d8820ef9b12649067cfa858a9d6a169a1b6880e",
     "note": "Historical compact diagnostics are copied byte-for-byte from the source checkout; deterministic workload statistics and the duplicate-safe YFCC diagnostic are generated from SHA-256-bound inputs in the isolated experiment checkout. Artifact SHA-256 values define this mixed-source snapshot.",
-    "generated_diagnostic_git_commit": "d610c2ffcc46d8c60267da374789d6390717161f"
+    "generated_diagnostic_git_commit": "69c7945899307567cc5a4b026ea68a47508ee51b"
   },
   "artifacts": [
     {
@@ -15,13 +15,58 @@
     },
     {
       "path": "yfcc_b0_distinct_output_summary.json",
-      "sha256": "a1eed97c1f881020f49daf96540a3876cccea28fc2f4479815cc1188022d30d9",
+      "sha256": "c59b34fcebc8ff34ca9fdd15aa2f5f8303e35d49ccbdfdfc8419e047e528efe1",
       "supports": ["yfcc_gt_seen_and_returned_recall"]
     },
     {
       "path": "summarize_yfcc_recall_diagnostic.py",
-      "sha256": "144c4319e8499a26a48bb53b1d1becec9e8f9049ca9cca82e2406a292558da5b",
+      "sha256": "7842ec246290d96339b5cbe63f823fb39363bd6f2caa0db0c57b064b67839ed4",
       "supports": ["yfcc_gt_seen_and_returned_recall_derivation"]
+    },
+    {
+      "path": "yfcc_b0_schema7_sources/configs/root_cause_b0_diagnostic.json",
+      "sha256": "ea7a0c10403adb7a77d98c1b704febaa707d1ea9e4b7faa27fef50640c60d6f6",
+      "supports": ["yfcc_schema7_config_source"]
+    },
+    {
+      "path": "yfcc_b0_schema7_sources/raw/root_cause_b0_diagnostic.json",
+      "sha256": "f7e597775e7010d0221f1296dd500821cb4e5b87741aa85bf06f8ccf7024435d",
+      "supports": ["yfcc_schema7_raw_source"]
+    },
+    {
+      "path": "yfcc_b0_schema7_sources/inputs/groundtruth.ibin",
+      "sha256": "fba2e290fae0e88c5f8b8e6a41b357d2c4248b68e93e6c3235bdc2aff003fe1a",
+      "supports": ["yfcc_schema7_ground_truth_source"]
+    },
+    {
+      "path": "yfcc_b0_schema7_sources/diagnostics/default_b0/manifest.json",
+      "sha256": "c5c14e3c9e3277797b57e0541e4f7b79ebbf1ee194fc5949cfd442a43617a6b5",
+      "supports": ["yfcc_schema7_base_manifest_source"]
+    },
+    {
+      "path": "yfcc_b0_schema7_sources/diagnostics/default_b0/query_summary.csv",
+      "sha256": "3611be2795fc612679483b500dd9459f1fa8834091b1fce0eda08ac45ee4fa0a",
+      "supports": ["yfcc_schema7_base_query_summary_source"]
+    },
+    {
+      "path": "yfcc_b0_schema7_sources/diagnostics/default_b0/result_indices.i64bin",
+      "sha256": "842bb6627902494afea0c43cb5b9e5bbf792790c3efca6a196eb48968d3717f1",
+      "supports": ["yfcc_schema7_base_result_ids_source"]
+    },
+    {
+      "path": "yfcc_b0_schema7_sources/diagnostics/default_accumulator_b0/manifest.json",
+      "sha256": "5c5501ca269d2c3e7a2d6e19d850b43513296bab366553c4ea3f6af5db2ab256",
+      "supports": ["yfcc_schema7_retain_manifest_source"]
+    },
+    {
+      "path": "yfcc_b0_schema7_sources/diagnostics/default_accumulator_b0/query_summary.csv",
+      "sha256": "9d7de6137c8ff6864f3d216b4b7409244ede2176c82b69ee61c74a8fed5c4e5e",
+      "supports": ["yfcc_schema7_retain_query_summary_source"]
+    },
+    {
+      "path": "yfcc_b0_schema7_sources/diagnostics/default_accumulator_b0/result_indices.i64bin",
+      "sha256": "a17c40c44995e6d67bbf57d046c0ab54e586ec563742cdf100edba03311cdbc3",
+      "supports": ["yfcc_schema7_retain_result_ids_source"]
     },
     {
       "path": "YFCC_RECALL_ROOT_CAUSE_REPORT.org",
@@ -30,17 +75,17 @@
     },
     {
       "path": "workload_selectivity_summary.json",
-      "sha256": "fac7ae3d671f28f7083450af8a0043635465bab5e1c039c86cb96952aeaa61cb",
+      "sha256": "715fdd372fd499488831dc0e8642fd25b1c5b1b429859a3ce1586d6c0339b18c",
       "supports": ["workload_selectivity_distribution", "yfcc_selectivity_distribution"]
     },
     {
       "path": "summarize_bitmap_selectivity.py",
-      "sha256": "858264d7afd30728726dc5bbaa79b8eb286b8aa1c1f8bfee6c332d2b93e7379f",
+      "sha256": "891050777c10e941014aa9c5a0cb9f6da2d313dc022f41b1f760d2ff95b5bcec",
       "supports": ["workload_selectivity_derivation"]
     },
     {
       "path": "test_summarize_bitmap_selectivity.py",
-      "sha256": "90d8e22e25ccdaf9b7b32911203f78bfea6e173e574f0cc025c4e0dd51ef68d4",
+      "sha256": "f49c7f499e2fb63d7f21733a2c3c6defe5bcd0eedce25ff574c08767846839f5",
       "supports": ["workload_selectivity_derivation_test"]
     },
     {

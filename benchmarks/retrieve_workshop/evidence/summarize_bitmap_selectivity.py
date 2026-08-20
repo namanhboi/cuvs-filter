@@ -48,7 +48,7 @@ def shard_source(
 
 def count_valid_ground_truth(
     path: Path, expected_rows: int, expected_k: int, base_rows: int
-) -> tuple[int, str]:
+) -> tuple[np.ndarray, str]:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
         header = stream.read(MATRIX_HEADER.size)
@@ -65,8 +65,9 @@ def count_valid_ground_truth(
             raise ValueError(f"ground-truth matrix violates manifest contract: {path}")
         payload = stream.read()
         digest.update(payload)
-    values = np.frombuffer(payload, dtype="<u4")
-    return int(np.count_nonzero(values < base_rows)), digest.hexdigest()
+    values = np.frombuffer(payload, dtype="<u4").reshape(expected_rows, expected_k)
+    counts = np.count_nonzero(values < base_rows, axis=1).astype(np.uint32)
+    return counts, digest.hexdigest()
 
 
 def count_bitmap_rows(
@@ -166,7 +167,7 @@ def summarize(name: str, manifest_path: Path) -> dict[str, object]:
     all_counts: list[np.ndarray] = []
     bitmap_sources: list[dict[str, object]] = []
     ground_truth_sources: list[dict[str, object]] = []
-    valid_gt_slots = 0
+    valid_gt_counts: list[np.ndarray] = []
     cursor = 0
     for shard_number, shard in enumerate(manifest["shards"]):
         first_query = int(shard["first_query"])
@@ -180,10 +181,10 @@ def summarize(name: str, manifest_path: Path) -> dict[str, object]:
         ground_truth_path = shard_source(
             manifest_path, shard, "groundtruth", "groundtruth.ibin"
         )
-        shard_valid_gt, ground_truth_hash = count_valid_ground_truth(
+        shard_valid_gt_counts, ground_truth_hash = count_valid_ground_truth(
             ground_truth_path, shard_queries, 10, base_rows
         )
-        valid_gt_slots += shard_valid_gt
+        valid_gt_counts.append(shard_valid_gt_counts)
         if int(counts.min()) != int(shard["min_passing"]):
             raise ValueError(f"min-passing mismatch for {bitmap_path}")
         if int(counts.max()) != int(shard["max_passing"]):
@@ -221,6 +222,9 @@ def summarize(name: str, manifest_path: Path) -> dict[str, object]:
         raise ValueError(f"query coverage mismatch in {manifest_path}")
 
     counts = np.concatenate(all_counts)
+    gt_counts = np.concatenate(valid_gt_counts)
+    gt_values, gt_frequencies = np.unique(gt_counts, return_counts=True)
+    valid_gt_slots = int(gt_counts.sum(dtype=np.uint64))
     selectivity = counts.astype(np.float64) / base_rows
     return {
         "workload": name,
@@ -243,6 +247,13 @@ def summarize(name: str, manifest_path: Path) -> dict[str, object]:
             "k": 10,
             "slots": valid_gt_slots,
             "fraction": valid_gt_slots / (query_rows * 10),
+            "min_per_query": int(gt_counts.min()),
+            "max_per_query": int(gt_counts.max()),
+            "underfilled_queries": int(np.count_nonzero(gt_counts < 10)),
+            "per_query_count_histogram": {
+                str(int(value)): int(frequency)
+                for value, frequency in zip(gt_values, gt_frequencies, strict=True)
+            },
         },
         "source_manifest": {
             "path": str(manifest_path),
