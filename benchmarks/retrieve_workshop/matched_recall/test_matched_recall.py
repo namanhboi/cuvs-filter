@@ -47,6 +47,49 @@ class MatchedRecallTest(unittest.TestCase):
                 }
             )
 
+    def test_explicit_depth_respects_single_cta_hash_capacity(self) -> None:
+        # 512 + 4 * 32 * 4092 = 524288: exactly the 20-bit table's 0.5-fill limit.
+        MODULE.normalize_point(
+            {
+                "workload": "emis",
+                "method": "default_cagra",
+                "itopk": 512,
+                "search_width": 4,
+                "max_iterations": 4092,
+            }
+        )
+        with self.assertRaises(ValueError):
+            MODULE.normalize_point(
+                {
+                    "workload": "emis",
+                    "method": "default_cagra",
+                    "itopk": 512,
+                    "search_width": 4,
+                    "max_iterations": 4093,
+                }
+            )
+
+        # Degree 64 halves the legal W=4 continuation depth on YFCC.
+        MODULE.normalize_point(
+            {
+                "workload": "yfcc",
+                "method": "default_cagra_accumulator",
+                "itopk": 512,
+                "search_width": 4,
+                "max_iterations": 2046,
+            }
+        )
+        with self.assertRaises(ValueError):
+            MODULE.normalize_point(
+                {
+                    "workload": "yfcc",
+                    "method": "default_cagra_accumulator",
+                    "itopk": 512,
+                    "search_width": 4,
+                    "max_iterations": 2047,
+                }
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -39,6 +39,9 @@ MIN_L = 32
 MAX_L = 512
 L_QUANTUM = 32
 MAX_ITERATIONS = 7569
+HASHMAP_MAX_FILL_RATE = 0.5
+MAX_NORMAL_HASH_BITLEN = 20
+MAX_NORMAL_HASH_ENTRIES = (1 << MAX_NORMAL_HASH_BITLEN) * HASHMAP_MAX_FILL_RATE
 TARGETS = {"yfcc": 0.80, "em": 0.95, "emis": 0.95, "r": 0.95}
 TARGET_WINDOW = 0.002
 EXPECTED_QUERIES = 10_000
@@ -150,6 +153,22 @@ def resolved_iterations(workload: str, itopk: int, width: int, maximum: int) -> 
     return resolved_b0(itopk, width, dataset_size, degree)
 
 
+def visit_multiplier(method: str) -> int:
+    """Match search_plan.cuh's conservative visited-node accounting."""
+    return 2 if method == "navix_reference" else 1
+
+
+def hash_nodes(workload: str, method: str, itopk: int, width: int, maximum: int) -> int:
+    degree = 64 if workload == "yfcc" else 32
+    iterations = resolved_iterations(workload, itopk, width, maximum)
+    return itopk + width * degree * visit_multiplier(method) * iterations
+
+
+def hash_feasible(workload: str, method: str, itopk: int, width: int, maximum: int) -> bool:
+    """Whether normal-hash planning remains within cuVS's 20-bit, 0.5-fill limit."""
+    return hash_nodes(workload, method, itopk, width, maximum) <= MAX_NORMAL_HASH_ENTRIES
+
+
 def key(row: dict) -> tuple[str, str, int, int, int]:
     return (
         str(row["workload"]),
@@ -176,6 +195,11 @@ def normalize_point(row: dict) -> dict[str, object]:
         raise ValueError(f"max_iterations outside [0,{MAX_ITERATIONS}]: {row}")
     if maximum and maximum <= resolved_iterations(workload, itopk, width, 0):
         raise ValueError(f"explicit depth must exceed B0: {row}")
+    if not hash_feasible(workload, method, itopk, width, maximum):
+        raise ValueError(
+            "configuration exceeds SINGLE_CTA's 20-bit normal-hash capacity "
+            f"({hash_nodes(workload, method, itopk, width, maximum)} visited nodes): {row}"
+        )
     return {
         "workload": workload,
         "method": method,
@@ -496,7 +520,9 @@ def next_points(result_root: Path) -> tuple[str, list[dict[str, object]]]:
                         continue
                     maximum = (lower + upper) // 2
                 candidate = (workload, method, itopk, width, maximum)
-                if candidate not in observed:
+                if candidate not in observed and hash_feasible(
+                    workload, method, itopk, width, maximum
+                ):
                     proposals.add(candidate)
     return "deep_refinement", [
         {
@@ -657,8 +683,17 @@ def provenance(result_root: Path, summaries: list[dict], selected: list[dict]) -
     run_path = result_root / "provenance" / "run.json"
     if not run_path.is_file():
         raise FileNotFoundError(run_path)
-    manifests = [path for path, _ in experiment_manifests(result_root)]
+    manifests = [
+        path
+        for path, _ in experiment_manifests(result_root)
+        if (result_root / "raw" / path.parent.parent.name / path.parent.name).is_dir()
+    ]
     raw_files = sorted((result_root / "raw").glob("*/*/shard_*.json"))
+    analysis_files = [
+        result_root / "analysis" / "measurements.csv",
+        result_root / "analysis" / "final_summary.csv",
+        result_root / "analysis" / "selected_points.csv",
+    ]
     return {
         "schema_version": 1,
         "experiment": "retrieve_workshop_matched_recall",
@@ -667,7 +702,8 @@ def provenance(result_root: Path, summaries: list[dict], selected: list[dict]) -
         "target_window": TARGET_WINDOW,
         "selection_contract": (
             "Use B0 only whenever any B0 configuration reaches the workload target. "
-            "Otherwise allow explicit continuation through 7569 iterations. Final selection "
+            "Otherwise allow explicit continuation through 7569 iterations where the L/W/depth "
+            "combination fits SINGLE_CTA's 20-bit normal visited hash at 0.5 fill. Final selection "
             "requires recall_min>=target, prefers median recall<=target+0.002, and chooses maximum "
             "median QPS inside that window; no interpolation."
         ),
@@ -676,8 +712,15 @@ def provenance(result_root: Path, summaries: list[dict], selected: list[dict]) -
             "QPS=10000/sum(shard seconds) within each repetition."
         ),
         "run_provenance": {"path": str(run_path.resolve()), "sha256": sha256(run_path)},
+        "analysis_script": {
+            "path": str(Path(__file__).resolve()),
+            "sha256": sha256(Path(__file__).resolve()),
+        },
         "config_manifests": [{"path": str(path.resolve()), "sha256": sha256(path)} for path in manifests],
         "raw_results": [{"path": str(path.resolve()), "sha256": sha256(path)} for path in raw_files],
+        "analysis_inputs": [
+            {"path": str(path.resolve()), "sha256": sha256(path)} for path in analysis_files
+        ],
         "summary_rows": len(summaries),
         "selected_rows": selected,
     }
