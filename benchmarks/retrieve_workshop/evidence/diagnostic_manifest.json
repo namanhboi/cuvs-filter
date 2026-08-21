@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
-  "snapshot_date_utc": "2026-08-20",
+  "snapshot_date_utc": "2026-08-21",
   "source": {
-    "branch": "favor-filtered-search",
+    "branch": "retrieve-workshop",
     "git_commit": "9d8820ef9b12649067cfa858a9d6a169a1b6880e",
-    "note": "Historical compact diagnostics are copied byte-for-byte from the source checkout; deterministic workload statistics and the duplicate-safe YFCC diagnostic are generated from SHA-256-bound inputs in the isolated experiment checkout. Artifact SHA-256 values define this mixed-source snapshot.",
-    "generated_diagnostic_git_commit": "dcf34ef58dc32385264118f6116a22f4a817a913"
+    "note": "Historical compact diagnostics are copied byte-for-byte from the source checkout; deterministic workload statistics and the same-graph G64 duplicate-safe YFCC diagnostic are generated from SHA-256-bound inputs in the isolated experiment checkout. Artifact SHA-256 values define this mixed-source snapshot.",
+    "generated_diagnostic_git_commit": "d2b565e9786cecf235b2b382b377243cd8c9f348"
   },
   "artifacts": [
     {
@@ -14,59 +14,59 @@
       "supports": ["accumulator_design"]
     },
     {
-      "path": "yfcc_b0_distinct_output_summary.json",
-      "sha256": "8322669e38cf83c03e009318b132deb6a79849c4e00a07a663a07684a5d07fd2",
+      "path": "yfcc_b0_g64_distinct_output_summary.json",
+      "sha256": "5a969463d9d2114b9543c8a7268b510b19c7ee992bfd2961626be2deaf0da838",
       "supports": ["yfcc_gt_seen_and_returned_recall"]
     },
     {
       "path": "summarize_yfcc_recall_diagnostic.py",
-      "sha256": "4ee59c5a9d68c2ce9336c1121dca01af1e9e271fa12e9a6fa03c9cb81219159d",
+      "sha256": "839b20e9a978f550be3526bc0550e782af57e213d103412c363e3f49d28f18b7",
       "supports": ["yfcc_gt_seen_and_returned_recall_derivation"]
     },
     {
-      "path": "yfcc_b0_schema7_sources/configs/root_cause_b0_diagnostic.json",
-      "sha256": "ea7a0c10403adb7a77d98c1b704febaa707d1ea9e4b7faa27fef50640c60d6f6",
-      "supports": ["yfcc_schema7_config_source"]
+      "path": "yfcc_b0_schema8_g64_sources/configs/yfcc_g64_b0_diagnostic.json",
+      "sha256": "1e129c25b2d134230ab28265e586a780c3bd3b0517b4a12a0794f49033a2357d",
+      "supports": ["yfcc_schema8_g64_config_source"]
     },
     {
-      "path": "yfcc_b0_schema7_sources/raw/root_cause_b0_diagnostic.json",
-      "sha256": "f7e597775e7010d0221f1296dd500821cb4e5b87741aa85bf06f8ccf7024435d",
-      "supports": ["yfcc_schema7_raw_source"]
+      "path": "yfcc_b0_schema8_g64_sources/raw/yfcc_g64_b0_diagnostic.json",
+      "sha256": "1fb07d5ad9d2527ffe9afb1f716bc7fc06e7e48c73ca8aea8b89d415818d5594",
+      "supports": ["yfcc_schema8_g64_raw_source"]
     },
     {
-      "path": "yfcc_b0_schema7_sources/inputs/groundtruth.ibin",
+      "path": "yfcc_b0_schema8_g64_sources/inputs/groundtruth.ibin",
       "sha256": "fba2e290fae0e88c5f8b8e6a41b357d2c4248b68e93e6c3235bdc2aff003fe1a",
-      "supports": ["yfcc_schema7_ground_truth_source"]
+      "supports": ["yfcc_schema8_g64_ground_truth_source"]
     },
     {
-      "path": "yfcc_b0_schema7_sources/diagnostics/default_b0/manifest.json",
-      "sha256": "c5c14e3c9e3277797b57e0541e4f7b79ebbf1ee194fc5949cfd442a43617a6b5",
-      "supports": ["yfcc_schema7_base_manifest_source"]
+      "path": "yfcc_b0_schema8_g64_sources/diagnostics/default_b0/manifest.json",
+      "sha256": "c51f6110665d68cf651dd50a4ed2311f34f70ac366d1cbc428af24393c6cea74",
+      "supports": ["yfcc_schema8_g64_base_manifest_source"]
     },
     {
-      "path": "yfcc_b0_schema7_sources/diagnostics/default_b0/query_summary.csv",
-      "sha256": "3611be2795fc612679483b500dd9459f1fa8834091b1fce0eda08ac45ee4fa0a",
-      "supports": ["yfcc_schema7_base_query_summary_source"]
+      "path": "yfcc_b0_schema8_g64_sources/diagnostics/default_b0/query_summary.csv",
+      "sha256": "54f0244b27bc2555c2a98c9d2316da541db3356c0c77ef34832cd95d505a7a21",
+      "supports": ["yfcc_schema8_g64_base_query_summary_source"]
     },
     {
-      "path": "yfcc_b0_schema7_sources/diagnostics/default_b0/result_indices.i64bin",
-      "sha256": "842bb6627902494afea0c43cb5b9e5bbf792790c3efca6a196eb48968d3717f1",
-      "supports": ["yfcc_schema7_base_result_ids_source"]
+      "path": "yfcc_b0_schema8_g64_sources/diagnostics/default_b0/result_indices.i64bin",
+      "sha256": "2f41106dfb5ed5e62cfcfa92ae084167b6e34701d3551f435e19f286e16ee8f6",
+      "supports": ["yfcc_schema8_g64_base_result_ids_source"]
     },
     {
-      "path": "yfcc_b0_schema7_sources/diagnostics/default_accumulator_b0/manifest.json",
-      "sha256": "5c5501ca269d2c3e7a2d6e19d850b43513296bab366553c4ea3f6af5db2ab256",
-      "supports": ["yfcc_schema7_retain_manifest_source"]
+      "path": "yfcc_b0_schema8_g64_sources/diagnostics/default_accumulator_b0/manifest.json",
+      "sha256": "24fd8e850c259df30d8a4c41b8bbf84d8647f72f65e6cb047a02919e44f98e99",
+      "supports": ["yfcc_schema8_g64_retain_manifest_source"]
     },
     {
-      "path": "yfcc_b0_schema7_sources/diagnostics/default_accumulator_b0/query_summary.csv",
-      "sha256": "9d7de6137c8ff6864f3d216b4b7409244ede2176c82b69ee61c74a8fed5c4e5e",
-      "supports": ["yfcc_schema7_retain_query_summary_source"]
+      "path": "yfcc_b0_schema8_g64_sources/diagnostics/default_accumulator_b0/query_summary.csv",
+      "sha256": "81b6c8024ee4f4232b1106dfda3e2abbaee99e90cfcd4f487b78bb7f91e63e2f",
+      "supports": ["yfcc_schema8_g64_retain_query_summary_source"]
     },
     {
-      "path": "yfcc_b0_schema7_sources/diagnostics/default_accumulator_b0/result_indices.i64bin",
-      "sha256": "a17c40c44995e6d67bbf57d046c0ab54e586ec563742cdf100edba03311cdbc3",
-      "supports": ["yfcc_schema7_retain_result_ids_source"]
+      "path": "yfcc_b0_schema8_g64_sources/diagnostics/default_accumulator_b0/result_indices.i64bin",
+      "sha256": "70a8fb70461ae056f7ff4b4096660188f49d7d9f7cd97070f8ef0a7d348c5821",
+      "supports": ["yfcc_schema8_g64_retain_result_ids_source"]
     },
     {
       "path": "YFCC_RECALL_ROOT_CAUSE_REPORT.org",

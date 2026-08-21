@@ -17,8 +17,9 @@ The production experiment has four inputs:
 3. Native FAISS-NaviX and ACORN CPU context runs.
 4. A SHA-256-bound manifest of supporting diagnostics.
 
-The GPU graph configuration is fixed at CAGRA graph degree 32/intermediate degree 64, =k=10=,
-=max_queries=512=, squared L2, SINGLE_CTA, and a resident per-query bitmap.  The primary B0 sweep
+The GPU graph configuration uses degree/intermediate-degree 64/128 for YFCC-10M and 32/64 for
+ArXiv-medium, with =k=10=, =max_queries=512=, squared L2, SINGLE_CTA, and a resident per-query
+bitmap.  The primary B0 sweep
 contains exactly =(L,W)={(64,1),(128,1),(128,2),(256,1),(256,2),(512,2)}= with
 =max_iterations=0=.  Correctness uses the first 1,000 queries and one repetition.  Reported
 throughput uses all 10,000 queries and three repetitions.
@@ -28,20 +29,20 @@ another substantial CPU/GPU job.  Even though the CPU suite does not launch CUDA
 memory traffic and host scheduling can perturb GPU measurements.  Run one production suite at a
 time on an otherwise idle machine.
 
-** Final executed production snapshot (2026-08-20)
+** Final executed production snapshot (2026-08-21)
 
 The paper uses these immutable analyzed roots:
 
 | Suite | Final root | Result |
 |-
-| GPU graph | =/home/ubuntu/retrieve_workshop_runs/gpu_l4_20260820T0143Z= | PASS; 128 staged rows; revision =31c13dcf71b93d91fe89f06cfa0d088847094cb3= |
+| GPU graph | =/home/ubuntu/retrieve_workshop_runs/gpu_l4_degreeaware_20260821_021746= | PASS; 126 staged throughput rows; D32/D64 implementation =dfffa4f7= |
 | Masked exact | =/home/ubuntu/retrieve_workshop_runs/exact_l4_20260820T0255Z= | PASS; four workloads; native-L2 cutoff recall 1.0 |
 | Native CPU | =/home/ubuntu/retrieve_workshop_runs/cpu/cpu_context_20260820T2200Z= | PASS; 120/120 commands; 200 aggregate rows |
-| YFCC mechanism diagnostic | =/home/ubuntu/retrieve_workshop_runs/yfcc_schema7_20260820T0055Z= | PASS; frozen diagnostic-only evidence |
+| YFCC mechanism diagnostic | =/home/ubuntu/retrieve_workshop_runs/yfcc_schema8_g64_20260821T0245Z= | PASS; same-G64 frozen diagnostic-only evidence |
 
-The staged paper is =/home/ubuntu/retrieve-cagra-paper= at commit =40913bb=.  Its =main.pdf= is
-six pages, double-blind, free of unfinished markers, and bound by =data/pdf_provenance.json= to
-the manuscript, bibliography, validated sources, tables, and figures.
+The staged paper is =/home/ubuntu/retrieve-cagra-paper=.  Record its exact commit with =git
+rev-parse HEAD= after the final commit.  Its validated =main.pdf= is six pages and double-blind;
+=data/pdf_provenance.json= binds the manuscript, bibliography, sources, tables, and figures.
 
 Do not stage =/home/ubuntu/retrieve_workshop_runs/exact_l4_20260820T0245Z=.  It is a superseded
 non-final attempt whose canonical-ID threshold did not account for legal rank-=k= ties.
@@ -95,6 +96,7 @@ command -v latexmk
 command -v pdftotext
 command -v pdfinfo
 command -v rg
+command -v jq
 #+end_src
 
 The paper build additionally needs IEEEtran, =graphicx=, =booktabs=, =multirow=, =balance=,
@@ -128,7 +130,7 @@ cmake --build cpp/build --parallel 32 --target \
 #+end_src
 
 Do not reuse old benchmark binaries after changing the diagnostic schema, benchmark metric code,
-or CAGRA JIT sources.  Schema 7 diagnostic capture explicitly verifies the device-written schema
+or CAGRA JIT sources.  Schema 8 diagnostic capture explicitly verifies the device-written schema
 and query identity against the host before writing any evidence.
 
 ** Required gate
@@ -168,6 +170,52 @@ python3 scripts/prepare_current_results.py --self-test
 Every command must exit zero.  The bitmap gtest may report intentional skips for unsupported
 MULTI_KERNEL/persistent combinations; an ordinary failed test is not acceptable.
 
+* Graph construction and degree provenance
+
+The production YFCC graph is NN-descent G64/IG128.  Its frozen build config is
+=gpu_graph/graph_build_configs/yfcc_g64_ig128.json=.  Build it on an idle GPU with:
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter-retrieve
+env LD_PRELOAD=/home/ubuntu/cuvs-filter-retrieve/cpp/build/libcuvs.so \
+  cpp/build/bench/ann/CUVS_CAGRA_ANN_BENCH \
+  --build --data_prefix=/home/ubuntu/cuvs-filter/datasets \
+  --index_prefix=/home/ubuntu/cuvs-filter/datasets \
+  benchmarks/retrieve_workshop/gpu_graph/graph_build_configs/yfcc_g64_ig128.json
+sha256sum /home/ubuntu/cuvs-filter/datasets/yfcc-10M/cagra_g64_ig128.index
+#+end_src
+
+The executed graph took 166 seconds and has SHA-256
+=89af75aa2163b92ffc10e37bc97724188472b8b0df53b7bc4e9e546a9ff6f1aa=.  YFCC's G64 degree
+aligns with the high-degree YFCC setup reported by JAG, while the CAGRA construction remains native
+cuVS NN-descent rather than an HNSW/ACORN topology.  ArXiv-medium retains the controlled G32/IG64
+graph shared by every GPU method.
+
+For an A100 follow-up on =SPCL/arxiv-for-fanns-large=, first convert the standard row-prefixed
+fvecs files without loading the full matrix into RAM, then use the frozen G64/IG128 config:
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter-retrieve
+export LARGE_DIR=/path/to/datasets/arxiv-for-fanns-large
+export PYTHON=/home/ubuntu/micromamba/envs/cuvs/bin/python
+${PYTHON} benchmarks/retrieve_workshop/gpu_graph/convert_fvecs_to_fbin.py \
+  "${LARGE_DIR}/database_vectors.fvecs" "${LARGE_DIR}/base.fbin" --reuse-valid
+${PYTHON} benchmarks/retrieve_workshop/gpu_graph/convert_fvecs_to_fbin.py \
+  "${LARGE_DIR}/query_vectors.fvecs" "${LARGE_DIR}/query.fbin" --reuse-valid
+env LD_PRELOAD=/home/ubuntu/cuvs-filter-retrieve/cpp/build/libcuvs.so \
+  cpp/build/bench/ann/CUVS_CAGRA_ANN_BENCH \
+  --build --data_prefix="$(dirname "${LARGE_DIR}")" \
+  --index_prefix="$(dirname "${LARGE_DIR}")" \
+  benchmarks/retrieve_workshop/gpu_graph/graph_build_configs/arxiv_large_g64_ig128.json
+sha256sum "${LARGE_DIR}/base.fbin" "${LARGE_DIR}/query.fbin" \
+  "${LARGE_DIR}/cagra_g64_ig128.index"
+#+end_src
+
+Record the GPU model, cuVS commit, config hash, wall time, and the three hashes.  The 2.2M-by-4096
+float matrix is about 36 GB before graph workspace, so preflight free A100 memory and do not overlap
+construction with any benchmark.  This config prepares a follow-up; it is not evidence in the
+current L4/ArXiv-medium paper.
+
 * Allocate immutable result roots
 
 Set a single UTC tag once.  Do not evaluate =date= independently for related paths, and do not
@@ -183,7 +231,7 @@ export RETRIEVE_EXACT_RESULT_ROOT=/home/ubuntu/retrieve_workshop_runs/exact_l4_$
 export RETRIEVE_EXACT_DATA_ROOT=/home/ubuntu/retrieve_workshop_data/exact_bitmap
 export RETRIEVE_CPU_RESULTS_ROOT=/home/ubuntu/retrieve_workshop_runs/cpu
 export RETRIEVE_CPU_RUN_ID=cpu_context_${RETRIEVE_RUN_TAG}
-export YFCC_DIAGNOSTIC_ROOT=/home/ubuntu/retrieve_workshop_runs/yfcc_schema7_${RETRIEVE_RUN_TAG}
+export YFCC_DIAGNOSTIC_ROOT=/home/ubuntu/retrieve_workshop_runs/yfcc_schema8_g64_${RETRIEVE_RUN_TAG}
 
 test ! -e "${RETRIEVE_RESULT_ROOT}"
 test ! -e "${RETRIEVE_EXACT_RESULT_ROOT}"
@@ -195,11 +243,11 @@ Keep these exports in the same shell, or save their literal resolved values in a
 GPU and exact provenance files reject a changed benchmark/library hash or changed host/GPU within
 one result root.  CPU execution creates its run directory atomically and refuses an existing ID.
 
-* Corrected YFCC B0 diagnostic (schema 7)
+* Corrected same-graph YFCC G64 B0 diagnostic (schema 8)
 
 This is supporting evidence, not a throughput point.  It runs the first 1,000 YFCC queries once at
-=(L=512,W=2,B0)= and captures untimed query diagnostics for Base and Retain (plus two historical
-FAVOR controls in the raw configuration).  Recall, output count, underfill, and selection loss use
+=(L=512,W=2,B0)= and captures untimed query diagnostics for Base and Retain on the production
+G64/IG128 graph.  Recall, output count, underfill, and selection loss use
 distinct valid output IDs: a duplicate ID receives no extra recall credit.
 
 Run it only after the rebuilt CUDA test passes, and use a brand-new diagnostic root because the
@@ -207,25 +255,42 @@ legacy YFCC runner itself does not provide an overwrite guard:
 
 #+begin_src sh
 cd /home/ubuntu/cuvs-filter-retrieve
-export YFCC_RESULT_ROOT=${YFCC_DIAGNOSTIC_ROOT}
-export YFCC_DATA_ROOT=/home/ubuntu/cuvs-filter/datasets
-export PYTHON=/home/ubuntu/micromamba/envs/cuvs/bin/python
-
-benchmarks/favor/yfcc_udf/run_experiment.sh root_cause_b0_diagnostic
-
 mkdir -p "${YFCC_DIAGNOSTIC_ROOT}/analysis"
+mkdir -p "${YFCC_DIAGNOSTIC_ROOT}/configs" "${YFCC_DIAGNOSTIC_ROOT}/raw"
+jq --arg root "${YFCC_DIAGNOSTIC_ROOT}" \
+  '.index[0].search_params |= map(.favor_diagnostics_output =
+    ($root + "/diagnostics/" + .favor_diagnostics_variant))' \
+  benchmarks/retrieve_workshop/evidence/yfcc_b0_schema8_g64_sources/configs/yfcc_g64_b0_diagnostic.json \
+  > "${YFCC_DIAGNOSTIC_ROOT}/configs/yfcc_g64_b0_diagnostic.json"
+
+env LD_PRELOAD=/home/ubuntu/cuvs-filter-retrieve/cpp/build/libcuvs.so \
+  /home/ubuntu/cuvs-filter-retrieve/cpp/build/bench/ann/CUVS_CAGRA_ANN_BENCH \
+  --search --mode=throughput --threads=1 \
+  --data_prefix=/home/ubuntu/cuvs-filter/datasets \
+  --index_prefix=/home/ubuntu/cuvs-filter/datasets \
+  --benchmark_repetitions=1 --benchmark_min_time=0.001s \
+  --benchmark_min_warmup_time=0 --benchmark_report_aggregates_only=false \
+  --benchmark_out_format=json \
+  --benchmark_out="${YFCC_DIAGNOSTIC_ROOT}/raw/yfcc_g64_b0_diagnostic.json" \
+  "${YFCC_DIAGNOSTIC_ROOT}/configs/yfcc_g64_b0_diagnostic.json"
+
 ${PYTHON} benchmarks/retrieve_workshop/evidence/summarize_yfcc_recall_diagnostic.py \
   --result-root "${YFCC_DIAGNOSTIC_ROOT}" \
   --repo /home/ubuntu/cuvs-filter-retrieve \
   --data-root /home/ubuntu/cuvs-filter/datasets \
   --bench-bin /home/ubuntu/cuvs-filter-retrieve/cpp/build/bench/ann/CUVS_CAGRA_ANN_BENCH \
   --libcuvs /home/ubuntu/cuvs-filter-retrieve/cpp/build/libcuvs.so \
-  --archive-dir /home/ubuntu/cuvs-filter-retrieve/benchmarks/retrieve_workshop/evidence/yfcc_b0_schema7_sources \
+  --archive-dir /home/ubuntu/cuvs-filter-retrieve/benchmarks/retrieve_workshop/evidence/yfcc_b0_schema8_g64_sources \
   --require-clean-repo \
-  --output "${YFCC_DIAGNOSTIC_ROOT}/analysis/yfcc_b0_distinct_output_summary.json"
+  --config-name yfcc_g64_b0_diagnostic.json \
+  --raw-name yfcc_g64_b0_diagnostic.json \
+  --diagnostics-subdir diagnostics \
+  --expected-schema-version 8 \
+  --expected-graph-degree 64 \
+  --output "${YFCC_DIAGNOSTIC_ROOT}/analysis/yfcc_b0_g64_distinct_output_summary.json"
 #+end_src
 
-The summarizer rejects any schema other than 7, a missing
+The summarizer rejects any schema other than the requested version, a missing
 =output_set_semantics=distinct_valid_output_ids_v1= marker, an unexpected configuration, a
 raw/trace recall mismatch, changed input identities, filter/sentinel errors, accumulator
 duplicates, a per-query GT-discovery-mask difference between Base and Retain, or failure of Retain

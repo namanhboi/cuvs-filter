@@ -8,6 +8,7 @@ import csv
 import json
 import math
 import os
+import struct
 import subprocess
 import sys
 import tempfile
@@ -206,6 +207,42 @@ def write_synthetic_raw(result_root: Path, group: str) -> None:
 
 
 class PipelineTest(unittest.TestCase):
+    def test_fvecs_converter_streams_exact_rows_and_reuses_only_valid_output(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "tiny.fvecs"
+            output = root / "tiny.fbin"
+            rows = (
+                (1.0, 2.0, 3.0),
+                (-4.5, 5.25, 6.0),
+                (7.0, 8.0, 9.5),
+            )
+            source.write_bytes(
+                b"".join(struct.pack("<I3f", 3, *row) for row in rows)
+            )
+            command = (
+                PYTHON,
+                str(SCRIPT_DIR / "convert_fvecs_to_fbin.py"),
+                str(source),
+                str(output),
+                "--chunk-rows",
+                "2",
+            )
+            subprocess.run(command, check=True, capture_output=True, text=True)
+            payload = output.read_bytes()
+            self.assertEqual(struct.unpack("<II", payload[:8]), (3, 3))
+            self.assertEqual(
+                struct.unpack("<9f", payload[8:]),
+                tuple(value for row in rows for value in row),
+            )
+            reused = subprocess.run(
+                (*command[:4], "--reuse-valid"),
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertIn("reusing valid", reused.stdout)
+
     def test_generator_freezes_cells_methods_and_deep_selection(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

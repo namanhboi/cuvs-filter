@@ -3,8 +3,10 @@
 * Scope
 
 This directory freezes the SINGLE_CTA, resident per-query bitmap experiment used by the
-RETRIEVE paper.  It does not expose a public cuVS option.  The graph is CAGRA G=32/IG=64,
-=k=10=, =max_queries=512=, and the search distance is squared L2 through cuVS-bench.
+RETRIEVE paper.  It does not expose a public cuVS option.  YFCC uses CAGRA G=64/IG=128; the
+ArXiv-medium workloads use G=32/IG=64.  All runs use =k=10=, =max_queries=512=, and squared L2
+through cuVS-bench.  The analyzer records both degrees in every row and refuses to merge different
+graph identities.
 
 The primary comparison is:
 
@@ -88,6 +90,11 @@ To stop a preliminary deep run at a global cap, set (for example)
 earlier depth groups before continuing, so staged execution is resumable.  Existing raw JSON is
 never overwritten unless
 =RETRIEVE_ALLOW_OVERWRITE=1= is explicitly set.
+
+For the historical YFCC G32 sensitivity only, pass =--yfcc-graph-degree 32= to the generator.
+The production default is G64/IG128; graph-degree 32 and 64 select plan-time compiled NaviX
+specializations from one source implementation.  Other degrees currently fail closed rather than
+silently using a mismatched scratch layout.
 
 The runner writes =provenance/run.json=.  Analysis emits =raw_points.csv=,
 =repetition_aggregates.csv=, =summary_points.csv=, =pareto_points.csv=,

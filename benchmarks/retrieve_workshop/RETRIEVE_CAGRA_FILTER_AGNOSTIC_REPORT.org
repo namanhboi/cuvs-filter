@@ -1,7 +1,7 @@
 #+TITLE: How Far Can Query-Time Filtering Go on CAGRA?
 #+SUBTITLE: Final implementation, experiment, and reproducibility report for the RETRIEVE workshop study
 #+AUTHOR: Anonymous Authors
-#+DATE: 2026-08-20
+#+DATE: 2026-08-21
 #+OPTIONS: toc:3 num:t ^:nil
 
 * Status and verdict
@@ -16,15 +16,15 @@ regimes and two GPU mechanisms that isolate them:
 
 1. *Retention loss.*  CAGRA may evaluate a high-quality legal node and later evict it from its fused
    navigation/result buffer.  CAGRA-Retain adds a bounded top-=k= passing-result accumulator without
-   changing traversal.  At the highest-recall B0 point on YFCC-10M, recall rises from 0.5983 to
-   0.7179 while median QPS changes from 43,667 to 41,289.
+   changing traversal.  At the highest-recall B0 point on YFCC-10M, recall rises from 0.5976 to
+   0.7714 while median QPS changes from 23,218 to 22,066.
 2. *Region-entry loss.*  Raw-distance traversal can spend its budget outside a legal region that is
    easy to search after entry.  On ArXiv-EMIS, CAGRA-NaviX's legal-only persistent frontier and
    adaptive one-/two-hop expansion reaches 0.9972 recall at B0, versus 0.6909 for Base and 0.7875
    for Retain.
 3. *Predicate-connectivity loss.*  YFCC predicates are extremely sparse and fragmented: median
    selectivity is 0.1395%, and 71.16% of queries are at or below 1%.  Retention and NaviX both remain
-   below 0.9 at B0.  Deeper Retain traversal reaches 0.9141 only at 2,661 QPS, showing that high
+   below 0.9 at B0.  Deeper Retain traversal reaches 0.9123 only at 2,783 QPS, showing that high
    recall is reachable but not within the default work budget.
 
 The practical conclusion is that query-time filtering on an unchanged graph can fix retention and
@@ -37,19 +37,19 @@ bridges with exact routing or a richer, GPU-friendly, predicate-agnostic topolog
 | Item | Final value |
 |-
 | cuVS repository | =/home/ubuntu/cuvs-filter-retrieve=, branch =retrieve-workshop= |
-| GPU production revision | =31c13dcf71b93d91fe89f06cfa0d088847094cb3=; clean worktree |
+| GPU production revision | =dfffa4f71df45c5a85ed6c9cf92e65345bd7e2d3=; clean worktree |
 | Exact production revision | =df2f895a47e5791f8e82fb9974297811314bb302=; clean worktree |
-| Paper revision | =40913bb= in =/home/ubuntu/retrieve-cagra-paper= |
-| GPU graph result root | =/home/ubuntu/retrieve_workshop_runs/gpu_l4_20260820T0143Z= |
+| Paper revision | record final =git rev-parse HEAD= in =/home/ubuntu/retrieve-cagra-paper= |
+| GPU graph result root | =/home/ubuntu/retrieve_workshop_runs/gpu_l4_degreeaware_20260821_021746= |
 | Exact-control result root | =/home/ubuntu/retrieve_workshop_runs/exact_l4_20260820T0255Z= |
 | CPU-context result root | =/home/ubuntu/retrieve_workshop_runs/cpu/cpu_context_20260820T2200Z= |
-| Frozen YFCC diagnostic | =/home/ubuntu/retrieve_workshop_runs/yfcc_schema7_20260820T0055Z= |
+| Frozen YFCC diagnostic | =/home/ubuntu/retrieve_workshop_runs/yfcc_schema8_g64_20260821T0245Z= |
 | GPU | NVIDIA L4, 23,034 MiB, compute capability 8.9 |
 | Driver | 580.173.02 |
 | Host CPU | 32 logical Intel Xeon CPUs at 2.20 GHz |
-| Graph benchmark SHA-256 | =3b3fb197f1bf5f16ff88828ecebb902b70e62d280026b5fd678648ce396bd549= |
+| Graph benchmark SHA-256 | =4c1ccdb78fc2e12ad61564538c1a54ba0f2232a2b925ea9a1b82142545580d6b= |
 | Exact benchmark SHA-256 | =f1eccdca8076eef1f953f276432d258c4d67eceff4f7355babfe205463f2dcf5= |
-| =libcuvs.so= SHA-256 | =f07f6fc273fd96ef21d95a368ca2398372e589555376f8eed1b6f39ed7a8c173= |
+| =libcuvs.so= SHA-256 | =5c4dd06397f7e0b8fca18589d017a0fe707592399e92ee089b5b10de9fe253f6= |
 | Data root | =/home/ubuntu/cuvs-filter/datasets= |
 
 The superseded exact run =exact_l4_20260820T0245Z= is *NON-FINAL / DO NOT STAGE*.  It used an
@@ -65,7 +65,8 @@ resident packed bitmap identifying legal source IDs.
 
 Included:
 
-- CAGRA =G=32=, =IG=64=; SINGLE_CTA; squared L2; =k=10=; =max_queries=512=.
+- CAGRA =G=64=, =IG=128= for YFCC and =G=32=, =IG=64= for ArXiv; SINGLE_CTA;
+  squared L2; =k=10=; =max_queries=512=.
 - YFCC-10M and ArXiv EM, EMIS, and R, with 10,000 queries per throughput point.
 - CAGRA-Base, CAGRA-Retain, CAGRA-NaviX, and matched deterministic passing-seed controls.
 - B0 plus selected deeper YFCC-Retain points.
@@ -81,6 +82,24 @@ Excluded:
 - A GPU ACORN/MCI index, filter-aware graph construction, distributed execution, and out-of-core
   search.
 - Absolute CPU/GPU speedup claims; CPU systems use different graphs, hardware, and timing regions.
+
+** Graph construction parameters and provenance
+
+| Method/index | Workload | Construction parameters | Why/source |
+|-
+| GPU CAGRA | YFCC | NN-descent =G=64=, =IG=128=, max iterations 20, threshold 0.0001 | Native cuVS construction; degree 64 aligns with JAG's high-degree YFCC setting, but topology is CAGRA |
+| GPU CAGRA | ArXiv medium EM/EMIS/R | NN-descent =G=32=, =IG=64= | Controlled medium graph shared by Base, Retain, and NaviX |
+| CPU HNSW-NaviX | YFCC | =M=64=, =efConstruction=200= | JAG YFCC construction recipe |
+| CPU HNSW-NaviX | ArXiv medium | =M=32=, =efConstruction=200= | filtered-ANN benchmark medium-scale recipe |
+| CPU ACORN-gamma | YFCC | =M=64=, =gamma=30=, =M_beta=64=, =efConstruction=1920= | JAG parameters; adapter uses =efConstruction=M*gamma= |
+| CPU ACORN-gamma | ArXiv EM | =M=16=, =gamma=10=, =M_beta=24=, =efConstruction=160= | filtered-ANN benchmark paper |
+| CPU ACORN-gamma | ArXiv EMIS | =M=16=, =gamma=15=, =M_beta=24=, =efConstruction=240= | filtered-ANN benchmark paper |
+| CPU ACORN-gamma | ArXiv R | =M=32=, =gamma=12=, =M_beta=24=, =efConstruction=384= | filtered-ANN benchmark paper |
+
+The production YFCC CAGRA graph was built in 166 seconds, occupies about 2.4 GiB, and has SHA-256
+=89af75aa2163b92ffc10e37bc97724188472b8b0df53b7bc4e9e546a9ff6f1aa=.  The current paper does
+not use the prepared ArXiv-large G64/A100 follow-up config; its exact commands are preserved in the
+benchmark handoff.
 
 * Workloads
 
@@ -137,6 +156,12 @@ only for unique admitted nodes, and commit them in deterministic bridge order.  
 metadata is hoisted once per CTA; aligned identity-ID rows use a direct packed-word test, while an
 exact fallback handles unaligned rows and source-index remapping.
 
+One source implementation is compiled into degree-32 and degree-64 plan fragments.  Degree 32
+uses one warp tile per adjacency row; degree 64 uses two coalesced tiles.  The adaptive-local
+cutovers are =P<=4= blind, =5..12= directed, and =P>=13= one-hop for G32; for G64 the directed
+range is =5..25= and one-hop begins at =P=26=.  Degree is fixed per index and dispatched once when
+the search plan is selected.
+
 ** Bitmap seed selection and matched controls
 
 A separate GPU seed-selection kernel scans each query's packed bitmap and emits the first =k=
@@ -156,8 +181,8 @@ methods.
 B0 = floor(L / W) + g(N,D)
 #+end_example
 
-The size/degree allowance =g= is 6 for YFCC and 5 for ArXiv.  Thus =L=512, =W=2 corresponds to 262
-iterations on YFCC and 261 on ArXiv.  A point covers 10,000 queries.  ArXiv uses one call; YFCC uses
+The size/degree allowance =g= is 5 for both graph families.  Thus =L=512, =W=2 corresponds to 261
+iterations on both YFCC and ArXiv.  A point covers 10,000 queries.  ArXiv uses one call; YFCC uses
 four 2,048-query shards and one 1,808-query shard.  YFCC QPS is exactly =10000 / sum(five search
 times)=, never the mean of shard QPS.
 
@@ -189,7 +214,7 @@ Validation snapshot:
 | Bitmap-selectivity evidence | PASS: 4/4 |
 | CPU pipeline | PASS |
 | CPU artifact preflight | PASS: 8 graphs, 5 methods, 4 workloads, 10,000 queries/workload |
-| GPU production | PASS: 128 staged rows |
+| GPU production | PASS: 126 staged throughput rows |
 | Exact production | PASS: 4 staged rows |
 | CPU production | PASS: 120/120 native commands and 200 aggregate rows |
 | Paper staging/build | PASS: 6-page anonymous PDF, no unfinished markers, current hashes |
@@ -207,33 +232,35 @@ the same row must not be interpreted as a matched-recall speedup.
 
 | Workload | Method | L | W | Recall@10 | Median QPS |
 |-
-| YFCC-10M | CAGRA-Base | 512 | 2 | 0.5983 | 43,667 |
-| YFCC-10M | CAGRA-Retain | 512 | 2 | 0.7179 | 41,289 |
-| YFCC-10M | CAGRA-NaviX | 512 | 2 | 0.7019 | 8,897 |
-| ArXiv-EM | CAGRA-Base | 512 | 2 | 0.9951 | 3,790 |
-| ArXiv-EM | CAGRA-Retain | 512 | 2 | 0.9977 | 3,793 |
-| ArXiv-EM | CAGRA-NaviX | 512 | 2 | 0.9995 | 1,507 |
-| ArXiv-EMIS | CAGRA-Base | 512 | 2 | 0.6909 | 3,797 |
-| ArXiv-EMIS | CAGRA-Retain | 512 | 2 | 0.7875 | 3,780 |
-| ArXiv-EMIS | CAGRA-NaviX | 512 | 2 | 0.9972 | 2,143 |
-| ArXiv-R | CAGRA-Base | 512 | 2 | 0.9943 | 3,794 |
-| ArXiv-R | CAGRA-Retain | 512 | 2 | 0.9974 | 3,791 |
-| ArXiv-R | CAGRA-NaviX | 512 | 2 | 0.9998 | 1,922 |
+| YFCC-10M | CAGRA-Base | 512 | 2 | 0.5976 | 23,218 |
+| YFCC-10M | CAGRA-Retain | 512 | 2 | 0.7714 | 22,066 |
+| YFCC-10M | CAGRA-NaviX | 512 | 2 | 0.8168 | 2,371 |
+| ArXiv-EM | CAGRA-Base | 512 | 2 | 0.9951 | 3,803 |
+| ArXiv-EM | CAGRA-Retain | 512 | 2 | 0.9977 | 3,805 |
+| ArXiv-EM | CAGRA-NaviX | 512 | 2 | 0.9995 | 1,509 |
+| ArXiv-EMIS | CAGRA-Base | 512 | 2 | 0.6909 | 3,805 |
+| ArXiv-EMIS | CAGRA-Retain | 512 | 2 | 0.7875 | 3,794 |
+| ArXiv-EMIS | CAGRA-NaviX | 512 | 2 | 0.9972 | 2,147 |
+| ArXiv-R | CAGRA-Base | 512 | 2 | 0.9943 | 3,806 |
+| ArXiv-R | CAGRA-Retain | 512 | 2 | 0.9974 | 3,800 |
+| ArXiv-R | CAGRA-NaviX | 512 | 2 | 0.9998 | 1,926 |
 
 Retain substantially dominates Base's YFCC Pareto frontier over the overlapping recall range and
-recovers 11.96 recall points at the maximum B0 cell with only a 5.4% QPS decrease.  It also raises
+recovers 17.38 recall points at the maximum B0 cell with only a 5.0% QPS decrease.  It also raises
 EMIS recall by 9.67 points at essentially unchanged QPS.  EM and R are already saturated, so their
 headroom is small.
 
 NaviX is decisive on EMIS: strict legal-frontier traversal enters and exploits the coherent legal
 region that distance-first Base struggles to reach.  NaviX is not universally faster or more
-accurate: on sparse YFCC its two-hop work cannot sustain a sufficiently connected legal frontier,
-and its Pareto curve lies below Retain's.
+accurate: on sparse YFCC, G64 raises NaviX's maximum-B0 recall above Retain's, but its two-hop work
+is expensive.  Selected explicit-depth Retain points dominate NaviX's measured G64 frontier at
+comparable recall, and neither method reaches 0.9 under B0.
 
 ** Retention diagnostic and deeper YFCC search
 
-On the frozen 1,000-query YFCC diagnostic at =L=512, =W=2, B0, Base evaluates 66.47% of exact
-neighbors but returns only 54.14%.  Retain returns the full 66.47% seen set.  This directly
+On the same-G64 frozen 1,000-query YFCC diagnostic at =L=512, =W=2, B0, Base evaluates 71.86% of
+exact neighbors but returns only 54.16%.  Retain returns the full 71.86% seen set with identical
+mean graph work (15,241.607 distance evaluations/query).  This directly
 identifies bounded fused-frontier selection as a real loss mechanism.
 
 Deeper continuous Retain search shows the remaining gap is exploration work rather than an
@@ -241,13 +268,13 @@ incorrect accumulator:
 
 | L | W | Explicit max iterations | Recall@10 | Median QPS |
 |-
-| 512 | 2 | 1,044 | 0.8307 | 10,478 |
-| 512 | 2 | 2,088 | 0.8767 | 5,236 |
-| 512 | 2 | 4,176 | 0.9141 | 2,661 |
+| 512 | 2 | 522 | 0.8258 | 11,347 |
+| 512 | 2 | 1,044 | 0.8742 | 5,551 |
+| 512 | 2 | 2,088 | 0.9123 | 2,783 |
 
-The first measured =L=512, =W=2 point above 0.9 is 4,176 iterations.  This is evidence that high
-recall is achievable on the graph, but it costs roughly sixteen times the B0 iteration allowance
-and about 94% of the B0 maximum-point throughput.
+The first measured =L=512, =W=2 point above 0.9 is 2,088 iterations.  This is evidence that high
+recall is achievable on the graph, but it costs eight times the 261-iteration B0 allowance and
+reduces QPS by 87.4% relative to the Retain B0 maximum point.
 
 ** Matched-seed ablation
 
@@ -255,7 +282,7 @@ and about 94% of the B0 maximum-point throughput.
 #+ATTR_ORG: :width 900
 [[file:/home/ubuntu/retrieve-cagra-paper/figures/gpu_matched_seed_b0_control.png]]
 
-At =L=512, =W=2, matched seeds change YFCC Retain recall from 0.7179 to 0.7257, only +0.0078, while
+At =L=512, =W=2, matched seeds change YFCC Retain recall from 0.7714 to 0.7795, only +0.0082, while
 EMIS Retain rises from 0.7875 to 0.8301.  Seed quality therefore explains part of EMIS's entry
 problem but not NaviX's full 0.9972 result; the persistent legal frontier is essential.  On YFCC,
 better initial legal IDs do not repair the sparse-connectivity bottleneck.
@@ -321,7 +348,8 @@ subgraph.
 
 * Limitations
 
-- One L4 GPU, one =G=32/=IG=64 CAGRA graph family, SINGLE_CTA, squared L2, and =k=10=.
+- One L4 GPU, YFCC =G=64/=IG=128 and ArXiv =G=32/=IG=64 CAGRA graphs, SINGLE_CTA,
+  squared L2, and =k=10=.
 - Resident bitmaps omit predicate evaluation, construction, transfer, caching, and invalidation.
 - YFCC graph search is native uint8, whereas its exact control converts bytes exactly to float32
   and therefore moves four times as many coordinate bytes.
@@ -370,8 +398,9 @@ unset RETRIEVE_EXACT_AVAILABLE_BYTES
 benchmarks/retrieve_workshop/exact_bitmap/run_exact.sh all
 #+end_src
 
-The runner performs a live per-shard memory preflight.  The largest YFCC production shard required
-21,755,556,850 bytes free and passed with 1,904,512,014 bytes headroom on the L4.
+The runner performs a live per-shard memory preflight before launching any timed method.  This is
+especially important for YFCC because the resident G64 graph and packed bitmap shard share the
+23-GiB L4 with cuVS scratch allocations.
 
 ** Native CPU context
 
@@ -395,7 +424,7 @@ the native CPU search timing.
 
 #+begin_src sh
 cd /home/ubuntu/retrieve-cagra-paper
-export RETRIEVE_GPU_SUMMARY=/home/ubuntu/retrieve_workshop_runs/gpu_l4_20260820T0143Z/analysis/summary_points.csv
+export RETRIEVE_GPU_SUMMARY=/home/ubuntu/retrieve_workshop_runs/gpu_l4_degreeaware_20260821_021746/analysis/summary_points.csv
 export RETRIEVE_EXACT_SUMMARY=/home/ubuntu/retrieve_workshop_runs/exact_l4_20260820T0255Z/analysis/exact_summary.csv
 export RETRIEVE_CPU_SUMMARY=/home/ubuntu/retrieve_workshop_runs/cpu/cpu_context_20260820T2200Z/analysis/summary.csv
 export RETRIEVE_DIAGNOSTIC_MANIFEST=/home/ubuntu/cuvs-filter-retrieve/benchmarks/retrieve_workshop/evidence/diagnostic_manifest.json
@@ -410,13 +439,13 @@ make PYTHON=/home/ubuntu/micromamba/envs/cuvs/bin/python check
 |-
 | Benchmark handoff | =benchmarks/retrieve_workshop/RETRIEVE_BENCHMARK_HANDOFF.org= | Current |
 | Frozen diagnostics | =benchmarks/retrieve_workshop/evidence/diagnostic_manifest.json= | 23 validated artifacts |
-| GPU summary | =/home/ubuntu/retrieve_workshop_runs/gpu_l4_20260820T0143Z/analysis/summary_points.csv= | Final |
-| GPU plots | =/home/ubuntu/retrieve_workshop_runs/gpu_l4_20260820T0143Z/analysis/= | Final |
+| GPU summary | =/home/ubuntu/retrieve_workshop_runs/gpu_l4_degreeaware_20260821_021746/analysis/summary_points.csv= | Final |
+| GPU plots | =/home/ubuntu/retrieve_workshop_runs/gpu_l4_degreeaware_20260821_021746/analysis/= | Final |
 | Exact summary | =/home/ubuntu/retrieve_workshop_runs/exact_l4_20260820T0255Z/analysis/exact_summary.csv= | Final |
 | Exact hash manifest | =/home/ubuntu/retrieve_workshop_runs/exact_l4_20260820T0255Z/analysis/final_hash_manifest.json= | Final |
 | CPU summary | =/home/ubuntu/retrieve_workshop_runs/cpu/cpu_context_20260820T2200Z/analysis/summary.csv= | Final |
 | CPU plot | =/home/ubuntu/retrieve_workshop_runs/cpu/cpu_context_20260820T2200Z/analysis/cpu_context_pareto.png= | Final |
-| Paper source and staged data | =/home/ubuntu/retrieve-cagra-paper= at =40913bb= | Final local commit |
+| Paper source and staged data | =/home/ubuntu/retrieve-cagra-paper=; record =git rev-parse HEAD= after final commit | Final local tree |
 | Paper PDF | =/home/ubuntu/retrieve-cagra-paper/main.pdf= | PASS, 6 pages, anonymous |
 | This report's DOCX | =benchmarks/retrieve_workshop/RETRIEVE_CAGRA_FILTER_AGNOSTIC_REPORT.docx= | Generated from this Org file |
 
