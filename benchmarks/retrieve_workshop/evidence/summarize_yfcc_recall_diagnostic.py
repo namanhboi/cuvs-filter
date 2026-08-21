@@ -59,7 +59,7 @@ def label_value(label: str, key: str) -> str:
 
 
 def validate_config(
-    path: Path, data_root: Path
+    path: Path, data_root: Path, expected_graph_degree: int
 ) -> tuple[dict[str, dict], list[Path]]:
     payload = json.loads(path.read_text())
     dataset = payload.get("dataset", {})
@@ -74,6 +74,8 @@ def validate_config(
         or basic != {"batch_size": 1000, "k": 10}
         or len(indexes) != 1
         or indexes[0].get("algo") != "cuvs_cagra"
+        or int(indexes[0].get("build_param", {}).get("graph_degree", -1))
+        != expected_graph_degree
     ):
         raise ValueError(f"frozen YFCC diagnostic config contract failure: {path}")
     searches = indexes[0].get("search_params", [])
@@ -225,16 +227,19 @@ def independently_verify_outputs(
 
 def summarize_variant(
     result_root: Path,
+    diagnostics_subdir: Path,
     variant: str,
     raw: dict[str, object],
     configured: dict[str, object],
+    expected_schema_version: int,
+    expected_graph_degree: int,
 ) -> tuple[
     dict[str, object],
     list[dict[str, object]],
     tuple[int, ...],
     dict[str, Path],
 ]:
-    directory = result_root / "diagnostics" / "root_cause" / variant
+    directory = result_root / diagnostics_subdir / variant
     manifest_path = directory / "manifest.json"
     summary_path = directory / "query_summary.csv"
     result_ids_path = directory / "result_indices.i64bin"
@@ -242,13 +247,13 @@ def summarize_variant(
     search = configured["search"]
     position = int(configured["position"])
     if (
-        int(manifest.get("schema_version", -1)) != 7
+        int(manifest.get("schema_version", -1)) != expected_schema_version
         or manifest.get("dataset") != "yfcc10m"
         or manifest.get("variant") != variant
         or int(manifest.get("num_queries", -1)) != 1000
         or int(manifest.get("topk", -1)) != 10
         or int(manifest.get("dataset_size", -1)) != 10_000_000
-        or int(manifest.get("graph_degree", -1)) != 32
+        or int(manifest.get("graph_degree", -1)) != expected_graph_degree
         or manifest.get("output_set_semantics")
         != "distinct_valid_output_ids_v1"
         or int(manifest.get("itopk", -1)) != int(search["itopk"])
@@ -429,6 +434,17 @@ def main() -> None:
     parser.add_argument("--bench-bin", type=Path, required=True)
     parser.add_argument("--libcuvs", type=Path, required=True)
     parser.add_argument("--archive-dir", type=Path)
+    parser.add_argument(
+        "--config-name", default="root_cause_b0_diagnostic.json"
+    )
+    parser.add_argument(
+        "--raw-name", default="root_cause_b0_diagnostic.json"
+    )
+    parser.add_argument(
+        "--diagnostics-subdir", type=Path, default=Path("diagnostics/root_cause")
+    )
+    parser.add_argument("--expected-schema-version", type=int, default=7)
+    parser.add_argument("--expected-graph-degree", type=int, default=32)
     parser.add_argument("--reuse-existing-archive", action="store_true")
     parser.add_argument("--require-clean-repo", action="store_true")
     parser.add_argument("--output", type=Path, required=True)
@@ -441,23 +457,31 @@ def main() -> None:
     }
     if args.require_clean_repo and git_provenance["status"]:
         raise ValueError("diagnostic generation requires a clean source repository")
-    raw_path = result_root / "raw" / "root_cause_b0_diagnostic.json"
-    config_path = result_root / "configs" / "root_cause_b0_diagnostic.json"
+    if args.expected_schema_version <= 0 or args.expected_graph_degree <= 0:
+        raise ValueError("expected schema version and graph degree must be positive")
+    raw_path = result_root / "raw" / args.raw_name
+    config_path = result_root / "configs" / args.config_name
     configured, input_paths = validate_config(
-        config_path, args.data_root.resolve()
+        config_path, args.data_root.resolve(), args.expected_graph_degree
     )
     records = raw_records(raw_path)
     variants: list[dict[str, object]] = []
     variant_sources: list[dict[str, object]] = []
     gt_seen_masks: dict[str, tuple[int, ...]] = {}
     compact_paths: dict[str, Path] = {
-        "raw/root_cause_b0_diagnostic.json": raw_path,
-        "configs/root_cause_b0_diagnostic.json": config_path,
+        f"raw/{args.raw_name}": raw_path,
+        f"configs/{args.config_name}": config_path,
         "inputs/groundtruth.ibin": input_paths[2],
     }
     for variant in VARIANTS:
         summary, current_sources, current_masks, current_compact_paths = summarize_variant(
-            result_root, variant, records[variant], configured[variant]
+            result_root,
+            args.diagnostics_subdir,
+            variant,
+            records[variant],
+            configured[variant],
+            args.expected_schema_version,
+            args.expected_graph_degree,
         )
         variants.append(summary)
         variant_sources.extend(current_sources)
@@ -497,7 +521,12 @@ def main() -> None:
 
     payload = {
         "schema_version": 1,
-        "experiment": "yfcc_1000_b0_duplicate_safe_retention_diagnostic",
+        "experiment": (
+            "yfcc_1000_b0_duplicate_safe_retention_diagnostic_"
+            f"g{args.expected_graph_degree}"
+        ),
+        "diagnostic_schema_version": args.expected_schema_version,
+        "graph_degree": args.expected_graph_degree,
         "output_set_semantics": "distinct_valid_output_ids_v1",
         "git": git_provenance,
         "variants": variants,

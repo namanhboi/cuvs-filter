@@ -97,6 +97,8 @@ class RawPoint:
     group: str
     phase: str
     workload: str
+    graph_degree: int
+    intermediate_graph_degree: int
     shard_index: int
     first_query: int
     repetition_index: int
@@ -122,6 +124,8 @@ class RepetitionPoint:
     group: str
     phase: str
     workload: str
+    graph_degree: int
+    intermediate_graph_degree: int
     repetition_index: int
     method: str
     itopk: int
@@ -145,6 +149,8 @@ class SummaryPoint:
     group: str
     phase: str
     workload: str
+    graph_degree: int
+    intermediate_graph_degree: int
     method: str
     itopk: int
     search_width: int
@@ -247,6 +253,13 @@ def load_group(path: Path, manifest: dict, raw_root: Path) -> list[RawPoint]:
     group = str(manifest["group"])
     phase = str(manifest["phase"])
     workload = str(manifest["workload"])
+    graph_degree = int(manifest["graph_degree"])
+    intermediate_graph_degree = int(manifest["intermediate_graph_degree"])
+    if graph_degree <= 0 or intermediate_graph_degree < graph_degree:
+        raise ValueError(
+            f"invalid graph degrees in {path}: "
+            f"G={graph_degree}, IG={intermediate_graph_degree}"
+        )
     repetitions = int(manifest["repetitions"])
     expected_points = {point_key(row) for row in manifest["search_points"]}
     if len(expected_points) != len(manifest["search_points"]):
@@ -398,6 +411,8 @@ def load_group(path: Path, manifest: dict, raw_root: Path) -> list[RawPoint]:
                     group=group,
                     phase=phase,
                     workload=workload,
+                    graph_degree=graph_degree,
+                    intermediate_graph_degree=intermediate_graph_degree,
                     shard_index=shard_index,
                     first_query=first_query,
                     repetition_index=repetition,
@@ -435,6 +450,8 @@ def aggregate_repetitions(points: list[RawPoint]) -> list[RepetitionPoint]:
             point.group,
             point.phase,
             point.workload,
+            point.graph_degree,
+            point.intermediate_graph_degree,
             point.repetition_index,
             point.method,
             point.itopk,
@@ -448,6 +465,8 @@ def aggregate_repetitions(points: list[RawPoint]) -> list[RepetitionPoint]:
             group,
             phase,
             workload,
+            graph_degree,
+            intermediate_graph_degree,
             repetition,
             method,
             itopk,
@@ -488,6 +507,8 @@ def aggregate_repetitions(points: list[RawPoint]) -> list[RepetitionPoint]:
                 group=str(group),
                 phase=str(phase),
                 workload=str(workload),
+                graph_degree=int(graph_degree),
+                intermediate_graph_degree=int(intermediate_graph_degree),
                 repetition_index=int(repetition),
                 method=str(method),
                 itopk=int(itopk),
@@ -531,6 +552,8 @@ def summarize(
             point.group,
             point.phase,
             point.workload,
+            point.graph_degree,
+            point.intermediate_graph_degree,
             point.method,
             point.itopk,
             point.search_width,
@@ -539,7 +562,17 @@ def summarize(
         groups.setdefault(key, []).append(point)
     rows: list[SummaryPoint] = []
     for key, members in sorted(groups.items()):
-        group, phase, workload, method, itopk, width, iterations = key
+        (
+            group,
+            phase,
+            workload,
+            graph_degree,
+            intermediate_graph_degree,
+            method,
+            itopk,
+            width,
+            iterations,
+        ) = key
         indices = sorted(row.repetition_index for row in members)
         expected_indices = [0] if phase == "correctness" else [0, 1, 2]
         if indices != expected_indices:
@@ -555,6 +588,8 @@ def summarize(
                 group=str(group),
                 phase=str(phase),
                 workload=str(workload),
+                graph_degree=int(graph_degree),
+                intermediate_graph_degree=int(intermediate_graph_degree),
                 method=str(method),
                 itopk=int(itopk),
                 search_width=int(width),
