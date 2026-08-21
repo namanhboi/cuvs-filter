@@ -1,0 +1,7 @@
+workload,method,queries,itopk,search_width,max_iterations,recall,graph_rows_per_query,seed_bitmap_words_per_query,bitmap_probes_per_query,distance_evaluations_per_query,passing_admissions_per_query,threads_per_cta,registers_per_thread,dynamic_smem_bytes,dynamic_smem_delta_from_base,active_ctas_per_sm
+yfcc,default_cagra,1000,64,1,0,0.333100000912,67.996,0.0,168.192,3088.817,92.945,64,64,2121,0,16
+yfcc,default_cagra_accumulator,1000,64,1,0,0.52660000043,67.996,0.0,2206.658,3088.817,92.945,64,64,2205,84,16
+yfcc,navix_reference,1000,64,1,0,0.725699999232,3228.073,6570.56,206596.672,2224.258,1093.347,64,63,2388,267,16
+emis,default_cagra,1000,64,1,0,0.37270000088099997,67.882,0.0,145.132,1223.653,215.817,256,64,17225,0,4
+emis,default_cagra_accumulator,1000,64,1,0,0.5393000000929999,67.882,0.0,866.346,1223.653,215.817,256,64,17309,84,4
+emis,navix_reference,1000,64,1,0,0.967199996268,662.463,33.184,21198.816,1556.45,1032.962,256,64,17364,139,4

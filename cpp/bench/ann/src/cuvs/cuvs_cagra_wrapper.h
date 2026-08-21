@@ -937,6 +937,9 @@ void cuvs_cagra<T, IdxT>::search_base(
                                          search_params_.max_iterations,
                                          -1.0f,
                                          true,
+                                         navix_bitmap_seeds_
+                                           ? navix_seed_inspected_units_->data()
+                                           : nullptr,
                                          neighbors,
                                          run_navix);
     } else {
@@ -946,10 +949,26 @@ void cuvs_cagra<T, IdxT>::search_base(
   }
 
   if (bitmap_filter_adapter_) {
-    if (cagra_bitmap_seeds_) {
-      RAFT_EXPECTS(static_cast<std::uint32_t>(k) == navix_seed_k_,
-                   "bitmap seed stride must equal the benchmark result width");
-      cuvs::neighbors::cagra::detail::benchmark_search_bitmap_seeded<T>(
+    auto run_bitmap_search = [&]() {
+      if (cagra_bitmap_seeds_) {
+        RAFT_EXPECTS(static_cast<std::uint32_t>(k) == navix_seed_k_,
+                     "bitmap seed stride must equal the benchmark result width");
+        cuvs::neighbors::cagra::detail::benchmark_search_bitmap_seeded<T>(
+          handle_,
+          search_params_,
+          *index_,
+          queries_view,
+          neighbors_view,
+          distances_view,
+          *filter_,
+          bitmap_query_offset_,
+          navix_seed_ids_->data(),
+          navix_seed_counts_->data(),
+          navix_seed_inspected_units_->data(),
+          favor_udf_passing_accumulator_);
+        return;
+      }
+      cuvs::neighbors::cagra::detail::benchmark_search_bitmap_with_query_offset<T>(
         handle_,
         search_params_,
         *index_,
@@ -958,22 +977,27 @@ void cuvs_cagra<T, IdxT>::search_base(
         distances_view,
         *filter_,
         bitmap_query_offset_,
-        navix_seed_ids_->data(),
-        navix_seed_counts_->data(),
-        navix_seed_inspected_units_->data(),
         favor_udf_passing_accumulator_);
-      return;
+    };
+    if (favor_diagnostic_session_) {
+      RAFT_EXPECTS(!cagra_bitmap_seeds_,
+                   "default-CAGRA bitmap-seed control has no diagnostic fragment");
+      favor_diagnostic_session_->capture(handle_,
+                                         static_cast<std::uint32_t>(batch_size),
+                                         static_cast<std::uint32_t>(k),
+                                         static_cast<std::uint32_t>(index_->graph().extent(1)),
+                                         static_cast<std::uint32_t>(search_params_.search_width),
+                                         static_cast<std::int64_t>(index_->size()),
+                                         static_cast<std::uint32_t>(search_params_.itopk_size),
+                                         search_params_.max_iterations,
+                                         -1.0f,
+                                         true,
+                                         nullptr,
+                                         neighbors,
+                                         run_bitmap_search);
+    } else {
+      run_bitmap_search();
     }
-    cuvs::neighbors::cagra::detail::benchmark_search_bitmap_with_query_offset<T>(
-      handle_,
-      search_params_,
-      *index_,
-      queries_view,
-      neighbors_view,
-      distances_view,
-      *filter_,
-      bitmap_query_offset_,
-      favor_udf_passing_accumulator_);
     return;
   }
 
@@ -1035,6 +1059,7 @@ void cuvs_cagra<T, IdxT>::search_base(
                                          search_params_.max_iterations,
                                          -1.0f,
                                          true,
+                                         nullptr,
                                          neighbors,
                                          run_udf_accumulated_search);
     } else {
@@ -1178,6 +1203,7 @@ void cuvs_cagra<T, IdxT>::search_base(
                                            search_params_.max_iterations,
                                            search_params_.filtering_rate,
                                            true,
+                                           nullptr,
                                            neighbors,
                                            run_search);
       } else {

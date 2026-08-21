@@ -1,0 +1,239 @@
+{
+  "schema_version": 1,
+  "status": "PASS",
+  "diagnostic_schema_version": 9,
+  "configuration": {
+    "queries": 1000,
+    "itopk": 64,
+    "search_width": 1,
+    "max_iterations": 0
+  },
+  "rows": [
+    {
+      "workload": "yfcc",
+      "method": "default_cagra",
+      "queries": 1000,
+      "itopk": 64,
+      "search_width": 1,
+      "max_iterations": 0,
+      "recall": 0.333100000912,
+      "graph_rows_per_query": 67.996,
+      "seed_bitmap_words_per_query": 0.0,
+      "bitmap_probes_per_query": 168.192,
+      "distance_evaluations_per_query": 3088.817,
+      "passing_admissions_per_query": 92.945,
+      "threads_per_cta": 64,
+      "registers_per_thread": 64,
+      "dynamic_smem_bytes": 2121,
+      "dynamic_smem_delta_from_base": 0,
+      "active_ctas_per_sm": 16
+    },
+    {
+      "workload": "yfcc",
+      "method": "default_cagra_accumulator",
+      "queries": 1000,
+      "itopk": 64,
+      "search_width": 1,
+      "max_iterations": 0,
+      "recall": 0.52660000043,
+      "graph_rows_per_query": 67.996,
+      "seed_bitmap_words_per_query": 0.0,
+      "bitmap_probes_per_query": 2206.658,
+      "distance_evaluations_per_query": 3088.817,
+      "passing_admissions_per_query": 92.945,
+      "threads_per_cta": 64,
+      "registers_per_thread": 64,
+      "dynamic_smem_bytes": 2205,
+      "dynamic_smem_delta_from_base": 84,
+      "active_ctas_per_sm": 16
+    },
+    {
+      "workload": "yfcc",
+      "method": "navix_reference",
+      "queries": 1000,
+      "itopk": 64,
+      "search_width": 1,
+      "max_iterations": 0,
+      "recall": 0.725699999232,
+      "graph_rows_per_query": 3228.073,
+      "seed_bitmap_words_per_query": 6570.56,
+      "bitmap_probes_per_query": 206596.672,
+      "distance_evaluations_per_query": 2224.258,
+      "passing_admissions_per_query": 1093.347,
+      "threads_per_cta": 64,
+      "registers_per_thread": 63,
+      "dynamic_smem_bytes": 2388,
+      "dynamic_smem_delta_from_base": 267,
+      "active_ctas_per_sm": 16
+    },
+    {
+      "workload": "emis",
+      "method": "default_cagra",
+      "queries": 1000,
+      "itopk": 64,
+      "search_width": 1,
+      "max_iterations": 0,
+      "recall": 0.37270000088099997,
+      "graph_rows_per_query": 67.882,
+      "seed_bitmap_words_per_query": 0.0,
+      "bitmap_probes_per_query": 145.132,
+      "distance_evaluations_per_query": 1223.653,
+      "passing_admissions_per_query": 215.817,
+      "threads_per_cta": 256,
+      "registers_per_thread": 64,
+      "dynamic_smem_bytes": 17225,
+      "dynamic_smem_delta_from_base": 0,
+      "active_ctas_per_sm": 4
+    },
+    {
+      "workload": "emis",
+      "method": "default_cagra_accumulator",
+      "queries": 1000,
+      "itopk": 64,
+      "search_width": 1,
+      "max_iterations": 0,
+      "recall": 0.5393000000929999,
+      "graph_rows_per_query": 67.882,
+      "seed_bitmap_words_per_query": 0.0,
+      "bitmap_probes_per_query": 866.346,
+      "distance_evaluations_per_query": 1223.653,
+      "passing_admissions_per_query": 215.817,
+      "threads_per_cta": 256,
+      "registers_per_thread": 64,
+      "dynamic_smem_bytes": 17309,
+      "dynamic_smem_delta_from_base": 84,
+      "active_ctas_per_sm": 4
+    },
+    {
+      "workload": "emis",
+      "method": "navix_reference",
+      "queries": 1000,
+      "itopk": 64,
+      "search_width": 1,
+      "max_iterations": 0,
+      "recall": 0.967199996268,
+      "graph_rows_per_query": 662.463,
+      "seed_bitmap_words_per_query": 33.184,
+      "bitmap_probes_per_query": 21198.816,
+      "distance_evaluations_per_query": 1556.45,
+      "passing_admissions_per_query": 1032.962,
+      "threads_per_cta": 256,
+      "registers_per_thread": 64,
+      "dynamic_smem_bytes": 17364,
+      "dynamic_smem_delta_from_base": 139,
+      "active_ctas_per_sm": 4
+    }
+  ],
+  "evidence": [
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/configs/diagnostics/emis.json",
+      "relative_to_result_root": "configs/diagnostics/emis.json",
+      "sha256": "99474fd02954689120f14aa985b770c23fb2f805484b95ff045f7c8f770dc02a"
+    },
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/configs/diagnostics/yfcc.json",
+      "relative_to_result_root": "configs/diagnostics/yfcc.json",
+      "sha256": "04df8780d6aa72b0a9044b180eb5dfa377acaab39967bb24fbb5f2fac77dda6f"
+    },
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/configs/manifest.json",
+      "relative_to_result_root": "configs/manifest.json",
+      "sha256": "400a2eba1cf66b7cc0bc2fb26e5ab00ae294841cc9fb619f05fd0c911d2be9b9"
+    },
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/configs/resources/emis.json",
+      "relative_to_result_root": "configs/resources/emis.json",
+      "sha256": "560a426f92c54c952ab8a19dea6c1086b22032726480c04a8d32e1f10f19035f"
+    },
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/configs/resources/yfcc.json",
+      "relative_to_result_root": "configs/resources/yfcc.json",
+      "sha256": "ba9f3ec04ae91de3e1fb63796e02c4321794469aaffd617bc1c80e12806202c7"
+    },
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/diagnostics/emis/default_cagra/manifest.json",
+      "relative_to_result_root": "diagnostics/emis/default_cagra/manifest.json",
+      "sha256": "3fc09d26695b7fb32503408ede6f1a785fdb19c79129dc3a5f792b900d7f7921"
+    },
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/diagnostics/emis/default_cagra/query_summary.csv",
+      "relative_to_result_root": "diagnostics/emis/default_cagra/query_summary.csv",
+      "sha256": "053147525c309032c3e308d1ba08f0cefceb2cf3f3d8b028750ff23a5292ab36"
+    },
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/diagnostics/emis/default_cagra_accumulator/manifest.json",
+      "relative_to_result_root": "diagnostics/emis/default_cagra_accumulator/manifest.json",
+      "sha256": "24eec5c5412d7ae7074cf9fcaaa5b93fbbe9ea83529c063ab44f84d0dc193a46"
+    },
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/diagnostics/emis/default_cagra_accumulator/query_summary.csv",
+      "relative_to_result_root": "diagnostics/emis/default_cagra_accumulator/query_summary.csv",
+      "sha256": "4e3dd14811884f315669dd2c5a2c82055943a21f3df9485dd2323b6404e0a331"
+    },
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/diagnostics/emis/navix_reference/manifest.json",
+      "relative_to_result_root": "diagnostics/emis/navix_reference/manifest.json",
+      "sha256": "d918fa85b6fe7001e3446a406077428397d90398abf79443fef5e804d39f9788"
+    },
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/diagnostics/emis/navix_reference/query_summary.csv",
+      "relative_to_result_root": "diagnostics/emis/navix_reference/query_summary.csv",
+      "sha256": "083618b2ceb506dff2742da562e937af4f9a4521153c5c699ce3cca7f9d38827"
+    },
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/diagnostics/yfcc/default_cagra/manifest.json",
+      "relative_to_result_root": "diagnostics/yfcc/default_cagra/manifest.json",
+      "sha256": "a615c16ae1f96c29d4021d9aaf1797d3a8ecf1b2a153e9741cff623e7f668404"
+    },
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/diagnostics/yfcc/default_cagra/query_summary.csv",
+      "relative_to_result_root": "diagnostics/yfcc/default_cagra/query_summary.csv",
+      "sha256": "99205dab50a2cfc0c3d58e4a45daac7d11bdc275def7a05f29e4d9df114a87cb"
+    },
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/diagnostics/yfcc/default_cagra_accumulator/manifest.json",
+      "relative_to_result_root": "diagnostics/yfcc/default_cagra_accumulator/manifest.json",
+      "sha256": "2138761be1384698c9ebacbbf3625a593fbcda360167054d9eba55550db9285a"
+    },
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/diagnostics/yfcc/default_cagra_accumulator/query_summary.csv",
+      "relative_to_result_root": "diagnostics/yfcc/default_cagra_accumulator/query_summary.csv",
+      "sha256": "69a9169990c7800d6e7fc84e73a612eda8935afe5ee644b88835e2cbb1b55fa3"
+    },
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/diagnostics/yfcc/navix_reference/manifest.json",
+      "relative_to_result_root": "diagnostics/yfcc/navix_reference/manifest.json",
+      "sha256": "721d898c723c6b07e447904893bcd5959843de44b7c59a9a024d46858d68c087"
+    },
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/diagnostics/yfcc/navix_reference/query_summary.csv",
+      "relative_to_result_root": "diagnostics/yfcc/navix_reference/query_summary.csv",
+      "sha256": "b2f9b32fa93b5fe3567db74ccee32dbf3104afdb99026edd92deb05922173ca9"
+    },
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/provenance/run.json",
+      "relative_to_result_root": "provenance/run.json",
+      "sha256": "ed891d8aecf459a34e7329210e92322c2979710be42b623c84e44ebe3b2e6291"
+    },
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/raw/resources/emis.json",
+      "relative_to_result_root": "raw/resources/emis.json",
+      "sha256": "e8f99f3c1b371abade39ab515468ca3e7476b7e7d6cf9afd3c0f4e178ac087b5"
+    },
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/raw/resources/yfcc.json",
+      "relative_to_result_root": "raw/resources/yfcc.json",
+      "sha256": "bfe2db3fb1ac95de81bc8cd388ef3d1afbae184060539192aebdf9e12b6a7f7e"
+    },
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/resources/emis.log",
+      "relative_to_result_root": "resources/emis.log",
+      "sha256": "c9f139b9f5bd0d087238b9ff8f45034b19b9dbce29b5c7d7988c582d3e6994b6"
+    },
+    {
+      "path": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/resources/yfcc.log",
+      "relative_to_result_root": "resources/yfcc.log",
+      "sha256": "46a3ef0af033a60d8d5b914fc16cd7628bf5e271076c0918971b034603cf680c"
+    }
+  ]
+}

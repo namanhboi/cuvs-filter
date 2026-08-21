@@ -63,6 +63,7 @@ class favor_diagnostic_session {
                std::uint32_t configured_max_iterations,
                float filtering_rate,
                bool device_telemetry,
+               const std::uint32_t* seed_inspected_units,
                const std::int64_t* result_indices,
                SearchFn&& search)
   {
@@ -210,6 +211,9 @@ class favor_diagnostic_session {
     std::vector<std::int64_t> result_indices_host(static_cast<std::uint64_t>(num_queries) * topk);
     std::vector<std::uint32_t> navix_seed_ids_host(navix_seed_count);
     std::vector<float> navix_seed_distances_host(navix_seed_count);
+    std::vector<std::uint32_t> seed_inspected_units_host(seed_inspected_units == nullptr
+                                                          ? 0
+                                                          : num_queries);
     if (device_telemetry) {
       RAFT_CUDA_TRY(cudaMemcpy(summaries_host.data(),
                                summaries.data(),
@@ -256,6 +260,12 @@ class favor_diagnostic_session {
                                navix_seed_count * sizeof(float),
                                cudaMemcpyDeviceToHost));
     }
+    if (seed_inspected_units != nullptr) {
+      RAFT_CUDA_TRY(cudaMemcpy(seed_inspected_units_host.data(),
+                               seed_inspected_units,
+                               seed_inspected_units_host.size() * sizeof(std::uint32_t),
+                               cudaMemcpyDeviceToHost));
+    }
 
     for (std::uint32_t query = 0; query < num_queries; ++query) {
       if (summaries_host[query].schema != favor_diag::schema_version ||
@@ -289,6 +299,9 @@ class favor_diagnostic_session {
       summaries_host[query].recall = static_cast<float>(matches) /
                                      static_cast<float>(std::min(topk, favor_diag::ground_truth_k));
       summaries_host[query].output_count = valid_outputs;
+      if (!seed_inspected_units_host.empty()) {
+        summaries_host[query].seed_inspected_units = seed_inspected_units_host[query];
+      }
     }
 
     write_capture(summaries_host,
@@ -396,7 +409,8 @@ class favor_diagnostic_session {
            "candidate_evaluations,candidate_duplicate_or_full,candidate_duplicates,"
            "candidate_hash_full,passing_candidates,"
            "rejected_candidates,penalized_candidates,accumulator_observations,"
-           "accumulator_insertions,gt_seen_mask,output_count,hash_bitlen,"
+           "accumulator_insertions,graph_rows_read,predicate_probes,distance_evaluations,"
+           "passing_admissions,seed_inspected_units,gt_seen_mask,output_count,hash_bitlen,"
            "small_hash_bitlen,small_hash_reset_interval,resolved_filtering_rate,"
            "reference_penalty,query_penalty,terminal_cutoff,"
            "best_unexpanded_distance,worst_retained_distance,kth_passing_raw_distance,"
@@ -424,8 +438,10 @@ class favor_diagnostic_session {
           << s.candidate_evaluations << ',' << s.candidate_duplicate_or_full << ','
           << s.candidate_duplicates << ',' << s.candidate_hash_full << ',' << s.passing_candidates
           << ',' << s.rejected_candidates << ',' << s.penalized_candidates << ','
-          << s.accumulator_observations << ',' << s.accumulator_insertions << ',' << s.gt_seen_mask
-          << ',' << s.output_count << ',' << s.hash_bitlen << ',' << s.small_hash_bitlen << ','
+          << s.accumulator_observations << ',' << s.accumulator_insertions << ','
+          << s.graph_rows_read << ',' << s.predicate_probes << ',' << s.distance_evaluations << ','
+          << s.passing_admissions << ',' << s.seed_inspected_units << ',' << s.gt_seen_mask << ','
+          << s.output_count << ',' << s.hash_bitlen << ',' << s.small_hash_bitlen << ','
           << s.small_hash_reset_interval << ',' << s.resolved_filtering_rate << ','
           << s.reference_penalty << ',' << s.query_penalty << ',' << s.terminal_cutoff << ','
           << s.best_unexpanded_distance << ',' << s.worst_retained_distance << ','
@@ -516,7 +532,7 @@ class favor_diagnostic_session {
   bool captured_ = false;
 };
 
-static_assert(sizeof(favor_diag::query_summary) == 536);
+static_assert(sizeof(favor_diag::query_summary) == 556);
 static_assert(sizeof(favor_diag::iteration_record) == 132);
 static_assert(sizeof(favor_diag::candidate_record) == 36);
 static_assert(sizeof(favor_diag::termination_checkpoint_record) == 136);

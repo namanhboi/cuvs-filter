@@ -818,6 +818,8 @@ void select_and_run(
   const uint32_t query_id_offset = filter_payload.query_id_offset;
   constexpr bool navix           = cagra_filter_uses_navix<SampleFilterT>::value;
   constexpr bool bitmap_seeded   = cagra_filter_uses_bitmap_seeds<SampleFilterT>::value;
+  constexpr bool passing_accumulator =
+    cagra_filter_uses_passing_accumulator<SampleFilterT>::value;
   if constexpr (bitmap_seeded) {
     RAFT_EXPECTS(filter_payload.filter_kind == cagra_sample_filter<SourceIndexT>::kind_bitmap,
                  "bitmap-seeded CAGRA requires a bitmap filter payload");
@@ -876,7 +878,7 @@ void select_and_run(
   } else {
     const bool favor       = ps.filter_mode == filtering_mode::FAVOR;
     const bool diagnostics = favor_search_diagnostics::get_active_context() != nullptr;
-    static_assert(!(navix && cagra_filter_uses_passing_accumulator<SampleFilterT>::value),
+    static_assert(!(navix && passing_accumulator),
                   "NaviX deliberately has no passing-result accumulator");
     static_assert(!(navix && bitmap_seeded),
                   "NaviX and default-CAGRA bitmap seeding use separate filter traits");
@@ -907,24 +909,53 @@ void select_and_run(
         static_cast<std::uint32_t>(graph.extent(1)));
     if (!launcher) { RAFT_FAIL("Failed to get JIT launcher for CAGRA search kernel"); }
 
-    if constexpr (navix) {
-      auto const* log_resources = std::getenv("CUVS_NAVIX_LOG_RESOURCES");
-      if (log_resources != nullptr && log_resources[0] == '1' && log_resources[1] == '\0') {
-        const auto requested_policy = cagra_filter_navix_policy(sample_filter);
-        cudaFuncAttributes attributes{};
-        RAFT_CUDA_TRY(cudaFuncGetAttributes(&attributes, launcher->get_kernel()));
-        int active_blocks = 0;
-        RAFT_CUDA_TRY(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-          &active_blocks, launcher->get_kernel(), static_cast<int>(block_size), smem_size));
+    auto const env_enabled = [](const char* name) {
+      auto const* value = std::getenv(name);
+      return value != nullptr && value[0] == '1' && value[1] == '\0';
+    };
+    const bool log_cagra_resources = env_enabled("CUVS_CAGRA_LOG_RESOURCES");
+    const bool log_navix_resources = env_enabled("CUVS_NAVIX_LOG_RESOURCES");
+    if (log_cagra_resources || (navix && log_navix_resources)) {
+      cudaFuncAttributes attributes{};
+      RAFT_CUDA_TRY(cudaFuncGetAttributes(&attributes, launcher->get_kernel()));
+      int active_blocks = 0;
+      RAFT_CUDA_TRY(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+        &active_blocks, launcher->get_kernel(), static_cast<int>(block_size), smem_size));
+      if (log_cagra_resources) {
+        const char* method = navix                 ? "navix"
+                             : passing_accumulator ? "retain"
+                             : favor               ? "favor"
+                                                   : "base";
         std::fprintf(stderr,
-                     "NaviX kernel resources: policy=%u threads=%u dynamic_smem=%u "
-                     "static_smem=%zu registers=%d active_blocks_per_sm=%d\n",
-                     requested_policy,
+                     "CAGRA_KERNEL_RESOURCES {\"method\":\"%s\",\"diagnostics\":%s,"
+                     "\"graph_degree\":%u,\"itopk\":%u,\"search_width\":%u,"
+                     "\"threads_per_cta\":%u,\"dynamic_smem_bytes\":%u,"
+                     "\"static_smem_bytes\":%zu,\"registers_per_thread\":%d,"
+                     "\"active_ctas_per_sm\":%d}\n",
+                     method,
+                     diagnostics ? "true" : "false",
+                     static_cast<std::uint32_t>(graph.extent(1)),
+                     static_cast<std::uint32_t>(ps.itopk_size),
+                     static_cast<std::uint32_t>(ps.search_width),
                      block_size,
                      smem_size,
                      attributes.sharedSizeBytes,
                      attributes.numRegs,
                      active_blocks);
+      }
+      if constexpr (navix) {
+        if (log_navix_resources) {
+          const auto requested_policy = cagra_filter_navix_policy(sample_filter);
+          std::fprintf(stderr,
+                       "NaviX kernel resources: policy=%u threads=%u dynamic_smem=%u "
+                       "static_smem=%zu registers=%d active_blocks_per_sm=%d\n",
+                       requested_policy,
+                       block_size,
+                       smem_size,
+                       attributes.sharedSizeBytes,
+                       attributes.numRegs,
+                       active_blocks);
+        }
       }
     }
 

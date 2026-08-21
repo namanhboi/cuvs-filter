@@ -76,7 +76,8 @@ RAFT_DEVICE_INLINE_FUNCTION void favor_observe_passing_candidates(
   std::uint32_t* const accumulator_lock,
   const std::uint8_t* const candidate_filter_outcomes = nullptr,
   std::uint32_t* const diagnostic_observations        = nullptr,
-  std::uint32_t* const diagnostic_insertions          = nullptr)
+  std::uint32_t* const diagnostic_insertions          = nullptr,
+  std::uint32_t* const diagnostic_predicate_probes    = nullptr)
 {
   if (accumulator_capacity == 0) { return; }
 
@@ -117,6 +118,11 @@ RAFT_DEVICE_INLINE_FUNCTION void favor_observe_passing_candidates(
       } else {
         const auto source = source_indices_ptr == nullptr ? static_cast<SourceIndexT>(node)
                                                           : source_indices_ptr[node];
+        if constexpr (DIAGNOSTICS) {
+          if (diagnostic_predicate_probes != nullptr) {
+            atomicAdd(diagnostic_predicate_probes, 1u);
+          }
+        }
         active =
           sample_filter<SourceIndexT>(filter_query_id, source, filter_payload.sample_filter_data());
       }
@@ -519,6 +525,13 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   }
   __syncthreads();
   _CLK_REC(clk_compute_1st_distance);
+  if constexpr (DIAGNOSTICS) {
+    if (threadIdx.x == 0 && diagnostic_summary != nullptr) {
+      diagnostic_summary->distance_evaluations +=
+        bitmap_seed_path ? bitmap_seed_count : result_buffer_size * num_distilation;
+    }
+  }
+  __syncthreads();
 
   // NaviX starts with ordinary default-CAGRA raw-distance sampling. If that initial candidate
   // batch already contains passing nodes, retain all of them and begin the passing-only traversal
@@ -584,7 +597,8 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
       passing_accumulator_lock,
       nullptr,
       diagnostic_summary == nullptr ? nullptr : &diagnostic_summary->accumulator_observations,
-      diagnostic_summary == nullptr ? nullptr : &diagnostic_summary->accumulator_insertions);
+      diagnostic_summary == nullptr ? nullptr : &diagnostic_summary->accumulator_insertions,
+      diagnostic_summary == nullptr ? nullptr : &diagnostic_summary->predicate_probes);
   }
   __syncthreads();
 
@@ -985,6 +999,7 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
         }
         diagnostic_summary->expanded_pass_parents += selected_pass;
         diagnostic_summary->expanded_reject_parents += selected_reject;
+        diagnostic_summary->graph_rows_read += selected_pass + selected_reject;
         if (diagnostic_trace_slot >= 0 && iter < diagnostic_context->max_trace_iterations) {
           auto& record = diagnostic_context
                            ->iteration_records[static_cast<std::uint64_t>(diagnostic_trace_slot) *
@@ -1333,7 +1348,8 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
         passing_accumulator_lock,
         child_filter_outcomes,
         diagnostic_summary == nullptr ? nullptr : &diagnostic_summary->accumulator_observations,
-        diagnostic_summary == nullptr ? nullptr : &diagnostic_summary->accumulator_insertions);
+        diagnostic_summary == nullptr ? nullptr : &diagnostic_summary->accumulator_insertions,
+        diagnostic_summary == nullptr ? nullptr : &diagnostic_summary->predicate_probes);
     }
     __syncthreads();
 
@@ -1438,6 +1454,8 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
         diagnostic_summary->passing_candidates += passing;
         diagnostic_summary->rejected_candidates += rejected;
         diagnostic_summary->penalized_candidates += penalized;
+        diagnostic_summary->distance_evaluations += evaluations;
+        diagnostic_summary->passing_admissions += passing;
         if (diagnostic_trace_slot >= 0 && iter < diagnostic_context->max_trace_iterations) {
           auto& record = diagnostic_context
                            ->iteration_records[static_cast<std::uint64_t>(diagnostic_trace_slot) *
@@ -1491,6 +1509,7 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
           const auto parent_id = result_indices_buffer[parent_list_buffer[p]] & ~index_msb_1_mask;
           const auto source_id = to_source_index(parent_id);
           bool passes_filter   = true;
+          bool probed_filter   = false;
           if constexpr (FAVOR) {
             if (favor_penalty_mode == 2 && filter_payload.is_bitset()) {
               passes_filter =
@@ -1501,6 +1520,7 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
               passes_filter = sample_filter<SourceIndexT>(
                 query_id + query_id_offset, source_id, filter_payload.sample_filter_data());
             }
+            probed_filter = true;
           } else if constexpr (NAVIX) {
             // While seed discovery is active, every retained batch has already been proven to
             // contain zero passing nodes. Therefore every selected parent is known rejected and
@@ -1509,6 +1529,12 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
           } else {
             passes_filter = sample_filter<SourceIndexT>(
               query_id + query_id_offset, source_id, filter_payload.sample_filter_data());
+            probed_filter = true;
+          }
+          if constexpr (DIAGNOSTICS) {
+            if (probed_filter && diagnostic_summary != nullptr) {
+              atomicAdd(&diagnostic_summary->predicate_probes, 1u);
+            }
           }
           if (!passes_filter) {
             result_distances_buffer[parent_list_buffer[p]] = utils::get_max_value<DistanceT>();
@@ -1565,14 +1591,17 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
          i += blockDim.x) {
       const auto node_id = result_indices_buffer[i] & ~index_msb_1_mask;
       bool passes_filter = true;
+      bool probed_filter = false;
       if (node_id != (invalid_index & ~index_msb_1_mask)) {
         if constexpr (NAVIX) {
           // Before handoff this is ordinary default-filter output. After handoff the persistent
           // NaviX frontier is predicate-clean by construction.
-          passes_filter =
-            navix_seeded || sample_filter<SourceIndexT>(query_id + query_id_offset,
+          if (!navix_seeded) {
+            passes_filter = sample_filter<SourceIndexT>(query_id + query_id_offset,
                                                         to_source_index(node_id),
                                                         filter_payload.sample_filter_data());
+            probed_filter = true;
+          }
         } else if constexpr (FAVOR) {
           if (favor_penalty_mode == 2 && filter_payload.is_bitset()) {
             const auto source_id = to_source_index(node_id);
@@ -1584,10 +1613,17 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
                                                         to_source_index(node_id),
                                                         filter_payload.sample_filter_data());
           }
+          probed_filter = true;
         } else {
           passes_filter = sample_filter<SourceIndexT>(query_id + query_id_offset,
                                                       to_source_index(node_id),
                                                       filter_payload.sample_filter_data());
+          probed_filter = true;
+        }
+        if constexpr (DIAGNOSTICS) {
+          if (probed_filter && diagnostic_summary != nullptr) {
+            atomicAdd(&diagnostic_summary->predicate_probes, 1u);
+          }
         }
       }
       if (!passes_filter) {

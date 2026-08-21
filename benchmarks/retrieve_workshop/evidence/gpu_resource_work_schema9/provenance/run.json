@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "experiment": "retrieve_gpu_resource_work_schema9",
+  "created_utc": "2026-08-21T03:52:26.153946+00:00",
+  "host": "brev-x1u02jrj0",
+  "platform": "Linux-6.8.0-1064-gcp-x86_64-with-glibc2.35",
+  "python": "3.14.6 | packaged by conda-forge | (main, Jul 24 2026, 16:09:24) [GCC 14.3.0]",
+  "git": {
+    "head": {
+      "argv": [
+        "git",
+        "-C",
+        "/home/ubuntu/cuvs-filter-retrieve",
+        "rev-parse",
+        "HEAD"
+      ],
+      "returncode": 0,
+      "stdout": "054e48c1f89483728143da7b1f48ca541d1d887f",
+      "stderr": ""
+    },
+    "status": {
+      "argv": [
+        "git",
+        "-C",
+        "/home/ubuntu/cuvs-filter-retrieve",
+        "status",
+        "--short"
+      ],
+      "returncode": 0,
+      "stdout": "M cpp/bench/ann/src/cuvs/cuvs_cagra_wrapper.h\n M cpp/bench/ann/src/cuvs/favor_search_diagnostic_session.h\n M cpp/src/neighbors/detail/cagra/jit_lto_kernels/favor_search_diagnostics.cuh\n M cpp/src/neighbors/detail/cagra/jit_lto_kernels/navix_device.cuh\n M cpp/src/neighbors/detail/cagra/jit_lto_kernels/search_single_cta_jit.cuh\n M cpp/src/neighbors/detail/cagra/search_single_cta_kernel_launcher_jit.cuh\n?? benchmarks/retrieve_workshop/resource_work/",
+      "stderr": ""
+    }
+  },
+  "gpu": {
+    "argv": [
+      "nvidia-smi",
+      "--query-gpu=name,uuid,driver_version,memory.total,compute_cap",
+      "--format=csv,noheader,nounits"
+    ],
+    "returncode": 0,
+    "stdout": "NVIDIA L4, GPU-813bf938-d58e-94aa-d202-e92ab2b2d59b, 580.173.02, 23034, 8.9",
+    "stderr": ""
+  },
+  "benchmark_binary": {
+    "path": "/home/ubuntu/cuvs-filter-retrieve/cpp/build/bench/ann/CUVS_CAGRA_ANN_BENCH",
+    "sha256": "894b91598917624831f770d0dbf1e12d75901247b8417ef5f80c8c445b8afb6a"
+  },
+  "libcuvs": {
+    "path": "/home/ubuntu/cuvs-filter-retrieve/cpp/build/libcuvs.so",
+    "sha256": "dc42756845fecd5bba4901e5401750d53142e61bb5d4030380a45515c67266a0"
+  },
+  "instrumented_sources": {
+    "cpp/bench/ann/src/cuvs/cuvs_cagra_wrapper.h": {
+      "path": "/home/ubuntu/cuvs-filter-retrieve/cpp/bench/ann/src/cuvs/cuvs_cagra_wrapper.h",
+      "sha256": "dd7e4c0b4e0a84f7e4950ddb91f5f7c98496ffa282b0c7082294509302cc62f1"
+    },
+    "cpp/bench/ann/src/cuvs/favor_search_diagnostic_session.h": {
+      "path": "/home/ubuntu/cuvs-filter-retrieve/cpp/bench/ann/src/cuvs/favor_search_diagnostic_session.h",
+      "sha256": "1dc36a7d3b967c4b78a879149302ea09237e01c6529e54af497de3283c3cb762"
+    },
+    "cpp/src/neighbors/detail/cagra/jit_lto_kernels/favor_search_diagnostics.cuh": {
+      "path": "/home/ubuntu/cuvs-filter-retrieve/cpp/src/neighbors/detail/cagra/jit_lto_kernels/favor_search_diagnostics.cuh",
+      "sha256": "6b5f1e27f202e6cf6c7cd5a40e3b1fc3b51b3aa10489a2e97a9e090736bd62fb"
+    },
+    "cpp/src/neighbors/detail/cagra/jit_lto_kernels/navix_device.cuh": {
+      "path": "/home/ubuntu/cuvs-filter-retrieve/cpp/src/neighbors/detail/cagra/jit_lto_kernels/navix_device.cuh",
+      "sha256": "38bbc5e9ad08867cee8950b2068d65aa3e48ec48af07a8455c52b5e1d140efdb"
+    },
+    "cpp/src/neighbors/detail/cagra/jit_lto_kernels/search_single_cta_jit.cuh": {
+      "path": "/home/ubuntu/cuvs-filter-retrieve/cpp/src/neighbors/detail/cagra/jit_lto_kernels/search_single_cta_jit.cuh",
+      "sha256": "4c06f44231f7e7e955f008ab5341035702aa916dde40434d86734fe2f0c1bec2"
+    },
+    "cpp/src/neighbors/detail/cagra/search_single_cta_kernel_launcher_jit.cuh": {
+      "path": "/home/ubuntu/cuvs-filter-retrieve/cpp/src/neighbors/detail/cagra/search_single_cta_kernel_launcher_jit.cuh",
+      "sha256": "8a88920b9db2503063ef4d6a0ff10f5e7d0981ad56551fb81f2163801dd445a6"
+    }
+  },
+  "data_root": "/home/ubuntu/cuvs-filter/datasets",
+  "contract": {
+    "diagnostic_schema_version": 9,
+    "workloads": [
+      "yfcc",
+      "emis"
+    ],
+    "methods": [
+      "default_cagra",
+      "default_cagra_accumulator",
+      "navix_reference"
+    ],
+    "queries": 1000,
+    "itopk": 64,
+    "search_width": 1,
+    "max_iterations": 0,
+    "diagnostics_are_timed": false,
+    "resources_from_production_kernel": true
+  }
+}

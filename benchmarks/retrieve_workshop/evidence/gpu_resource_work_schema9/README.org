@@ -1,0 +1,13 @@
+#+TITLE: Frozen Schema-9 GPU Resource-Work Evidence
+
+This directory is the compact, checked-in copy of the accepted paper-table run at
+=/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z=.  It contains the
+five generated configs, two ordinary correctness JSON files, two production resource logs, six
+schema-9 manifests and query summaries, executable/source/GPU provenance, and the validated
+CSV/JSON/LaTeX outputs.  Large seed and result-index binaries are omitted because no table field or
+validation invariant reads them.
+
+=gpu_resource_work.json= records the original absolute path and SHA-256 of each of its 22 inputs.
+The corresponding archived files retain the same relative paths.  Re-run the analyzer against the
+original immutable result root for regeneration; use this directory for review and long-term
+inspection rather than silently mixing it with a new run.

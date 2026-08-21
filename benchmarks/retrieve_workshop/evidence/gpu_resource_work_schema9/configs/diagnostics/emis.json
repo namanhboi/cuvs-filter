@@ -1,0 +1,81 @@
+{
+  "dataset": {
+    "name": "retrieve-emis-correctness-q00000-01000",
+    "base_file": "arxiv-for-fanns-medium/base.fbin",
+    "query_file": "/home/ubuntu/cuvs-filter/datasets/navix_bitmap/arxiv/emis/correctness_1000/shard_00000_01000/query.bin",
+    "groundtruth_neighbors_file": "/home/ubuntu/cuvs-filter/datasets/navix_bitmap/arxiv/emis/correctness_1000/shard_00000_01000/groundtruth.ibin",
+    "distance": "euclidean",
+    "dtype": "float",
+    "filter": {
+      "kind": "bitmap",
+      "file": "/home/ubuntu/cuvs-filter/datasets/navix_bitmap/arxiv/emis/correctness_1000/shard_00000_01000/filter.bitmap"
+    }
+  },
+  "search_basic_param": {
+    "batch_size": 1000,
+    "k": 10
+  },
+  "index": [
+    {
+      "name": "cagra-g32-ig64",
+      "algo": "cuvs_cagra",
+      "file": "arxiv-for-fanns-medium/cagra_g32_ig64.index",
+      "build_param": {
+        "graph_build_algo": "NN_DESCENT",
+        "graph_degree": 32,
+        "intermediate_graph_degree": 64
+      },
+      "search_params": [
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "max_queries": 1024,
+          "itopk": 64,
+          "search_width": 1,
+          "max_iterations": 0,
+          "favor_udf_passing_accumulator": false,
+          "require_identity_source_indices": true,
+          "bitmap_method": "default_cagra",
+          "favor_diagnostics_output": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/diagnostics/emis/default_cagra",
+          "favor_diagnostics_groundtruth": "/home/ubuntu/cuvs-filter/datasets/navix_bitmap/arxiv/emis/correctness_1000/shard_00000_01000/groundtruth.ibin",
+          "favor_diagnostics_dataset": "emis",
+          "favor_diagnostics_variant": "default_cagra"
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "max_queries": 1024,
+          "itopk": 64,
+          "search_width": 1,
+          "max_iterations": 0,
+          "favor_udf_passing_accumulator": true,
+          "require_identity_source_indices": true,
+          "bitmap_method": "default_cagra_accumulator",
+          "favor_diagnostics_output": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/diagnostics/emis/default_cagra_accumulator",
+          "favor_diagnostics_groundtruth": "/home/ubuntu/cuvs-filter/datasets/navix_bitmap/arxiv/emis/correctness_1000/shard_00000_01000/groundtruth.ibin",
+          "favor_diagnostics_dataset": "emis",
+          "favor_diagnostics_variant": "default_cagra_accumulator"
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "max_queries": 1024,
+          "itopk": 64,
+          "search_width": 1,
+          "max_iterations": 0,
+          "favor_udf_passing_accumulator": false,
+          "require_identity_source_indices": true,
+          "bitmap_method": "navix_reference",
+          "navix_mode": "adaptive_kuzu",
+          "navix_scheduler": "tiled",
+          "navix_bitmap_seeds": true,
+          "navix_kernel_variant": "reference",
+          "favor_diagnostics_output": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/diagnostics/emis/navix_reference",
+          "favor_diagnostics_groundtruth": "/home/ubuntu/cuvs-filter/datasets/navix_bitmap/arxiv/emis/correctness_1000/shard_00000_01000/groundtruth.ibin",
+          "favor_diagnostics_dataset": "emis",
+          "favor_diagnostics_variant": "navix_reference"
+        }
+      ]
+    }
+  ]
+}

@@ -39,6 +39,7 @@ The paper uses these immutable analyzed roots:
 | Masked exact | =/home/ubuntu/retrieve_workshop_runs/exact_l4_20260820T0255Z= | PASS; four workloads; native-L2 cutoff recall 1.0 |
 | Native CPU | =/home/ubuntu/retrieve_workshop_runs/cpu/cpu_context_20260820T2200Z= | PASS; 120/120 commands; 200 aggregate rows |
 | YFCC mechanism diagnostic | =/home/ubuntu/retrieve_workshop_runs/yfcc_schema8_g64_20260821T0245Z= | PASS; same-G64 frozen diagnostic-only evidence |
+| GPU resource/dynamic work | =/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z= | PASS; schema 9; fixed 1,000-query YFCC/EMIS samples |
 
 The staged paper is =/home/ubuntu/retrieve-cagra-paper=.  Record its exact commit with =git
 rev-parse HEAD= after the final commit.  Its validated =main.pdf= is six pages and double-blind;
@@ -130,7 +131,7 @@ cmake --build cpp/build --parallel 32 --target \
 #+end_src
 
 Do not reuse old benchmark binaries after changing the diagnostic schema, benchmark metric code,
-or CAGRA JIT sources.  Schema 8 diagnostic capture explicitly verifies the device-written schema
+or CAGRA JIT sources.  Schema 9 diagnostic capture explicitly verifies the device-written schema
 and query identity against the host before writing any evidence.
 
 ** Required gate
@@ -144,6 +145,7 @@ env LD_PRELOAD=/home/ubuntu/cuvs-filter-retrieve/cpp/build/libcuvs.so \
 
 /home/ubuntu/micromamba/envs/cuvs/bin/python -m py_compile \
   benchmarks/retrieve_workshop/gpu_graph/*.py \
+  benchmarks/retrieve_workshop/resource_work/*.py \
   benchmarks/retrieve_workshop/exact_bitmap/*.py \
   benchmarks/retrieve_workshop/cpu_context/*.py \
   benchmarks/retrieve_workshop/evidence/*.py
@@ -158,6 +160,7 @@ MPLBACKEND=Agg /home/ubuntu/micromamba/envs/cuvs/bin/python \
   benchmarks/retrieve_workshop/evidence/test_summarize_bitmap_selectivity.py
 
 bash -n benchmarks/retrieve_workshop/gpu_graph/run_gpu_graph.sh
+bash -n benchmarks/retrieve_workshop/resource_work/run.sh
 bash -n benchmarks/retrieve_workshop/exact_bitmap/run_exact.sh
 bash -n benchmarks/favor/yfcc_udf/run_experiment.sh
 git diff --check
@@ -302,6 +305,33 @@ SHA-256, and the claim keys to =diagnostic_manifest.json=, update =evidence/READ
 the paper staging check.  Never edit a result number by hand or point the paper directly at an
 unmanifested diagnostic.  Use a new versioned archive directory for any later regeneration; the
 summarizer refuses to replace an existing archive.
+
+* GPU resource and dynamic-work table (schema 9)
+
+This table is a mechanism diagnostic, not a throughput result.  It fixes =L=64=, =W=1=, and
+=max_iterations=0= on the first 1,000 YFCC and EMIS queries.  Schema-9 kernels count adjacency
+rows, logical predicate probes, distance calls, and legal admissions; separate non-diagnostic
+launches report production registers, shared memory, threads/CTA, and the occupancy-API active-CTA
+ceiling.
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter-retrieve
+export RETRIEVE_RESOURCE_WORK_ROOT=/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_<UTC_TAG>
+export RETRIEVE_DATA_ROOT=/home/ubuntu/cuvs-filter/datasets
+benchmarks/retrieve_workshop/resource_work/run.sh all
+#+end_src
+
+Production resource capture retains =max_queries=512=.  The untimed diagnostic config uses
+=max_queries=1024= only so one host chunk contains the entire fixed sample; it does not alter
+per-query traversal, =L=, =W=, =B0=, or kernel resources.  The analyzer refuses a Base/Retain
+per-query mismatch in graph rows, distance evaluations, or legal admissions, and requires Retain's
+shared-memory increment to be exactly 84 bytes.
+
+The accepted root is
+=/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z=.  Its compact
+checked-in evidence is =benchmarks/retrieve_workshop/evidence/gpu_resource_work_schema9/=.  Exact
+counter semantics, commands, results, and interpretation are in
+=benchmarks/retrieve_workshop/resource_work/README.org=.
 
 * GPU graph experiment
 
@@ -523,13 +553,15 @@ export RETRIEVE_GPU_SUMMARY="${RETRIEVE_RESULT_ROOT}/analysis/summary_points.csv
 export RETRIEVE_EXACT_SUMMARY="${RETRIEVE_EXACT_RESULT_ROOT}/analysis/exact_summary.csv"
 export RETRIEVE_CPU_SUMMARY="${RETRIEVE_CPU_RESULTS_ROOT}/${RETRIEVE_CPU_RUN_ID}/analysis/summary.csv"
 export RETRIEVE_DIAGNOSTIC_MANIFEST=/home/ubuntu/cuvs-filter-retrieve/benchmarks/retrieve_workshop/evidence/diagnostic_manifest.json
+export RETRIEVE_RESOURCE_WORK_SUMMARY=/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/analysis/gpu_resource_work.json
 
 cd /home/ubuntu/retrieve-cagra-paper
 python3 scripts/prepare_current_results.py --check \
   --gpu-summary "${RETRIEVE_GPU_SUMMARY}" \
   --exact-summary "${RETRIEVE_EXACT_SUMMARY}" \
   --cpu-summary "${RETRIEVE_CPU_SUMMARY}" \
-  --diagnostic-manifest "${RETRIEVE_DIAGNOSTIC_MANIFEST}"
+  --diagnostic-manifest "${RETRIEVE_DIAGNOSTIC_MANIFEST}" \
+  --resource-work-summary "${RETRIEVE_RESOURCE_WORK_SUMMARY}"
 
 make PYTHON=python3 data
 make PYTHON=python3 paper
@@ -622,6 +654,8 @@ binary, library, hardware, data, and repetition identity auditable.
 - [X] CPU results are described as qualitative context, not absolute CPU/GPU speedup.
 - [X] Diagnostic claims come only from artifacts listed and SHA-256-verified in
   =diagnostic_manifest.json=.
+- [X] The resource-work table comes from schema-9 untimed counters and separately captured
+  production JIT attributes; its 22 inputs and exact instrumented sources are SHA-256-bound.
 - [X] Paper staging, PDF provenance, unfinished-text scan, and six-page check all pass.
 - [X] The manuscript remains double-blind: no names, institutions, acknowledgments, or personally
   named fork links.

@@ -52,6 +52,16 @@ query-distance locality, graph-edge locality, and traversal counters.  These dat
 region-entry hypothesis; they do not by themselves separate seed quality from traversal.  The
 final matched-seed sweep is the causal control for that distinction.
 
+* GPU resource and dynamic-work evidence
+
+=gpu_resource_work_schema9/= is the compact archive for the paper's mechanism-level table.  It
+contains six fixed =L=64,W=1,B0= YFCC/EMIS query summaries, the production kernel-resource logs,
+configs, ordinary correctness output, and provenance for the exact benchmark binary, library,
+GPU, Git state, and six instrumented sources.  =gpu_resource_work.json= SHA-256-binds all 22 table
+inputs.  The schema-9 analyzer additionally proves query-by-query that Base and Retain read the
+same graph rows, evaluate the same distances, and admit the same legal candidates, and verifies
+that Retain adds exactly 84 dynamic-shared bytes without changing the active-CTA ceiling.
+
 * SHA-256
 
 | File | SHA-256 |

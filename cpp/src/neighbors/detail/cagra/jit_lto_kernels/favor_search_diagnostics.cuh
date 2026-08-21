@@ -9,9 +9,9 @@
 
 namespace cuvs::neighbors::cagra::detail::favor_search_diagnostics {
 
-// Schema 8 extends NaviX's local-yield histogram from degree 32 to the largest supported degree,
-// 64. Consumers must not interpret schema-7 query-summary binaries with this larger layout.
-inline constexpr std::uint32_t schema_version          = 8;
+// Schema 9 adds mechanism-level work counters used to separate adjacency, predicate, and vector
+// distance work. Consumers must not interpret earlier query-summary binaries with this layout.
+inline constexpr std::uint32_t schema_version          = 9;
 inline constexpr std::uint32_t ground_truth_k          = 10;
 inline constexpr std::uint32_t max_navix_graph_degree  = 64;
 inline constexpr std::uint32_t navix_local_p_bin_count = max_navix_graph_degree + 1;
@@ -64,6 +64,16 @@ struct query_summary {
   std::uint32_t penalized_candidates{};
   std::uint32_t accumulator_observations{};
   std::uint32_t accumulator_insertions{};
+  // Counts below describe production algorithm operations. Diagnostic-only rechecks used to
+  // classify terminal state are deliberately excluded.
+  std::uint32_t graph_rows_read{};
+  std::uint32_t predicate_probes{};
+  std::uint32_t distance_evaluations{};
+  std::uint32_t passing_admissions{};
+  // Host-populated from the separate strict-bitmap seed-selection kernel. For identity source
+  // indices this is the number of 32-bit bitmap words loaded; remapped indices use internal-ID
+  // warp tiles and are rejected by the paper experiment's identity-index contract.
+  std::uint32_t seed_inspected_units{};
   std::uint32_t gt_seen_mask{};
   std::uint32_t gt_first_iteration[ground_truth_k]{};
   std::uint32_t output_count{};

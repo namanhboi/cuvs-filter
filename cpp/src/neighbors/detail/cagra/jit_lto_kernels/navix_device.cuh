@@ -284,6 +284,7 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_navix_candidates_jit(
     if constexpr (DIAGNOSTICS) {
       if (diagnostic_summary != nullptr) {
         atomicAdd(&diagnostic_summary->navix_first_hop_checks, 1u);
+        atomicAdd(&diagnostic_summary->predicate_probes, 1u);
         atomicAdd(&diagnostic_summary->candidate_attempts, 1u);
         atomicAdd(&diagnostic_summary->candidate_evaluations, 1u);
         atomicAdd(passes ? &diagnostic_summary->navix_first_hop_passing
@@ -372,6 +373,11 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_navix_candidates_jit(
             : (lead_lane ? raft::upper_bound<DistanceT>() : DistanceT{0});
     const auto distance = device::team_sum(partial, team_size_bits);
     __syncwarp();
+    if constexpr (DIAGNOSTICS) {
+      if (valid && lead_lane && diagnostic_summary != nullptr) {
+        atomicAdd(&diagnostic_summary->distance_evaluations, 1u);
+      }
+    }
     if (in_range && lead_lane) { output_distances[i] = distance; }
   }
   __syncthreads();
@@ -486,6 +492,7 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_navix_candidates_jit(
         if constexpr (DIAGNOSTICS) {
           if (diagnostic_summary != nullptr) {
             atomicAdd(&diagnostic_summary->navix_admitted_candidates, 1u);
+            atomicAdd(&diagnostic_summary->passing_admissions, 1u);
             const auto source = source_indices_ptr == nullptr ? static_cast<SourceIndexT>(child)
                                                               : source_indices_ptr[child];
             const auto gt_bit = navix_ground_truth_bit(diagnostic_context, query_id, source);
@@ -536,6 +543,7 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_navix_candidates_jit(
         if (lane == 0 && owns_row) {
           if (diagnostic_summary != nullptr) {
             atomicAdd(&diagnostic_summary->navix_bridge_rows_loaded, 1u);
+            atomicAdd(&diagnostic_summary->graph_rows_read, 1u);
             if (row_started_after_cap) {
               atomicAdd(&diagnostic_summary->navix_bridge_rows_after_cap, 1u);
             }
@@ -566,6 +574,7 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_navix_candidates_jit(
           if constexpr (DIAGNOSTICS) {
             if (diagnostic_summary != nullptr) {
               atomicAdd(&diagnostic_summary->navix_second_hop_checks, 1u);
+              atomicAdd(&diagnostic_summary->predicate_probes, 1u);
               atomicAdd(&diagnostic_summary->candidate_attempts, 1u);
               atomicAdd(&diagnostic_summary->candidate_evaluations, 1u);
               if (grandchild_passes[item]) {
@@ -641,6 +650,7 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_navix_candidates_jit(
                 if constexpr (DIAGNOSTICS) {
                   if (diagnostic_summary != nullptr) {
                     atomicAdd(&diagnostic_summary->navix_admitted_candidates, 1u);
+                    atomicAdd(&diagnostic_summary->passing_admissions, 1u);
                     const auto source = source_indices_ptr == nullptr
                                           ? static_cast<SourceIndexT>(grandchild)
                                           : source_indices_ptr[grandchild];
@@ -700,6 +710,11 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_navix_candidates_jit(
         : (lead_lane ? raft::upper_bound<DistanceT>() : DistanceT{0});
     const auto distance = device::team_sum(partial, team_size_bits);
     __syncwarp();
+    if constexpr (DIAGNOSTICS) {
+      if (valid && !has_distance && lead_lane && diagnostic_summary != nullptr) {
+        atomicAdd(&diagnostic_summary->distance_evaluations, 1u);
+      }
+    }
     if (in_range && lead_lane && !has_distance) { output_distances[i] = distance; }
   }
 }

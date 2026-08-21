@@ -1,0 +1,80 @@
+#+TITLE: RETRIEVE GPU Resource and Dynamic-Work Table
+
+* Purpose
+
+This experiment produces the mechanism-level table in the RETRIEVE paper.  It compares
+=default_cagra= (Base), =default_cagra_accumulator= (Retain), and =navix_reference= (NaviX) at the
+same =L=64=, =W=1=, automatic =B0= budget on fixed 1,000-query YFCC and ArXiv-EMIS samples.
+It is deliberately separate from throughput measurement:
+
+- schema-9 diagnostic kernels count dynamic work but are never timed;
+- production, non-diagnostic kernels supply registers, shared memory, launch size, and the
+  occupancy-API active-CTA limit;
+- the analyzer requires production and diagnostic recall to agree and enforces exact per-query
+  Base/Retain equality for graph rows, distance evaluations, and legal admissions.
+
+No public cuVS field or filter API is added.  The resource logger is enabled only by the
+benchmark-private =CUVS_CAGRA_LOG_RESOURCES= environment variable.
+
+* Counter definitions
+
+| Column | Definition |
+|-
+| Graph rows/query | Valid adjacency rows read for graph expansion. NaviX includes first-hop parent rows and second-hop bridge rows. |
+| Seed words/query | 32-bit packed-bitmap words loaded by NaviX's strict seed prepass for identity source IDs. It is reported separately from logical predicate probes. |
+| Predicate probes/query | Production-path logical bitmap/UDF tests during traversal and result handling. Diagnostic-only rechecks are excluded. |
+| Distance evaluations/query | Actual query-to-vector distance calls, after visited/cap rejection where applicable. |
+| Legal admissions/query | Filter-passing unique candidates admitted after visited/cap handling. The ten initial NaviX seeds are excluded. |
+| Registers/thread | =cudaFuncGetAttributes= on the corresponding production JIT kernel. |
+| Dynamic SMEM | Production launch dynamic shared memory. The paper also reports the byte delta from Base. |
+| Active CTAs/SM | =cudaOccupancyMaxActiveBlocksPerMultiprocessor= for the production launch. This is a resource ceiling, not a measured achieved-occupancy percentage. |
+
+The 1,000-query diagnostic configs use =max_queries=1024= solely so the existing session writes
+one complete capture rather than overwriting a 512-query chunk with the final 488 queries.
+Production resource configs retain the paper's normal =max_queries=512=.  This host scheduling
+cap does not change per-query traversal, kernel resources, =L=, =W=, or =B0=.
+
+* Build and run
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter-retrieve
+cmake --build cpp/build --parallel 16 --target \
+  NEIGHBORS_ANN_CAGRA_FILTER_BITMAP_TEST CUVS_CAGRA_ANN_BENCH
+
+env LD_PRELOAD=/home/ubuntu/cuvs-filter-retrieve/cpp/build/libcuvs.so \
+  cpp/build/gtests/NEIGHBORS_ANN_CAGRA_FILTER_BITMAP_TEST --gtest_color=no
+
+export RETRIEVE_RESOURCE_WORK_ROOT=/home/ubuntu/retrieve_workshop_runs/resource_work_<UTC_TAG>
+export RETRIEVE_DATA_ROOT=/home/ubuntu/cuvs-filter/datasets
+benchmarks/retrieve_workshop/resource_work/run.sh all
+#+end_src
+
+Stages =generate=, =resources=, =diagnostics=, and =analyze= may be run separately against the
+same explicit root.  Raw results are never overwritten unless =RETRIEVE_ALLOW_OVERWRITE=1= is set;
+do not set it for a paper run.  =capture_provenance.py= binds the executable, =libcuvs=, GPU, Git
+state, and all six instrumented source files.  =analyze.py= SHA-256-binds every table input.
+
+* Frozen paper result
+
+The accepted run is
+=/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z=.  A compact copy of
+all table inputs and outputs is checked in under
+=benchmarks/retrieve_workshop/evidence/gpu_resource_work_schema9/=.  The analyzer reports:
+
+| Workload | Method | Graph rows | Seed words | Predicate probes | Distance evals | Legal admissions | Threads | Regs | Dynamic SMEM | CTAs/SM |
+|-
+| YFCC | Base | 68.0 | 0.0 | 168.2 | 3,088.8 | 92.9 | 64 | 64 | 2,121 | 16 |
+| YFCC | Retain | 68.0 | 0.0 | 2,206.7 | 3,088.8 | 92.9 | 64 | 64 | 2,205 (+84) | 16 |
+| YFCC | NaviX | 3,228.1 | 6,570.6 | 206,596.7 | 2,224.3 | 1,093.3 | 64 | 63 | 2,388 (+267) | 16 |
+| EMIS | Base | 67.9 | 0.0 | 145.1 | 1,223.7 | 215.8 | 256 | 64 | 17,225 | 4 |
+| EMIS | Retain | 67.9 | 0.0 | 866.3 | 1,223.7 | 215.8 | 256 | 64 | 17,309 (+84) | 4 |
+| EMIS | NaviX | 662.5 | 33.2 | 21,198.8 | 1,556.5 | 1,033.0 | 256 | 64 | 17,364 (+139) | 4 |
+
+Retain therefore changes result preservation, not traversal: Base and Retain have identical graph
+rows, distance work, and legal admissions and use the same registers and active CTAs/SM.  NaviX
+also does not lower the resource-limited active-CTA ceiling.  Its weakness on YFCC is dynamic work
+quality: it reads 4.87 times the graph rows and issues 9.75 times the traversal probes used on EMIS,
+but admits only 1.06 times as many legal children.  Legal admissions per probe are 0.529% on YFCC
+and 4.873% on EMIS, a 9.2-times yield gap.  Moreover, NaviX performs fewer vector distance
+evaluations than Base on YFCC; sparse two-hop graph inspection and bitmap testing, not vector
+arithmetic or static occupancy, dominate that case.

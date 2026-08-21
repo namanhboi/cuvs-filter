@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "experiment": "retrieve_gpu_resource_work",
+  "diagnostic_schema_version": 9,
+  "workloads": [
+    "yfcc",
+    "emis"
+  ],
+  "methods": [
+    "default_cagra",
+    "default_cagra_accumulator",
+    "navix_reference"
+  ],
+  "queries": 1000,
+  "itopk": 64,
+  "search_width": 1,
+  "max_iterations": 0,
+  "configs": {
+    "yfcc": {
+      "resources": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/configs/resources/yfcc.json",
+      "diagnostics": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/configs/diagnostics/yfcc.json"
+    },
+    "emis": {
+      "resources": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/configs/resources/emis.json",
+      "diagnostics": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/configs/diagnostics/emis.json"
+    }
+  }
+}
