@@ -12,7 +12,10 @@
 
 namespace {
 
+// CMake replaces this token before CUDA compilation; keep clang-format from splitting it.
+// clang-format off
 using data_t = @data_type@;
+// clang-format on
 
 }
 
@@ -173,7 +176,9 @@ CUVS_EXPORT void benchmark_search_navix_udf<data_t>(
   auto const* udf_filter =
     dynamic_cast<cuvs::neighbors::filtering::udf_filter const*>(&sample_filter);
   RAFT_EXPECTS(udf_filter != nullptr, "benchmark_search_navix_udf requires a UDF filter");
-  RAFT_EXPECTS(index.graph().extent(1) == 32, "NaviX currently requires a degree-32 CAGRA graph");
+  const auto graph_degree = index.graph().extent(1);
+  RAFT_EXPECTS(graph_degree == 32 || graph_degree == 64,
+               "NaviX currently requires a degree-32 or degree-64 CAGRA graph");
 
   auto params_copy           = params;
   params_copy.algo           = search_algo::SINGLE_CTA;
@@ -196,7 +201,9 @@ auto validate_navix_bitmap(
 {
   auto const* bitmap = dynamic_cast<BitmapFilterT const*>(&sample_filter);
   RAFT_EXPECTS(bitmap != nullptr, "benchmark bitmap search requires a uint32 bitmap filter");
-  RAFT_EXPECTS(index.graph().extent(1) == 32, "NaviX currently requires a degree-32 CAGRA graph");
+  const auto graph_degree = index.graph().extent(1);
+  RAFT_EXPECTS(graph_degree == 32 || graph_degree == 64,
+               "NaviX currently requires a degree-32 or degree-64 CAGRA graph");
   RAFT_EXPECTS(query_offset + static_cast<std::uint64_t>(queries.extent(0)) <=
                  static_cast<std::uint64_t>(bitmap->view().get_n_rows()),
                "benchmark bitmap does not cover the requested query range");

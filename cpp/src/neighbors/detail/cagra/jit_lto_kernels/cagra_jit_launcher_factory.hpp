@@ -43,7 +43,8 @@ std::shared_ptr<AlgorithmLauncher> build_single_cta_launcher(
   bool favor,
   bool diagnostics,
   bool navix,
-  bool bitmap_seeded)
+  bool bitmap_seeded,
+  std::uint32_t graph_degree)
 {
   single_cta_search::CagraSingleCtaSearchPlanner<DataTag,
                                                  IndexTag,
@@ -86,7 +87,7 @@ std::shared_ptr<AlgorithmLauncher> build_single_cta_launcher(
                                                      bitonic_sort_and_merge_multi_warps);
   } else if (navix) {
     planner.add_navix_search_kernel_fragment(
-      topk_by_bitonic_sort, bitonic_sort_and_merge_multi_warps, diagnostics);
+      topk_by_bitonic_sort, bitonic_sort_and_merge_multi_warps, diagnostics, graph_degree);
   } else if (favor) {
     planner.add_favor_search_kernel_fragment(
       topk_by_bitonic_sort, bitonic_sort_and_merge_multi_warps, diagnostics);
@@ -255,7 +256,8 @@ std::shared_ptr<AlgorithmLauncher> make_cagra_single_cta_jit_launcher(
   bool favor                                                    = false,
   bool diagnostics                                              = false,
   bool navix                                                    = false,
-  bool bitmap_seeded                                            = false)
+  bool bitmap_seeded                                            = false,
+  std::uint32_t graph_degree                                    = 0)
 {
   RAFT_EXPECTS(!(bitmap_seeded && (persistent || favor || diagnostics || navix)),
                "bitmap-seeded CAGRA requires a dedicated nonpersistent default fragment");
@@ -286,7 +288,8 @@ std::shared_ptr<AlgorithmLauncher> make_cagra_single_cta_jit_launcher(
       favor,
       diagnostics,
       navix,
-      bitmap_seeded);
+      bitmap_seeded,
+      graph_degree);
   }
   using CodebookTag = codebook_tag_standard_t;
   if (dataset_desc.metric == cuvs::distance::DistanceType::BitwiseHamming) {
@@ -311,7 +314,8 @@ std::shared_ptr<AlgorithmLauncher> make_cagra_single_cta_jit_launcher(
       favor,
       diagnostics,
       navix,
-      bitmap_seeded);
+      bitmap_seeded,
+      graph_degree);
   }
   using QueryTag = query_type_tag_standard_t<DataTag, cuvs::distance::DistanceType::L2Expanded>;
   return cagra_jit_launcher_factory_detail::build_single_cta_launcher<DataTag,
@@ -333,7 +337,8 @@ std::shared_ptr<AlgorithmLauncher> make_cagra_single_cta_jit_launcher(
     favor,
     diagnostics,
     navix,
-    bitmap_seeded);
+    bitmap_seeded,
+    graph_degree);
 }
 
 /// Build a JIT AlgorithmLauncher for multi-CTA CAGRA search.

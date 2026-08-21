@@ -882,7 +882,8 @@ void select_and_run(
                   "NaviX and default-CAGRA bitmap seeding use separate filter traits");
     if constexpr (navix) {
       RAFT_EXPECTS(!favor, "NaviX is a separate default-mode traversal specialization");
-      RAFT_EXPECTS(graph.extent(1) == 32, "NaviX SINGLE_CTA currently requires graph degree 32");
+      RAFT_EXPECTS(graph.extent(1) == 32 || graph.extent(1) == 64,
+                   "NaviX SINGLE_CTA requires graph degree 32 or 64");
     }
     if (diagnostics) {
       RAFT_LOG_INFO("Selecting dedicated SINGLE_CTA %s diagnostic fragment",
@@ -902,7 +903,8 @@ void select_and_run(
         favor,
         diagnostics,
         navix,
-        bitmap_seeded);
+        bitmap_seeded,
+        static_cast<std::uint32_t>(graph.extent(1)));
     if (!launcher) { RAFT_FAIL("Failed to get JIT launcher for CAGRA search kernel"); }
 
     if constexpr (navix) {

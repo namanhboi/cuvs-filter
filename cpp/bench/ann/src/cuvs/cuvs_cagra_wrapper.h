@@ -520,8 +520,8 @@ void cuvs_cagra<T, IdxT>::set_search_param(const search_param_base& param,
                  "The benchmark-only NaviX path does not support dynamic batching");
     RAFT_EXPECTS(sp.refine_ratio == 1.0f,
                  "The benchmark-only NaviX path does not support refinement");
-    RAFT_EXPECTS(index_->graph().extent(1) == 32,
-                 "The benchmark-only NaviX path currently requires graph_degree=32");
+    RAFT_EXPECTS(index_->graph().extent(1) == 32 || index_->graph().extent(1) == 64,
+                 "The benchmark-only NaviX path requires graph_degree=32 or 64");
     RAFT_EXPECTS(!favor_udf_passing_accumulator_,
                  "NaviX owns the passing frontier and cannot use the result accumulator");
     RAFT_EXPECTS(!sp.favor_retry_diagnostics.enabled(),

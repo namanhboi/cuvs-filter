@@ -37,13 +37,25 @@ class DatasetPaths:
     base_file: str
     index_file: str
     dtype: str
+    graph_degree: int
+    intermediate_graph_degree: int
 
 
-def dataset_paths(data_root: Path, workload: str, phase: str) -> DatasetPaths:
+def dataset_paths(
+    data_root: Path,
+    workload: str,
+    phase: str,
+    yfcc_graph_degree: int,
+) -> DatasetPaths:
     if workload not in WORKLOADS:
         raise ValueError(f"unknown workload {workload!r}")
     sample_count = "1000" if phase == "correctness" else "10000"
     if workload == "yfcc":
+        if yfcc_graph_degree not in (32, 64):
+            raise ValueError(
+                "YFCC graph degree must be 32 (sensitivity) or 64 (primary)"
+            )
+        intermediate_graph_degree = 2 * yfcc_graph_degree
         return DatasetPaths(
             data_root
             / "navix_bitmap"
@@ -51,8 +63,13 @@ def dataset_paths(data_root: Path, workload: str, phase: str) -> DatasetPaths:
             / f"{phase}_{sample_count}"
             / "manifest.json",
             "yfcc-10M/base.10M.u8bin",
-            "yfcc-10M/cagra_g32_ig64.index",
+            (
+                "yfcc-10M/"
+                f"cagra_g{yfcc_graph_degree}_ig{intermediate_graph_degree}.index"
+            ),
             "uint8",
+            yfcc_graph_degree,
+            intermediate_graph_degree,
         )
     return DatasetPaths(
         data_root
@@ -64,6 +81,8 @@ def dataset_paths(data_root: Path, workload: str, phase: str) -> DatasetPaths:
         "arxiv-for-fanns-medium/base.fbin",
         "arxiv-for-fanns-medium/cagra_g32_ig64.index",
         "float",
+        32,
+        64,
     )
 
 
@@ -140,13 +159,18 @@ def config_payload(
         "search_basic_param": {"batch_size": query_count, "k": K},
         "index": [
             {
-                "name": "cagra-g32-ig64",
+                "name": (
+                    f"cagra-g{paths.graph_degree}-"
+                    f"ig{paths.intermediate_graph_degree}"
+                ),
                 "algo": "cuvs_cagra",
                 "file": paths.index_file,
                 "build_param": {
                     "graph_build_algo": "NN_DESCENT",
-                    "graph_degree": 32,
-                    "intermediate_graph_degree": 64,
+                    "graph_degree": paths.graph_degree,
+                    "intermediate_graph_degree": (
+                        paths.intermediate_graph_degree
+                    ),
                 },
                 "search_params": searches,
             }
@@ -162,8 +186,11 @@ def write_group(
     workload: str,
     phase: str,
     searches: list[dict],
+    yfcc_graph_degree: int,
 ) -> None:
-    paths = dataset_paths(data_root, workload, phase)
+    paths = dataset_paths(
+        data_root, workload, phase, yfcc_graph_degree
+    )
     if not paths.manifest.is_file():
         raise FileNotFoundError(paths.manifest)
     source_manifest = json.loads(paths.manifest.read_text())
@@ -227,6 +254,8 @@ def write_group(
         "workload": workload,
         "k": K,
         "max_queries": MAX_QUERIES,
+        "graph_degree": paths.graph_degree,
+        "intermediate_graph_degree": paths.intermediate_graph_degree,
         "repetitions": (
             CORRECTNESS_REPETITIONS
             if phase == "correctness"
@@ -270,6 +299,16 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--data-root", type=Path, required=True)
     parser.add_argument(
+        "--yfcc-graph-degree",
+        type=int,
+        choices=(32, 64),
+        default=64,
+        help=(
+            "YFCC CAGRA degree: 64 is the primary paper configuration; "
+            "32 is retained only for graph-degree sensitivity"
+        ),
+    )
+    parser.add_argument(
         "--deep-pair",
         action="append",
         default=[],
@@ -299,6 +338,7 @@ def main() -> None:
             workload=workload,
             phase="correctness",
             searches=correctness_searches,
+            yfcc_graph_degree=args.yfcc_graph_degree,
         )
         write_group(
             args.output,
@@ -307,6 +347,7 @@ def main() -> None:
             workload=workload,
             phase="throughput",
             searches=b0_searches,
+            yfcc_graph_degree=args.yfcc_graph_degree,
         )
 
     deep_pairs = parse_deep_pairs(args)
@@ -348,6 +389,7 @@ def main() -> None:
                         search_point(method, itopk, width, iterations)
                         for itopk, width in DEEP_CELLS
                     ],
+                    yfcc_graph_degree=args.yfcc_graph_degree,
                 )
 
 

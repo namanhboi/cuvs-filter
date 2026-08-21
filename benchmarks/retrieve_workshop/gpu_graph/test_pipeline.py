@@ -43,6 +43,7 @@ def make_source_manifests(root: Path) -> None:
     for relative in (
         "yfcc-10M/base.10M.u8bin",
         "yfcc-10M/cagra_g32_ig64.index",
+        "yfcc-10M/cagra_g64_ig128.index",
         "arxiv-for-fanns-medium/base.fbin",
         "arxiv-for-fanns-medium/cagra_g32_ig64.index",
     ):
@@ -226,6 +227,8 @@ class PipelineTest(unittest.TestCase):
             self.assertEqual(b0["expected_queries"], 10_000)
             self.assertEqual(b0["expected_shards"], 5)
             self.assertEqual(b0["repetitions"], 3)
+            self.assertEqual(b0["graph_degree"], 64)
+            self.assertEqual(b0["intermediate_graph_degree"], 128)
             self.assertEqual(len(b0["search_points"]), 30)
             self.assertEqual(
                 {row["method"] for row in b0["search_points"]},
@@ -238,6 +241,11 @@ class PipelineTest(unittest.TestCase):
                 },
             )
             config = json.loads(Path(b0["configs"][0]["config"]).read_text())
+            self.assertEqual(config["index"][0]["name"], "cagra-g64-ig128")
+            self.assertEqual(
+                config["index"][0]["file"],
+                "yfcc-10M/cagra_g64_ig128.index",
+            )
             searches = config["index"][0]["search_params"]
             navix = [
                 row
@@ -297,6 +305,23 @@ class PipelineTest(unittest.TestCase):
                     {"workload": "yfcc", "method": "default_cagra"},
                 ],
             )
+
+            d32_root = root / "d32"
+            generate(d32_root, data, "--yfcc-graph-degree", "32")
+            d32_manifest = json.loads(
+                (
+                    d32_root
+                    / "configs"
+                    / "b0"
+                    / "yfcc"
+                    / "manifest.json"
+                ).read_text()
+            )
+            self.assertEqual(d32_manifest["graph_degree"], 32)
+            d32_config = json.loads(
+                Path(d32_manifest["configs"][0]["config"]).read_text()
+            )
+            self.assertEqual(d32_config["index"][0]["name"], "cagra-g32-ig64")
 
     def test_analyzer_keeps_repetitions_separate_before_serial_shard_sum(
         self,

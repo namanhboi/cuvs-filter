@@ -92,7 +92,8 @@ template <typename DataTag,
           typename IndexTag,
           typename DistanceTag,
           bool TopkByBitonicSort,
-          bool BitonicSortAndMergeMultiWarps>
+          bool BitonicSortAndMergeMultiWarps,
+          uint32_t GraphDegree>
 struct fragment_tag_search_single_cta_navix {};
 
 template <typename DataTag,
@@ -100,7 +101,8 @@ template <typename DataTag,
           typename IndexTag,
           typename DistanceTag,
           bool TopkByBitonicSort,
-          bool BitonicSortAndMergeMultiWarps>
+          bool BitonicSortAndMergeMultiWarps,
+          uint32_t GraphDegree>
 struct fragment_tag_search_single_cta_navix_diagnostic {};
 
 template <typename DataTag,

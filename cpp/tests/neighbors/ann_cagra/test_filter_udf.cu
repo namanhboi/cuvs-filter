@@ -115,6 +115,8 @@ void expect_same_results(cagra_search_result const& expected, cagra_search_resul
 
 class CagraUdfFilterTest : public ::testing::TestWithParam<cagra::search_algo> {
  protected:
+  virtual std::uint32_t graph_degree() const { return 32; }
+
   void SetUp() override
   {
     dataset.emplace(raft::make_device_matrix<float, int64_t>(res, n_rows, n_dim));
@@ -126,8 +128,8 @@ class CagraUdfFilterTest : public ::testing::TestWithParam<cagra::search_algo> {
 
     cagra::index_params index_params;
     index_params.metric                    = cuvs::distance::DistanceType::L2Expanded;
-    index_params.graph_degree              = 32;
-    index_params.intermediate_graph_degree = 64;
+    index_params.graph_degree              = graph_degree();
+    index_params.intermediate_graph_degree = 2 * graph_degree();
     index_params.graph_build_params =
       cagra::graph_build_params::nn_descent_params(index_params.intermediate_graph_degree);
 
@@ -275,6 +277,11 @@ class CagraUdfFilterTest : public ::testing::TestWithParam<cagra::search_algo> {
   std::optional<raft::device_matrix<float, int64_t>> dataset = std::nullopt;
   std::optional<raft::device_matrix<float, int64_t>> queries = std::nullopt;
   std::optional<cagra::index<float, uint32_t>> index         = std::nullopt;
+};
+
+class CagraUdfFilterDegree64Test : public CagraUdfFilterTest {
+ protected:
+  std::uint32_t graph_degree() const override { return 64; }
 };
 
 class CagraUdfFilterHalfTest : public ::testing::TestWithParam<cagra::search_algo> {
@@ -702,6 +709,54 @@ TEST_P(CagraUdfFilterTest, NavixHonorsQueryOffsetsAndSchedulerOrdering)
   }
 }
 
+TEST_P(CagraUdfFilterDegree64Test, NavixAcceptAllOneHopMatchesDefault)
+{
+  cuvs::neighbors::filtering::udf_filter udf_filter(accept_all_udf_source(), nullptr, 0.0f);
+  const auto expected = search(udf_filter, 0.0f);
+  const auto actual   = search_navix(udf_filter, navix_one_hop_policy);
+  expect_same_results(expected, actual);
+}
+
+TEST_P(CagraUdfFilterDegree64Test, NavixPoliciesReturnOnlyPassingUniqueSortedRows)
+{
+  cuvs::neighbors::filtering::udf_filter udf_filter(
+    threshold_udf_source(), nullptr, static_cast<float>(threshold) / static_cast<float>(n_rows));
+  for (const auto policy : {navix_adaptive_kuzu_policy,
+                            navix_one_hop_policy,
+                            navix_directed_capped_policy,
+                            navix_blind_capped_policy,
+                            navix_adaptive_paper_policy}) {
+    const auto result = search_navix(udf_filter, policy);
+    for (int64_t query = 0; query < n_queries; ++query) {
+      std::vector<std::uint32_t> seen;
+      float previous_distance = -std::numeric_limits<float>::infinity();
+      std::uint32_t previous_id{};
+      for (int64_t rank = 0; rank < k; ++rank) {
+        const auto pos       = static_cast<std::size_t>(query * k + rank);
+        const auto source_id = result.neighbors[pos];
+        ASSERT_LT(source_id, static_cast<std::uint32_t>(n_rows));
+        EXPECT_GE(source_id, static_cast<std::uint32_t>(threshold));
+        EXPECT_GE(result.distances[pos], previous_distance);
+        if (result.distances[pos] == previous_distance) { EXPECT_GT(source_id, previous_id); }
+        EXPECT_EQ(std::find(seen.begin(), seen.end(), source_id), seen.end());
+        seen.push_back(source_id);
+        previous_distance = result.distances[pos];
+        previous_id       = source_id;
+      }
+    }
+  }
+}
+
+TEST_P(CagraUdfFilterDegree64Test, NavixTiledSchedulerMatchesSerialReference)
+{
+  cuvs::neighbors::filtering::udf_filter udf_filter(
+    threshold_udf_source(), nullptr, static_cast<float>(threshold) / static_cast<float>(n_rows));
+  const auto tiled = search_navix(udf_filter, navix_directed_capped_policy);
+  const auto serial =
+    search_navix(udf_filter, navix_directed_capped_policy | navix_serial_scheduler_mask);
+  expect_same_results(tiled, serial);
+}
+
 INSTANTIATE_TEST_CASE_P(CagraUdfFilters,
                         CagraUdfFilterTest,
                         ::testing::Values(cagra::search_algo::SINGLE_CTA,
@@ -713,6 +768,10 @@ INSTANTIATE_TEST_CASE_P(CagraUdfFilterHalf,
                         ::testing::Values(cagra::search_algo::SINGLE_CTA,
                                           cagra::search_algo::MULTI_CTA,
                                           cagra::search_algo::MULTI_KERNEL));
+
+INSTANTIATE_TEST_CASE_P(CagraUdfDegree64,
+                        CagraUdfFilterDegree64Test,
+                        ::testing::Values(cagra::search_algo::SINGLE_CTA));
 
 }  // namespace
 }  // namespace cuvs::neighbors::cagra

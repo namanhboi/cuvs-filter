@@ -30,27 +30,42 @@ enum class navix_policy : std::uint32_t {
 
 constexpr std::uint32_t navix_serial_scheduler_mask = std::uint32_t{1} << 8;
 
-RAFT_DEVICE_INLINE_FUNCTION auto resolve_navix_policy(std::uint32_t requested,
+template <std::uint32_t GRAPH_DEGREE>
+_RAFT_HOST_DEVICE constexpr auto resolve_navix_policy(std::uint32_t requested,
                                                       std::uint32_t passing_first_hop)
   -> navix_policy
 {
+  static_assert(GRAPH_DEGREE == 32 || GRAPH_DEGREE == 64,
+                "NaviX supports degree-32 and degree-64 CAGRA graphs");
   const auto mode = static_cast<navix_policy>(requested & 0xffu);
   if (mode == navix_policy::one_hop || mode == navix_policy::directed_capped ||
       mode == navix_policy::blind_capped) {
     return mode;
   }
   if (mode == navix_policy::adaptive_paper) {
-    // Paper thresholds for a degree-32 graph.
-    return passing_first_hop >= 16  ? navix_policy::one_hop
-           : passing_first_hop <= 2 ? navix_policy::blind_capped
-                                    : navix_policy::directed_capped;
+    // The original global-policy thresholds are 0.5 and 0.08. Use exact integer comparisons so
+    // degree specialization cannot change a boundary through floating-point rounding.
+    return 2u * passing_first_hop >= GRAPH_DEGREE         ? navix_policy::one_hop
+           : 25u * passing_first_hop <= 2u * GRAPH_DEGREE ? navix_policy::blind_capped
+                                                          : navix_policy::directed_capped;
   }
-  // The released Kuzu implementation uses local selectivity >= 0.4 for one hop and its
-  // distance-work inequality selects blind expansion at P <= 4 for degree 32.
-  return passing_first_hop >= 13  ? navix_policy::one_hop
-         : passing_first_hop <= 4 ? navix_policy::blind_capped
-                                  : navix_policy::directed_capped;
+  // The released Kuzu implementation uses local selectivity P/D >= 0.4 for one hop. Below that
+  // threshold it compares 0.4*P*(D+1) full-two-hop work against 2D-P directed work.
+  if (5u * passing_first_hop >= 2u * GRAPH_DEGREE) { return navix_policy::one_hop; }
+  return 2u * passing_first_hop * (GRAPH_DEGREE + 1u) <=
+             5u * (2u * GRAPH_DEGREE - passing_first_hop)
+           ? navix_policy::blind_capped
+           : navix_policy::directed_capped;
 }
+
+static_assert(resolve_navix_policy<32>(0, 4) == navix_policy::blind_capped);
+static_assert(resolve_navix_policy<32>(0, 5) == navix_policy::directed_capped);
+static_assert(resolve_navix_policy<32>(0, 12) == navix_policy::directed_capped);
+static_assert(resolve_navix_policy<32>(0, 13) == navix_policy::one_hop);
+static_assert(resolve_navix_policy<64>(0, 4) == navix_policy::blind_capped);
+static_assert(resolve_navix_policy<64>(0, 5) == navix_policy::directed_capped);
+static_assert(resolve_navix_policy<64>(0, 25) == navix_policy::directed_capped);
+static_assert(resolve_navix_policy<64>(0, 26) == navix_policy::one_hop);
 
 /**
  * Retain only passing nodes in a candidate batch and publish their count CTA-wide.
@@ -206,7 +221,8 @@ RAFT_DEVICE_INLINE_FUNCTION void capture_navix_seed_batch(
  * row and its 32 lanes hold the grandchildren in registers; rows are committed in bridge order to
  * preserve capped blind/directed semantics.
  */
-template <bool DIAGNOSTICS,
+template <std::uint32_t GRAPH_DEGREE,
+          bool DIAGNOSTICS,
           typename IndexT,
           typename DistanceT,
           typename DataT,
@@ -231,16 +247,17 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_navix_candidates_jit(
   favor_search_diagnostics::iteration_record* diagnostic_record = nullptr,
   favor_search_diagnostics::context* diagnostic_context         = nullptr)
 {
-  constexpr IndexT invalid_index    = ~static_cast<IndexT>(0);
-  constexpr IndexT index_msb_1_mask = utils::gen_index_msb_1_mask<IndexT>::value;
-  const auto candidate_count        = search_width * graph_degree;
-  const auto lane                   = static_cast<std::uint32_t>(threadIdx.x) & 31u;
-  const auto warp                   = static_cast<std::uint32_t>(threadIdx.x) >> 5u;
-  const auto num_warps              = static_cast<std::uint32_t>(blockDim.x) >> 5u;
+  static_assert(GRAPH_DEGREE == 32 || GRAPH_DEGREE == 64,
+                "NaviX supports degree-32 and degree-64 CAGRA graphs");
+  constexpr std::uint32_t items_per_lane = GRAPH_DEGREE / device::warp_size;
+  constexpr IndexT invalid_index         = ~static_cast<IndexT>(0);
+  constexpr IndexT index_msb_1_mask      = utils::gen_index_msb_1_mask<IndexT>::value;
+  const auto candidate_count             = search_width * GRAPH_DEGREE;
+  const auto lane                        = static_cast<std::uint32_t>(threadIdx.x) & 31u;
+  const auto warp                        = static_cast<std::uint32_t>(threadIdx.x) >> 5u;
+  const auto num_warps                   = static_cast<std::uint32_t>(blockDim.x) >> 5u;
 
-  // Degree 32 is the deliberately narrow first implementation. It maps a neighbor row exactly
-  // onto a warp and is the configuration used by the filtered datasets in this experiment.
-  assert(graph_degree == 32);
+  assert(graph_degree == GRAPH_DEGREE);
   assert((blockDim.x & 31u) == 0);
 
   auto* bridge_ids      = reinterpret_cast<IndexT*>(work_ptr);
@@ -253,12 +270,12 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_navix_candidates_jit(
     output_distances[i] = raft::upper_bound<DistanceT>();
     bridge_ids[i]       = invalid_index;
 
-    const auto parent_number = i / graph_degree;
+    const auto parent_number = i / GRAPH_DEGREE;
     const auto parent_pos    = parent_positions[parent_number];
     if (parent_pos == invalid_index) { continue; }
     const auto parent = internal_topk_list[parent_pos] & ~index_msb_1_mask;
     const auto child =
-      knn_graph[static_cast<std::uint64_t>(parent) * graph_degree + (i % graph_degree)];
+      knn_graph[static_cast<std::uint64_t>(parent) * GRAPH_DEGREE + (i % GRAPH_DEGREE)];
     if (child == invalid_index) { continue; }
     const auto source =
       source_indices_ptr == nullptr ? static_cast<SourceIndexT>(child) : source_indices_ptr[child];
@@ -296,15 +313,19 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_navix_candidates_jit(
 
   // Resolve the local policy from all D predicate outcomes, before visited suppression.
   for (std::uint32_t p = warp; p < search_width; p += num_warps) {
-    const auto tagged       = output_indices[p * graph_degree + lane];
-    const bool pass         = tagged != invalid_index && ((tagged & index_msb_1_mask) != 0);
-    const auto passing_mask = __ballot_sync(0xffffffffu, pass);
+    std::uint32_t passing_count = 0;
+#pragma unroll
+    for (std::uint32_t item = 0; item < items_per_lane; ++item) {
+      const auto tagged = output_indices[p * GRAPH_DEGREE + item * device::warp_size + lane];
+      const bool pass   = tagged != invalid_index && ((tagged & index_msb_1_mask) != 0);
+      passing_count += static_cast<std::uint32_t>(__popc(__ballot_sync(0xffffffffu, pass)));
+    }
     if (lane == 0) {
-      const auto passing_count = static_cast<std::uint32_t>(__popc(passing_mask));
-      const bool valid_parent  = parent_positions[p] != invalid_index;
-      const auto policy  = valid_parent ? resolve_navix_policy(requested_policy, passing_count)
-                                        : navix_policy::one_hop;
-      parent_policies[p] = static_cast<std::uint32_t>(policy);
+      const bool valid_parent = parent_positions[p] != invalid_index;
+      const auto policy       = valid_parent
+                                  ? resolve_navix_policy<GRAPH_DEGREE>(requested_policy, passing_count)
+                                  : navix_policy::one_hop;
+      parent_policies[p]      = static_cast<std::uint32_t>(policy);
       if constexpr (DIAGNOSTICS) {
         if (valid_parent && diagnostic_summary != nullptr) {
           atomicAdd(&diagnostic_summary->navix_local_p_histogram[passing_count], 1u);
@@ -341,7 +362,7 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_navix_candidates_jit(
     const bool in_range = i < candidate_count;
     const auto tagged   = in_range ? output_indices[i] : invalid_index;
     const auto child    = tagged & ~index_msb_1_mask;
-    const bool directed = in_range && parent_policies[i / graph_degree] ==
+    const bool directed = in_range && parent_policies[i / GRAPH_DEGREE] ==
                                         static_cast<std::uint32_t>(navix_policy::directed_capped);
     const bool valid =
       directed && tagged != invalid_index && child != (invalid_index & ~index_msb_1_mask);
@@ -358,85 +379,141 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_navix_candidates_jit(
   // One warp arranges each first-hop row. Multiple parents are processed concurrently when W and
   // the resident warp count allow it.
   for (std::uint32_t p = warp; p < search_width; p += num_warps) {
-    const auto offset = p * graph_degree + lane;
-    DistanceT keys[1] = {output_distances[offset]};
-    IndexT vals[1]    = {output_indices[offset]};
     const auto policy = static_cast<navix_policy>(parent_policies[p]);
+    DistanceT keys[items_per_lane];
+    IndexT vals[items_per_lane];
+#pragma unroll
+    for (std::uint32_t item = 0; item < items_per_lane; ++item) {
+      // warp_sort<N> linearizes items lane-major. Load directed rows in that layout so the sorted
+      // sequence remains distance ordered when compacted. Non-directed rows retain the graph's
+      // natural chunk-major order and use coalesced shared-memory reads.
+      const auto row_slot = policy == navix_policy::directed_capped
+                              ? lane * items_per_lane + item
+                              : item * device::warp_size + lane;
+      keys[item]          = output_distances[p * GRAPH_DEGREE + row_slot];
+      vals[item]          = output_indices[p * GRAPH_DEGREE + row_slot];
+    }
     if (policy == navix_policy::directed_capped) {
-      bitonic::warp_sort<DistanceT, IndexT, 1>(keys, vals);
+      bitonic::warp_sort<DistanceT, IndexT, items_per_lane>(keys, vals);
     }
 
-    const auto tagged = vals[0];
-    const auto child  = tagged & ~index_msb_1_mask;
-    const bool valid  = tagged != invalid_index && child != (invalid_index & ~index_msb_1_mask);
-    const bool passes = valid && ((tagged & index_msb_1_mask) != 0);
-    // One-hop mode ignores rejected neighbors, so leave them unvisited. The same row may be a
-    // useful transient bridge if it is encountered later under a parent that selects two hops.
-    const bool needs_visit = passes || policy != navix_policy::one_hop;
-    bool inserted          = false;
-    auto insert_result     = hashmap::insert_outcome::duplicate;
-    if (valid && needs_visit) {
-      if constexpr (DIAGNOSTICS) {
-        insert_result =
-          hashmap::insert_with_outcome(visited_hashmap_ptr, visited_hash_bitlen, child);
-        inserted = insert_result == hashmap::insert_outcome::inserted;
-        if (diagnostic_summary != nullptr) {
-          if (insert_result == hashmap::insert_outcome::duplicate) {
-            atomicAdd(&diagnostic_summary->candidate_duplicates, 1u);
-          } else if (insert_result == hashmap::insert_outcome::full) {
-            atomicAdd(&diagnostic_summary->candidate_hash_full, 1u);
+    bool inserted[items_per_lane];
+    bool passes[items_per_lane];
+    bool bridges[items_per_lane];
+    std::uint32_t passing_masks[items_per_lane];
+    std::uint32_t bridge_masks[items_per_lane];
+#pragma unroll
+    for (std::uint32_t item = 0; item < items_per_lane; ++item) {
+      const auto tagged = vals[item];
+      const auto child  = tagged & ~index_msb_1_mask;
+      const bool valid  = tagged != invalid_index && child != (invalid_index & ~index_msb_1_mask);
+      passes[item]      = valid && ((tagged & index_msb_1_mask) != 0);
+      // One-hop mode ignores rejected neighbors, so leave them unvisited. The same row may be a
+      // useful transient bridge if it is encountered later under a parent that selects two hops.
+      const bool needs_visit = passes[item] || policy != navix_policy::one_hop;
+      inserted[item]         = false;
+      if (valid && needs_visit) {
+        if constexpr (DIAGNOSTICS) {
+          const auto insert_result =
+            hashmap::insert_with_outcome(visited_hashmap_ptr, visited_hash_bitlen, child);
+          inserted[item] = insert_result == hashmap::insert_outcome::inserted;
+          if (diagnostic_summary != nullptr) {
+            if (insert_result == hashmap::insert_outcome::duplicate) {
+              atomicAdd(&diagnostic_summary->candidate_duplicates, 1u);
+            } else if (insert_result == hashmap::insert_outcome::full) {
+              atomicAdd(&diagnostic_summary->candidate_hash_full, 1u);
+              const auto source = source_indices_ptr == nullptr ? static_cast<SourceIndexT>(child)
+                                                                : source_indices_ptr[child];
+              const auto gt_bit = navix_ground_truth_bit(diagnostic_context, query_id, source);
+              if (gt_bit != 0) { atomicOr(&diagnostic_summary->navix_gt_hash_full_mask, gt_bit); }
+            }
+          }
+        } else {
+          inserted[item] = hashmap::insert(visited_hashmap_ptr, visited_hash_bitlen, child) != 0;
+        }
+      }
+      bridges[item] = inserted[item] && !passes[item] && policy != navix_policy::one_hop;
+    }
+
+#pragma unroll
+    for (std::uint32_t item = 0; item < items_per_lane; ++item) {
+      passing_masks[item] = __ballot_sync(0xffffffffu, inserted[item] && passes[item]);
+      bridge_masks[item]  = __ballot_sync(0xffffffffu, bridges[item]);
+    }
+    // Every lane already holds its tagged value in registers. Clear the original row before
+    // compacting so rejected and duplicate first-hop entries cannot leak past output_counts[p].
+#pragma unroll
+    for (std::uint32_t item = 0; item < items_per_lane; ++item) {
+      const auto offset        = p * GRAPH_DEGREE + item * device::warp_size + lane;
+      output_indices[offset]   = invalid_index;
+      output_distances[offset] = raft::upper_bound<DistanceT>();
+    }
+    __syncwarp();
+
+    const auto lower_lanes = (std::uint32_t{1} << lane) - 1u;
+#pragma unroll
+    for (std::uint32_t item = 0; item < items_per_lane; ++item) {
+      std::uint32_t passing_rank = 0;
+      std::uint32_t bridge_rank  = 0;
+      if (policy == navix_policy::directed_capped) {
+        // Sorted items are lane-major: count every item owned by earlier lanes, followed by the
+        // earlier items in this lane.
+#pragma unroll
+        for (std::uint32_t other = 0; other < items_per_lane; ++other) {
+          passing_rank += static_cast<std::uint32_t>(__popc(passing_masks[other] & lower_lanes));
+          bridge_rank += static_cast<std::uint32_t>(__popc(bridge_masks[other] & lower_lanes));
+        }
+#pragma unroll
+        for (std::uint32_t previous = 0; previous < item; ++previous) {
+          passing_rank += (passing_masks[previous] >> lane) & 1u;
+          bridge_rank += (bridge_masks[previous] >> lane) & 1u;
+        }
+      } else {
+        // Unsorted items are chunk-major, matching the graph row's natural order.
+#pragma unroll
+        for (std::uint32_t previous = 0; previous < item; ++previous) {
+          passing_rank += static_cast<std::uint32_t>(__popc(passing_masks[previous]));
+          bridge_rank += static_cast<std::uint32_t>(__popc(bridge_masks[previous]));
+        }
+        passing_rank += static_cast<std::uint32_t>(__popc(passing_masks[item] & lower_lanes));
+        bridge_rank += static_cast<std::uint32_t>(__popc(bridge_masks[item] & lower_lanes));
+      }
+
+      const auto child = vals[item] & ~index_msb_1_mask;
+      if (inserted[item] && passes[item]) {
+        output_indices[p * GRAPH_DEGREE + passing_rank]   = child;
+        output_distances[p * GRAPH_DEGREE + passing_rank] = keys[item];
+        if constexpr (DIAGNOSTICS) {
+          if (diagnostic_summary != nullptr) {
+            atomicAdd(&diagnostic_summary->navix_admitted_candidates, 1u);
             const auto source = source_indices_ptr == nullptr ? static_cast<SourceIndexT>(child)
                                                               : source_indices_ptr[child];
             const auto gt_bit = navix_ground_truth_bit(diagnostic_context, query_id, source);
-            if (gt_bit != 0) { atomicOr(&diagnostic_summary->navix_gt_hash_full_mask, gt_bit); }
+            if (gt_bit != 0) { atomicOr(&diagnostic_summary->navix_gt_admitted_mask, gt_bit); }
+          }
+          if (diagnostic_record != nullptr) {
+            atomicAdd(&diagnostic_record->navix_admitted_candidates, 1u);
           }
         }
-      } else {
-        inserted = hashmap::insert(visited_hashmap_ptr, visited_hash_bitlen, child) != 0;
       }
+      if (bridges[item]) { bridge_ids[p * GRAPH_DEGREE + bridge_rank] = child; }
     }
-
-    const auto passing_mask = __ballot_sync(0xffffffffu, inserted && passes);
-    const auto passing_rank =
-      static_cast<std::uint32_t>(__popc(passing_mask & ((std::uint32_t{1} << lane) - 1u)));
-
-    const bool bridge      = inserted && !passes && policy != navix_policy::one_hop;
-    const auto bridge_mask = __ballot_sync(0xffffffffu, bridge);
-    const auto bridge_rank =
-      static_cast<std::uint32_t>(__popc(bridge_mask & ((std::uint32_t{1} << lane) - 1u)));
-    // Every lane already holds its tagged value in registers. Clear the original row before
-    // compacting so rejected and duplicate first-hop entries cannot leak past output_counts[p].
-    output_indices[offset]   = invalid_index;
-    output_distances[offset] = raft::upper_bound<DistanceT>();
-    __syncwarp();
-    if (inserted && passes) {
-      output_indices[p * graph_degree + passing_rank]   = child;
-      output_distances[p * graph_degree + passing_rank] = keys[0];
-      if constexpr (DIAGNOSTICS) {
-        if (diagnostic_summary != nullptr) {
-          atomicAdd(&diagnostic_summary->navix_admitted_candidates, 1u);
-          const auto source = source_indices_ptr == nullptr ? static_cast<SourceIndexT>(child)
-                                                            : source_indices_ptr[child];
-          const auto gt_bit = navix_ground_truth_bit(diagnostic_context, query_id, source);
-          if (gt_bit != 0) { atomicOr(&diagnostic_summary->navix_gt_admitted_mask, gt_bit); }
-        }
-        if (diagnostic_record != nullptr) {
-          atomicAdd(&diagnostic_record->navix_admitted_candidates, 1u);
-        }
-      }
-    }
-    if (bridge) { bridge_ids[p * graph_degree + bridge_rank] = child; }
     if (lane == 0) {
-      output_counts[p] = static_cast<std::uint32_t>(__popc(passing_mask));
-      bridge_counts[p] = static_cast<std::uint32_t>(__popc(bridge_mask));
+      std::uint32_t passing_count = 0;
+      std::uint32_t bridge_count  = 0;
+#pragma unroll
+      for (std::uint32_t item = 0; item < items_per_lane; ++item) {
+        passing_count += static_cast<std::uint32_t>(__popc(passing_masks[item]));
+        bridge_count += static_cast<std::uint32_t>(__popc(bridge_masks[item]));
+      }
+      output_counts[p] = passing_count;
+      bridge_counts[p] = bridge_count;
       if constexpr (DIAGNOSTICS) {
         if (diagnostic_summary != nullptr) {
-          atomicAdd(&diagnostic_summary->navix_bridge_rows,
-                    static_cast<std::uint32_t>(__popc(bridge_mask)));
+          atomicAdd(&diagnostic_summary->navix_bridge_rows, bridge_count);
         }
         if (diagnostic_record != nullptr) {
-          atomicAdd(&diagnostic_record->navix_bridge_rows,
-                    static_cast<std::uint32_t>(__popc(bridge_mask)));
+          atomicAdd(&diagnostic_record->navix_bridge_rows, bridge_count);
         }
       }
     }
@@ -453,8 +530,8 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_navix_candidates_jit(
     // must encounter the same barriers even when an earlier bridge row fills the D-slot cap.
     for (std::uint32_t base = 0; base < bridge_counts[p]; base += tile_warps) {
       const bool owns_row = warp < tile_warps && base + warp < bridge_counts[p];
-      const auto bridge   = owns_row ? bridge_ids[p * graph_degree + base + warp] : invalid_index;
-      const bool row_started_after_cap = owns_row && output_counts[p] >= graph_degree;
+      const auto bridge   = owns_row ? bridge_ids[p * GRAPH_DEGREE + base + warp] : invalid_index;
+      const bool row_started_after_cap = owns_row && output_counts[p] >= GRAPH_DEGREE;
       if constexpr (DIAGNOSTICS) {
         if (lane == 0 && owns_row) {
           if (diagnostic_summary != nullptr) {
@@ -471,35 +548,44 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_navix_candidates_jit(
           }
         }
       }
-      const auto grandchild =
-        owns_row ? knn_graph[static_cast<std::uint64_t>(bridge) * graph_degree + lane]
-                 : invalid_index;
-      bool passes = false;
-      if (grandchild != invalid_index) {
-        const auto source = source_indices_ptr == nullptr ? static_cast<SourceIndexT>(grandchild)
-                                                          : source_indices_ptr[grandchild];
-        passes            = cuvs::neighbors::detail::sample_filter<SourceIndexT>(
-          query_id, source, filter_payload.sample_filter_data());
-        if constexpr (DIAGNOSTICS) {
-          if (diagnostic_summary != nullptr) {
-            atomicAdd(&diagnostic_summary->navix_second_hop_checks, 1u);
-            atomicAdd(&diagnostic_summary->candidate_attempts, 1u);
-            atomicAdd(&diagnostic_summary->candidate_evaluations, 1u);
-            if (passes) {
-              atomicAdd(&diagnostic_summary->navix_second_hop_passing, 1u);
-              atomicAdd(&diagnostic_summary->passing_candidates, 1u);
-            } else {
-              atomicAdd(&diagnostic_summary->rejected_candidates, 1u);
+      IndexT grandchildren[items_per_lane];
+      bool grandchild_passes[items_per_lane];
+#pragma unroll
+      for (std::uint32_t item = 0; item < items_per_lane; ++item) {
+        const auto grandchild   = owns_row
+                                    ? knn_graph[static_cast<std::uint64_t>(bridge) * GRAPH_DEGREE +
+                                              item * device::warp_size + lane]
+                                    : invalid_index;
+        grandchildren[item]     = grandchild;
+        grandchild_passes[item] = false;
+        if (grandchild != invalid_index) {
+          const auto source = source_indices_ptr == nullptr ? static_cast<SourceIndexT>(grandchild)
+                                                            : source_indices_ptr[grandchild];
+          grandchild_passes[item] = cuvs::neighbors::detail::sample_filter<SourceIndexT>(
+            query_id, source, filter_payload.sample_filter_data());
+          if constexpr (DIAGNOSTICS) {
+            if (diagnostic_summary != nullptr) {
+              atomicAdd(&diagnostic_summary->navix_second_hop_checks, 1u);
+              atomicAdd(&diagnostic_summary->candidate_attempts, 1u);
+              atomicAdd(&diagnostic_summary->candidate_evaluations, 1u);
+              if (grandchild_passes[item]) {
+                atomicAdd(&diagnostic_summary->navix_second_hop_passing, 1u);
+                atomicAdd(&diagnostic_summary->passing_candidates, 1u);
+              } else {
+                atomicAdd(&diagnostic_summary->rejected_candidates, 1u);
+              }
+              const auto gt_bit = navix_ground_truth_bit(diagnostic_context, query_id, source);
+              if (gt_bit != 0) {
+                atomicOr(&diagnostic_summary->gt_seen_mask, gt_bit);
+                atomicOr(&diagnostic_summary->navix_gt_second_hop_mask, gt_bit);
+              }
             }
-            const auto gt_bit = navix_ground_truth_bit(diagnostic_context, query_id, source);
-            if (gt_bit != 0) {
-              atomicOr(&diagnostic_summary->gt_seen_mask, gt_bit);
-              atomicOr(&diagnostic_summary->navix_gt_second_hop_mask, gt_bit);
+            if (diagnostic_record != nullptr) {
+              atomicAdd(&diagnostic_record->navix_second_hop_checks, 1u);
+              if (grandchild_passes[item]) {
+                atomicAdd(&diagnostic_record->navix_second_hop_passing, 1u);
+              }
             }
-          }
-          if (diagnostic_record != nullptr) {
-            atomicAdd(&diagnostic_record->navix_second_hop_checks, 1u);
-            if (passes) { atomicAdd(&diagnostic_record->navix_second_hop_passing, 1u); }
           }
         }
       }
@@ -510,85 +596,90 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_navix_candidates_jit(
       // is reached part-way through a tile.
       for (std::uint32_t commit_warp = 0; commit_warp < tile_warps; ++commit_warp) {
         if (warp == commit_warp && owns_row) {
-          auto pending = __ballot_sync(0xffffffffu, passes && grandchild != invalid_index);
-          auto count   = __shfl_sync(0xffffffffu, lane == 0 ? output_counts[p] : 0u, 0);
-          while (pending != 0 && count < graph_degree) {
-            const auto lower     = (std::uint32_t{1} << lane) - 1u;
-            const auto rank      = static_cast<std::uint32_t>(__popc(pending & lower));
-            const auto remaining = graph_degree - count;
-            const bool attempt   = (pending & (std::uint32_t{1} << lane)) != 0 && rank < remaining;
-            bool inserted        = false;
-            auto insert_result   = hashmap::insert_outcome::duplicate;
-            if (attempt) {
-              if constexpr (DIAGNOSTICS) {
-                insert_result = hashmap::insert_with_outcome(
-                  visited_hashmap_ptr, visited_hash_bitlen, grandchild);
-                inserted = insert_result == hashmap::insert_outcome::inserted;
-                if (diagnostic_summary != nullptr) {
-                  if (insert_result == hashmap::insert_outcome::duplicate) {
-                    atomicAdd(&diagnostic_summary->candidate_duplicates, 1u);
-                  } else if (insert_result == hashmap::insert_outcome::full) {
-                    atomicAdd(&diagnostic_summary->candidate_hash_full, 1u);
+          auto count = __shfl_sync(0xffffffffu, lane == 0 ? output_counts[p] : 0u, 0);
+#pragma unroll
+          for (std::uint32_t item = 0; item < items_per_lane; ++item) {
+            const auto grandchild = grandchildren[item];
+            auto pending =
+              __ballot_sync(0xffffffffu, grandchild_passes[item] && grandchild != invalid_index);
+            while (pending != 0 && count < GRAPH_DEGREE) {
+              const auto lower     = (std::uint32_t{1} << lane) - 1u;
+              const auto rank      = static_cast<std::uint32_t>(__popc(pending & lower));
+              const auto remaining = GRAPH_DEGREE - count;
+              const bool attempt = (pending & (std::uint32_t{1} << lane)) != 0 && rank < remaining;
+              bool inserted      = false;
+              if (attempt) {
+                if constexpr (DIAGNOSTICS) {
+                  const auto insert_result = hashmap::insert_with_outcome(
+                    visited_hashmap_ptr, visited_hash_bitlen, grandchild);
+                  inserted = insert_result == hashmap::insert_outcome::inserted;
+                  if (diagnostic_summary != nullptr) {
+                    if (insert_result == hashmap::insert_outcome::duplicate) {
+                      atomicAdd(&diagnostic_summary->candidate_duplicates, 1u);
+                    } else if (insert_result == hashmap::insert_outcome::full) {
+                      atomicAdd(&diagnostic_summary->candidate_hash_full, 1u);
+                      const auto source = source_indices_ptr == nullptr
+                                            ? static_cast<SourceIndexT>(grandchild)
+                                            : source_indices_ptr[grandchild];
+                      const auto gt_bit =
+                        navix_ground_truth_bit(diagnostic_context, query_id, source);
+                      if (gt_bit != 0) {
+                        atomicOr(&diagnostic_summary->navix_gt_hash_full_mask, gt_bit);
+                      }
+                    }
+                  }
+                } else {
+                  inserted =
+                    hashmap::insert(visited_hashmap_ptr, visited_hash_bitlen, grandchild) != 0;
+                }
+              }
+              const auto attempt_mask = __ballot_sync(0xffffffffu, attempt);
+              const auto success_mask = __ballot_sync(0xffffffffu, inserted);
+              const auto success_rank = static_cast<std::uint32_t>(__popc(success_mask & lower));
+              if (inserted) {
+                output_indices[p * GRAPH_DEGREE + count + success_rank] = grandchild;
+                if constexpr (DIAGNOSTICS) {
+                  if (diagnostic_summary != nullptr) {
+                    atomicAdd(&diagnostic_summary->navix_admitted_candidates, 1u);
                     const auto source = source_indices_ptr == nullptr
                                           ? static_cast<SourceIndexT>(grandchild)
                                           : source_indices_ptr[grandchild];
                     const auto gt_bit =
                       navix_ground_truth_bit(diagnostic_context, query_id, source);
                     if (gt_bit != 0) {
-                      atomicOr(&diagnostic_summary->navix_gt_hash_full_mask, gt_bit);
+                      atomicOr(&diagnostic_summary->navix_gt_admitted_mask, gt_bit);
                     }
                   }
+                  if (diagnostic_record != nullptr) {
+                    atomicAdd(&diagnostic_record->navix_admitted_candidates, 1u);
+                  }
                 }
-              } else {
-                inserted =
-                  hashmap::insert(visited_hashmap_ptr, visited_hash_bitlen, grandchild) != 0;
               }
+              count += static_cast<std::uint32_t>(__popc(success_mask));
+              pending &= ~attempt_mask;
             }
-            const auto attempt_mask = __ballot_sync(0xffffffffu, attempt);
-            const auto success_mask = __ballot_sync(0xffffffffu, inserted);
-            const auto success_rank = static_cast<std::uint32_t>(__popc(success_mask & lower));
-            if (inserted) {
-              output_indices[p * graph_degree + count + success_rank] = grandchild;
-              if constexpr (DIAGNOSTICS) {
+            if constexpr (DIAGNOSTICS) {
+              const bool blocked =
+                (pending & (std::uint32_t{1} << lane)) != 0 &&
+                hashmap::search(visited_hashmap_ptr, visited_hash_bitlen, grandchild) == 0;
+              if (blocked) {
                 if (diagnostic_summary != nullptr) {
-                  atomicAdd(&diagnostic_summary->navix_admitted_candidates, 1u);
+                  atomicAdd(&diagnostic_summary->navix_cap_blocked_unique, 1u);
                   const auto source = source_indices_ptr == nullptr
                                         ? static_cast<SourceIndexT>(grandchild)
                                         : source_indices_ptr[grandchild];
                   const auto gt_bit = navix_ground_truth_bit(diagnostic_context, query_id, source);
                   if (gt_bit != 0) {
-                    atomicOr(&diagnostic_summary->navix_gt_admitted_mask, gt_bit);
+                    atomicOr(&diagnostic_summary->navix_gt_cap_blocked_mask, gt_bit);
                   }
                 }
                 if (diagnostic_record != nullptr) {
-                  atomicAdd(&diagnostic_record->navix_admitted_candidates, 1u);
+                  atomicAdd(&diagnostic_record->navix_cap_blocked_unique, 1u);
                 }
               }
             }
-            count += static_cast<std::uint32_t>(__popc(success_mask));
-            pending &= ~attempt_mask;
           }
-          if constexpr (DIAGNOSTICS) {
-            const bool blocked =
-              (pending & (std::uint32_t{1} << lane)) != 0 &&
-              hashmap::search(visited_hashmap_ptr, visited_hash_bitlen, grandchild) == 0;
-            if (blocked) {
-              if (diagnostic_summary != nullptr) {
-                atomicAdd(&diagnostic_summary->navix_cap_blocked_unique, 1u);
-                const auto source = source_indices_ptr == nullptr
-                                      ? static_cast<SourceIndexT>(grandchild)
-                                      : source_indices_ptr[grandchild];
-                const auto gt_bit = navix_ground_truth_bit(diagnostic_context, query_id, source);
-                if (gt_bit != 0) {
-                  atomicOr(&diagnostic_summary->navix_gt_cap_blocked_mask, gt_bit);
-                }
-              }
-              if (diagnostic_record != nullptr) {
-                atomicAdd(&diagnostic_record->navix_cap_blocked_unique, 1u);
-              }
-            }
-          }
-          if (lane == 0) { output_counts[p] = min(count, graph_degree); }
+          if (lane == 0) { output_counts[p] = min(count, GRAPH_DEGREE); }
         }
         __syncthreads();
       }

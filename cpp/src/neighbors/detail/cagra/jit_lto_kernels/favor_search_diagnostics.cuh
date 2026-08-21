@@ -9,11 +9,13 @@
 
 namespace cuvs::neighbors::cagra::detail::favor_search_diagnostics {
 
-// Schema 7 makes host-populated recall/output_count explicitly set-valued.  The binary layout is
-// unchanged from schema 6, but consumers must not mix the two semantic contracts.
-inline constexpr std::uint32_t schema_version    = 7;
-inline constexpr std::uint32_t ground_truth_k    = 10;
-inline constexpr std::uint32_t invalid_iteration = 0xffffffffu;
+// Schema 8 extends NaviX's local-yield histogram from degree 32 to the largest supported degree,
+// 64. Consumers must not interpret schema-7 query-summary binaries with this larger layout.
+inline constexpr std::uint32_t schema_version          = 8;
+inline constexpr std::uint32_t ground_truth_k          = 10;
+inline constexpr std::uint32_t max_navix_graph_degree  = 64;
+inline constexpr std::uint32_t navix_local_p_bin_count = max_navix_graph_degree + 1;
+inline constexpr std::uint32_t invalid_iteration       = 0xffffffffu;
 
 enum class stop_reason : std::uint32_t {
   unknown = 0,
@@ -79,7 +81,7 @@ struct query_summary {
 
   // Benchmark-only NaviX-inspired traversal telemetry. These fields stay zero for the default and
   // FAVOR diagnostic kernels. The local-yield histogram is indexed by the number P of passing
-  // first-hop neighbors; the current specialization has D=32, hence 33 bins.
+  // first-hop neighbors. Bins cover every P for both supported graph degrees, D=32 and D=64.
   std::uint32_t navix_seed_found{};
   std::uint32_t navix_seed_iteration{};
   std::uint32_t navix_seed_count{};
@@ -88,7 +90,7 @@ struct query_summary {
   std::uint32_t navix_one_hop_parents{};
   std::uint32_t navix_directed_parents{};
   std::uint32_t navix_blind_parents{};
-  std::uint32_t navix_local_p_histogram[33]{};
+  std::uint32_t navix_local_p_histogram[navix_local_p_bin_count]{};
   std::uint32_t navix_first_hop_checks{};
   std::uint32_t navix_first_hop_passing{};
   std::uint32_t navix_bridge_rows{};

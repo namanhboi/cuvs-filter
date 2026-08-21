@@ -123,6 +123,8 @@ std::string query_specific_udf_source()
 
 class CagraBitmapFilterTest : public ::testing::TestWithParam<cagra::search_algo> {
  protected:
+  virtual std::uint32_t graph_degree() const { return 32; }
+
   void SetUp() override
   {
     dataset.emplace(raft::make_device_matrix<float, std::int64_t>(res, kRows, kDim));
@@ -134,8 +136,8 @@ class CagraBitmapFilterTest : public ::testing::TestWithParam<cagra::search_algo
 
     cagra::index_params index_params;
     index_params.metric                    = cuvs::distance::DistanceType::L2Expanded;
-    index_params.graph_degree              = 32;
-    index_params.intermediate_graph_degree = 64;
+    index_params.graph_degree              = graph_degree();
+    index_params.intermediate_graph_degree = 2 * graph_degree();
     index_params.graph_build_params =
       cagra::graph_build_params::nn_descent_params(index_params.intermediate_graph_degree);
     index.emplace(cagra::build(res, index_params, raft::make_const_mdspan(dataset->view())));
@@ -206,6 +208,11 @@ class CagraBitmapFilterTest : public ::testing::TestWithParam<cagra::search_algo
   std::optional<raft::device_matrix<float, std::int64_t>> dataset;
   std::optional<raft::device_matrix<float, std::int64_t>> queries;
   std::optional<cagra::index<float, std::uint32_t>> index;
+};
+
+class CagraBitmapFilterDegree64Test : public CagraBitmapFilterTest {
+ protected:
+  std::uint32_t graph_degree() const override { return 64; }
 };
 
 TEST_P(CagraBitmapFilterTest, AllPassingMatchesBitsetAcrossTopKBoundaries)
@@ -1046,10 +1053,56 @@ TEST(CagraBitmapRecallAccounting, TreatsOutputsAsASetAndRejectsSentinels)
   EXPECT_TRUE(cuvs::bench::detail::is_valid_source_id(signed_outputs[3], 769));
   EXPECT_FALSE(cuvs::bench::detail::is_valid_source_id(signed_outputs[4], 769));
 
-  const std::uint32_t unsigned_outputs[] = {
-    3, 3, std::numeric_limits<std::uint32_t>::max()};
+  const std::uint32_t unsigned_outputs[] = {3, 3, std::numeric_limits<std::uint32_t>::max()};
   EXPECT_FALSE(cuvs::bench::detail::is_first_output_occurrence(unsigned_outputs, 1));
   EXPECT_FALSE(cuvs::bench::detail::is_valid_source_id(unsigned_outputs[2], 769));
+}
+
+TEST_P(CagraBitmapFilterDegree64Test, LegacyNavixBitmapMatchesEquivalentUdfExactly)
+{
+  auto predicate = [](std::int64_t query_id, std::int64_t source_id) {
+    return ((source_id * 7 + query_id * 11) % 5) < 2;
+  };
+  device_bitmap bitmap(res, kQueries, kRows, predicate);
+  auto bitmap_filter = bitmap.filter();
+  cuvs::neighbors::filtering::udf_filter udf_filter(query_specific_udf_source(), nullptr, 0.6f);
+  auto search_params           = params(k, 0.6f);
+  search_params.algo           = cagra::search_algo::SINGLE_CTA;
+  search_params.filtering_rate = 0.0f;
+
+  auto run = [&](auto const& filter, bool bitmap_path) {
+    auto neighbors = raft::make_device_matrix<std::int64_t, std::int64_t>(res, kQueries, k);
+    auto distances = raft::make_device_matrix<float, std::int64_t>(res, kQueries, k);
+    if (bitmap_path) {
+      detail::benchmark_search_navix_bitmap<float>(res,
+                                                   search_params,
+                                                   *index,
+                                                   raft::make_const_mdspan(queries->view()),
+                                                   neighbors.view(),
+                                                   distances.view(),
+                                                   filter,
+                                                   0,
+                                                   0);
+    } else {
+      detail::benchmark_search_navix_udf<float>(res,
+                                                search_params,
+                                                *index,
+                                                raft::make_const_mdspan(queries->view()),
+                                                neighbors.view(),
+                                                distances.view(),
+                                                filter,
+                                                0);
+    }
+    bitmap_search_result<std::int64_t> result{std::vector<std::int64_t>(neighbors.size()),
+                                              std::vector<float>(distances.size())};
+    auto stream = raft::resource::get_cuda_stream(res);
+    raft::copy(result.neighbors.data(), neighbors.data_handle(), neighbors.size(), stream);
+    raft::copy(result.distances.data(), distances.data_handle(), distances.size(), stream);
+    raft::resource::sync_stream(res);
+    return result;
+  };
+
+  expect_same(run(udf_filter, false), run(bitmap_filter, true));
 }
 
 INSTANTIATE_TEST_CASE_P(CagraBitmapFilters,
@@ -1057,6 +1110,10 @@ INSTANTIATE_TEST_CASE_P(CagraBitmapFilters,
                         ::testing::Values(cagra::search_algo::SINGLE_CTA,
                                           cagra::search_algo::MULTI_CTA,
                                           cagra::search_algo::AUTO));
+
+INSTANTIATE_TEST_CASE_P(CagraBitmapDegree64,
+                        CagraBitmapFilterDegree64Test,
+                        ::testing::Values(cagra::search_algo::SINGLE_CTA));
 
 }  // namespace
 }  // namespace cuvs::neighbors::cagra

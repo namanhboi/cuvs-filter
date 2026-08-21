@@ -209,8 +209,9 @@ template <bool FAVOR,
           typename IndexT,
           typename DistanceT,
           typename SourceIndexT,
-          bool DIAGNOSTICS   = false,
-          bool BITMAP_SEEDED = false>
+          bool DIAGNOSTICS                 = false,
+          bool BITMAP_SEEDED               = false,
+          std::uint32_t NAVIX_GRAPH_DEGREE = 0>
 RAFT_DEVICE_INLINE_FUNCTION void search_core(
   uintptr_t result_indices_ptr,
   DistanceT* const result_distances_ptr,
@@ -250,6 +251,10 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   const std::uint32_t navix_policy_value                      = 0)
 {
   static_assert(!(FAVOR && NAVIX), "FAVOR and NaviX are separate traversal specializations");
+  static_assert(!NAVIX || NAVIX_GRAPH_DEGREE == 32 || NAVIX_GRAPH_DEGREE == 64,
+                "NaviX requires a degree-32 or degree-64 specialization");
+  static_assert(NAVIX || NAVIX_GRAPH_DEGREE == 0,
+                "Only NaviX kernels carry a compile-time graph degree");
   static_assert(!(BITMAP_SEEDED && (FAVOR || NAVIX || DIAGNOSTICS)),
                 "bitmap-seeded default CAGRA uses a dedicated non-diagnostic specialization");
   using LOAD_T = device::LOAD_128BIT_T;
@@ -1062,25 +1067,29 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
                                       iter;
           }
         }
-        device::compute_navix_candidates_jit<DIAGNOSTICS, IndexT, DistanceT, DataT, SourceIndexT>(
-          result_indices_buffer + internal_topk,
-          result_distances_buffer + internal_topk,
-          smem_desc,
-          knn_graph,
-          graph_degree,
-          local_visited_hashmap_ptr,
-          hash_bitlen,
-          parent_list_buffer,
-          result_indices_buffer,
-          search_width,
-          source_indices_ptr,
-          query_id + query_id_offset,
-          filter_payload,
-          smem_work_ptr,
-          navix_policy_value,
-          diagnostic_summary,
-          navix_diagnostic_record,
-          diagnostic_context);
+        device::compute_navix_candidates_jit<NAVIX_GRAPH_DEGREE,
+                                             DIAGNOSTICS,
+                                             IndexT,
+                                             DistanceT,
+                                             DataT,
+                                             SourceIndexT>(result_indices_buffer + internal_topk,
+                                                           result_distances_buffer + internal_topk,
+                                                           smem_desc,
+                                                           knn_graph,
+                                                           graph_degree,
+                                                           local_visited_hashmap_ptr,
+                                                           hash_bitlen,
+                                                           parent_list_buffer,
+                                                           result_indices_buffer,
+                                                           search_width,
+                                                           source_indices_ptr,
+                                                           query_id + query_id_offset,
+                                                           filter_payload,
+                                                           smem_work_ptr,
+                                                           navix_policy_value,
+                                                           diagnostic_summary,
+                                                           navix_diagnostic_record,
+                                                           diagnostic_context);
       } else {
         // Seed discovery deliberately matches default CAGRA: raw-distance expansion, one fused
         // frontier, and rejected-parent retirement after expansion. The UDF is evaluated only
@@ -1912,7 +1921,8 @@ __device__ void search_kernel_jit(
 }
 
 /** Private benchmark-only NaviX SINGLE_CTA entry. */
-template <bool TOPK_BY_BITONIC_SORT,
+template <std::uint32_t GRAPH_DEGREE,
+          bool TOPK_BY_BITONIC_SORT,
           bool BITONIC_SORT_AND_MERGE_MULTI_WARPS,
           typename DataT,
           typename IndexT,
@@ -1955,7 +1965,10 @@ __device__ void search_navix_kernel_jit(
               DataT,
               IndexT,
               DistanceT,
-              SourceIndexT>(result_indices_ptr,
+              SourceIndexT,
+              false,
+              false,
+              GRAPH_DEGREE>(result_indices_ptr,
                             result_distances_ptr,
                             top_k,
                             queries_ptr,
@@ -1994,7 +2007,8 @@ __device__ void search_navix_kernel_jit(
 }
 
 /** Dedicated benchmark-only NaviX diagnostic entry; the production NaviX fragment stays intact. */
-template <bool TOPK_BY_BITONIC_SORT,
+template <std::uint32_t GRAPH_DEGREE,
+          bool TOPK_BY_BITONIC_SORT,
           bool BITONIC_SORT_AND_MERGE_MULTI_WARPS,
           typename DataT,
           typename IndexT,
@@ -2038,42 +2052,45 @@ __device__ void search_navix_diagnostic_kernel_jit(
               IndexT,
               DistanceT,
               SourceIndexT,
-              true>(result_indices_ptr,
-                    result_distances_ptr,
-                    top_k,
-                    queries_ptr,
-                    knn_graph,
-                    graph_degree,
-                    source_indices_ptr,
-                    num_distilation,
-                    rand_xor_mask,
-                    seed_ptr,
-                    num_seeds,
-                    visited_hashmap_ptr,
-                    max_candidates,
-                    max_itopk,
-                    internal_topk,
-                    search_width,
-                    min_iteration,
-                    max_iteration,
-                    nullptr,
-                    hash_bitlen,
-                    small_hash_bitlen,
-                    small_hash_reset_interval,
-                    query_id,
-                    query_id_offset,
-                    dataset_desc,
-                    filter_payload,
-                    0.0f,
-                    0.0f,
-                    0u,
-                    0.0f,
-                    0.5f,
-                    graph_size,
-                    reinterpret_cast<favor_search_diagnostics::context*>(diagnostic_context_ptr),
-                    0,
-                    0,
-                    navix_policy_value);
+              true,
+              false,
+              GRAPH_DEGREE>(
+    result_indices_ptr,
+    result_distances_ptr,
+    top_k,
+    queries_ptr,
+    knn_graph,
+    graph_degree,
+    source_indices_ptr,
+    num_distilation,
+    rand_xor_mask,
+    seed_ptr,
+    num_seeds,
+    visited_hashmap_ptr,
+    max_candidates,
+    max_itopk,
+    internal_topk,
+    search_width,
+    min_iteration,
+    max_iteration,
+    nullptr,
+    hash_bitlen,
+    small_hash_bitlen,
+    small_hash_reset_interval,
+    query_id,
+    query_id_offset,
+    dataset_desc,
+    filter_payload,
+    0.0f,
+    0.0f,
+    0u,
+    0.0f,
+    0.5f,
+    graph_size,
+    reinterpret_cast<favor_search_diagnostics::context*>(diagnostic_context_ptr),
+    0,
+    0,
+    navix_policy_value);
 }
 
 /** Diagnostic default-filter entry used only by the bench-only scoped attachment. */

@@ -72,34 +72,46 @@ struct CagraSingleCtaSearchPlanner
 
   void add_navix_search_kernel_fragment(bool topk_by_bitonic_sort,
                                         bool bitonic_sort_and_merge_multi_warps,
-                                        bool diagnostics = false)
+                                        bool diagnostics,
+                                        std::uint32_t graph_degree)
   {
-    auto add = [&]<bool TopkByBitonic, bool MultiWarpMerge>() {
-      if (diagnostics) {
-        this->template add_static_fragment<
-          fragment_tag_search_single_cta_navix_diagnostic<DataTag,
-                                                          SourceIndexTag,
-                                                          IndexTag,
-                                                          DistanceTag,
-                                                          TopkByBitonic,
-                                                          MultiWarpMerge>>();
+    auto add_degree = [&]<std::uint32_t GraphDegree>() {
+      auto add = [&]<bool TopkByBitonic, bool MultiWarpMerge>() {
+        if (diagnostics) {
+          this->template add_static_fragment<
+            fragment_tag_search_single_cta_navix_diagnostic<DataTag,
+                                                            SourceIndexTag,
+                                                            IndexTag,
+                                                            DistanceTag,
+                                                            TopkByBitonic,
+                                                            MultiWarpMerge,
+                                                            GraphDegree>>();
+        } else {
+          this->template add_static_fragment<fragment_tag_search_single_cta_navix<DataTag,
+                                                                                  SourceIndexTag,
+                                                                                  IndexTag,
+                                                                                  DistanceTag,
+                                                                                  TopkByBitonic,
+                                                                                  MultiWarpMerge,
+                                                                                  GraphDegree>>();
+        }
+      };
+      if (topk_by_bitonic_sort && bitonic_sort_and_merge_multi_warps) {
+        add.template operator()<true, true>();
+      } else if (topk_by_bitonic_sort) {
+        add.template operator()<true, false>();
+      } else if (bitonic_sort_and_merge_multi_warps) {
+        add.template operator()<false, true>();
       } else {
-        this->template add_static_fragment<fragment_tag_search_single_cta_navix<DataTag,
-                                                                                SourceIndexTag,
-                                                                                IndexTag,
-                                                                                DistanceTag,
-                                                                                TopkByBitonic,
-                                                                                MultiWarpMerge>>();
+        add.template operator()<false, false>();
       }
     };
-    if (topk_by_bitonic_sort && bitonic_sort_and_merge_multi_warps) {
-      add.template operator()<true, true>();
-    } else if (topk_by_bitonic_sort) {
-      add.template operator()<true, false>();
-    } else if (bitonic_sort_and_merge_multi_warps) {
-      add.template operator()<false, true>();
+    if (graph_degree == 32) {
+      add_degree.template operator()<32>();
+    } else if (graph_degree == 64) {
+      add_degree.template operator()<64>();
     } else {
-      add.template operator()<false, false>();
+      RAFT_FAIL("NaviX requires graph degree 32 or 64");
     }
   }
 

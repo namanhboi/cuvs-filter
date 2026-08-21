@@ -261,13 +261,14 @@ class favor_diagnostic_session {
       if (summaries_host[query].schema != favor_diag::schema_version ||
           summaries_host[query].query_id != query) {
         throw std::runtime_error(
-          "diagnostic device/host schema or query identity mismatch; rebuild all CAGRA JIT kernels");
+          "diagnostic device/host schema or query identity mismatch; rebuild all CAGRA JIT "
+          "kernels");
       }
       std::uint32_t matches       = 0;
       std::uint32_t valid_outputs = 0;
       for (std::uint32_t rank = 0; rank < topk; ++rank) {
         const auto candidate = result_indices_host[static_cast<std::uint64_t>(query) * topk + rank];
-        const bool valid = candidate >= 0 && candidate < dataset_size;
+        const bool valid     = candidate >= 0 && candidate < dataset_size;
         bool first_occurrence = valid;
         for (std::uint32_t prior = 0; valid && prior < rank; ++prior) {
           first_occurrence &=
@@ -407,7 +408,7 @@ class favor_diagnostic_session {
            "navix_admitted_candidates,navix_cap_blocked_unique,navix_gt_first_hop_mask,"
            "navix_gt_second_hop_mask,navix_gt_admitted_mask,navix_gt_retained_mask,"
            "navix_gt_cap_blocked_mask,navix_gt_hash_full_mask,navix_gt_output_mask";
-    for (std::uint32_t p = 0; p <= 32; ++p) {
+    for (std::uint32_t p = 0; p < favor_diag::navix_local_p_bin_count; ++p) {
       csv << ",navix_local_p_" << p;
     }
     for (std::uint32_t rank = 0; rank < favor_diag::ground_truth_k; ++rank) {
@@ -515,7 +516,7 @@ class favor_diagnostic_session {
   bool captured_ = false;
 };
 
-static_assert(sizeof(favor_diag::query_summary) == 408);
+static_assert(sizeof(favor_diag::query_summary) == 536);
 static_assert(sizeof(favor_diag::iteration_record) == 132);
 static_assert(sizeof(favor_diag::candidate_record) == 36);
 static_assert(sizeof(favor_diag::termination_checkpoint_record) == 136);

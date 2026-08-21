@@ -11,6 +11,7 @@ namespace {
 // clang-format off
 constexpr bool k_topk_by_bitonic_sort               = @topk_by_bitonic_sort@;
 constexpr bool k_bitonic_sort_and_merge_multi_warps = @bitonic_sort_and_merge_multi_warps@;
+constexpr std::uint32_t k_graph_degree               = @graph_degree@;
 
 using data_t         = @data_type@;
 using index_t        = @index_type@;
@@ -54,7 +55,8 @@ extern "C" __global__ __launch_bounds__(1024, 1) void search_single_cta_navix(
   cagra_sample_filter_t filter_payload,
   const std::uint32_t navix_policy)
 {
-  single_cta_search::search_navix_kernel_jit<k_topk_by_bitonic_sort,
+  single_cta_search::search_navix_kernel_jit<k_graph_degree,
+                                             k_topk_by_bitonic_sort,
                                              k_bitonic_sort_and_merge_multi_warps,
                                              data_t,
                                              index_t,

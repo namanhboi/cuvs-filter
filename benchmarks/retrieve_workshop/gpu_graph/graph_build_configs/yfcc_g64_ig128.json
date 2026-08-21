@@ -1,0 +1,34 @@
+{
+  "dataset": {
+    "name": "retrieve-yfcc-10m-cagra-g64-ig128",
+    "base_file": "yfcc-10M/base.10M.u8bin",
+    "query_file": "yfcc-10M/query.public.100K.u8bin",
+    "distance": "euclidean",
+    "dtype": "uint8"
+  },
+  "search_basic_param": {
+    "batch_size": 1000,
+    "k": 10
+  },
+  "index": [
+    {
+      "name": "cagra-g64-ig128",
+      "algo": "cuvs_cagra",
+      "file": "yfcc-10M/cagra_g64_ig128.index",
+      "build_param": {
+        "graph_build_algo": "NN_DESCENT",
+        "graph_degree": 64,
+        "intermediate_graph_degree": 128,
+        "nn_descent_max_iterations": 20,
+        "nn_descent_termination_threshold": 0.0001
+      },
+      "search_params": [
+        {
+          "algo": "single_cta",
+          "itopk": 64,
+          "search_width": 1
+        }
+      ]
+    }
+  ]
+}
