@@ -9,6 +9,7 @@ import os
 import platform
 import shutil
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -39,6 +40,21 @@ def main() -> None:
     if status.returncode or status.stdout.strip():
         failures.append("repository is not clean")
     profile = json.loads(args.profile.read_text())
+
+    python_packages: dict[str, str] = {}
+    for package in ("numpy", "matplotlib"):
+        probe = command(
+            sys.executable,
+            "-c",
+            f"import {package}; print({package}.__version__)",
+        )
+        if probe.returncode:
+            failures.append(
+                f"Python package {package!r} is unavailable from {sys.executable}: "
+                f"{probe.stderr.strip()}"
+            )
+        else:
+            python_packages[package] = probe.stdout.strip()
 
     gpu = command(
         "nvidia-smi",
@@ -113,6 +129,8 @@ def main() -> None:
         "disk_free_gib": free_gib,
         "host_memory_gib": memory_gib,
         "logical_cpus": cpus,
+        "python_executable": sys.executable,
+        "python_packages": python_packages,
         "failures": failures,
     }
     destination = (
