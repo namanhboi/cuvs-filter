@@ -6,6 +6,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+import struct
 import subprocess
 import sys
 import tempfile
@@ -18,12 +19,33 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 RETRIEVE_DIR = SCRIPT_DIR.parent
 sys.path.insert(0, str(SCRIPT_DIR))
 sys.path.insert(0, str(RETRIEVE_DIR / "gpu_graph"))
+sys.path.insert(0, str(RETRIEVE_DIR.parent / "favor" / "navix_bitmap"))
 
 from dataset_profile import load_profile
 from prepare_arxiv_large import materialize_phase, packed_words
+from prepare_bitmaps import Matrix
 
 
 class A100PipelineTest(unittest.TestCase):
+    def test_bigann_groundtruth_accepts_trailing_distances(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "GT.public.ibin"
+            ids = np.arange(20, dtype="<u4").reshape(2, 10)
+            distances = np.arange(20, dtype="<f4").reshape(2, 10)
+            with path.open("wb") as stream:
+                stream.write(struct.pack("<II", 2, 10))
+                ids.tofile(stream)
+                distances.tofile(stream)
+
+            with self.assertRaises(ValueError):
+                Matrix(path, np.dtype("<u4"))
+            matrix = Matrix(
+                path,
+                np.dtype("<u4"),
+                allow_trailing_float_distances=True,
+            )
+            np.testing.assert_array_equal(matrix.values, ids)
+
     def test_profile_contract(self) -> None:
         profile = load_profile(
             SCRIPT_DIR / "profiles" / "a100_yfcc10m_arxiv_large.json"

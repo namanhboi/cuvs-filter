@@ -30,6 +30,7 @@ INVALID_PADDING_START = int(INVALID_U32) - 999
 class Matrix:
     path: Path
     dtype: np.dtype
+    allow_trailing_float_distances: bool = False
 
     def __post_init__(self) -> None:
         with self.path.open("rb") as stream:
@@ -38,7 +39,12 @@ class Matrix:
             raise ValueError(f"truncated matrix header: {self.path}")
         rows, cols = struct.unpack("<II", header)
         expected = 8 + rows * cols * self.dtype.itemsize
-        if self.path.stat().st_size != expected:
+        distances_expected = expected + rows * cols * np.dtype("<f4").itemsize
+        actual = self.path.stat().st_size
+        if actual != expected and not (
+            self.allow_trailing_float_distances
+            and actual == distances_expected
+        ):
             raise ValueError(f"matrix size mismatch: {self.path}")
         object.__setattr__(self, "rows", rows)
         object.__setattr__(self, "cols", cols)
@@ -229,7 +235,13 @@ def materialize(
     candidate_for_query,
 ) -> None:
     vectors = Matrix(args.query_vectors, np.dtype(args.vector_dtype))
-    gt = Matrix(args.groundtruth, np.dtype("<u4"))
+    # BIG-ann YFCC appends a float32 distance matrix after its uint32 neighbor-ID matrix. Other
+    # prepared workloads contain IDs only. Both layouts share the same header and ID prefix.
+    gt = Matrix(
+        args.groundtruth,
+        np.dtype("<u4"),
+        allow_trailing_float_distances=True,
+    )
     total = min(query_rows, vectors.rows, gt.rows)
     if args.limit:
         total = min(total, args.limit)

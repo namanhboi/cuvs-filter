@@ -101,6 +101,10 @@ export PARALLEL_LEVEL=12
 - =base.metadata.10M.spmat= and =query.metadata.public.100K.spmat=;
 - =GT.public.ibin=.
 
+The official BIG-ann ground-truth file contains a headered uint32 ID matrix followed by an equally
+shaped float32 distance matrix.  Bitmap preparation validates that complete layout and reads only
+the ID prefix; do not truncate or rewrite the downloaded file.
+
 The runner makes non-destructive symlinks under
 =${RETRIEVE_DATA_ROOT}/yfcc-10M=.  Existing files are retained.  It never copies the YFCC base.
 
