@@ -56,6 +56,18 @@ calibrate() {
   local round=0
   while true; do
     local proposal group count
+    group="calibration_r$(printf '%02d' "${round}")"
+    if test -d "${result_root}/configs/${group}"; then
+      test -f "${result_root}/configs/${group}/manifest.json" || {
+        echo "incomplete existing calibration config group: ${group}" >&2
+        exit 2
+      }
+      echo "resume: validate existing ${group}" >&2
+      run_group "${group}"
+      "${python_bin}" "${script_dir}/matched_recall.py" analyze --result-root "${result_root}"
+      round=$((round + 1))
+      continue
+    fi
     proposal="${result_root}/state/next_$(printf '%02d' "${round}").json"
     mkdir -p "$(dirname "${proposal}")"
     "${python_bin}" "${script_dir}/matched_recall.py" next \
@@ -65,7 +77,6 @@ calibrate() {
       echo "calibration complete after ${round} rounds" >&2
       break
     fi
-    group="calibration_r$(printf '%02d' "${round}")"
     "${python_bin}" "${script_dir}/matched_recall.py" generate-group \
       --result-root "${result_root}" --data-root "${data_root}" \
       --group "${group}" --repetitions 1 --points "${proposal}"
