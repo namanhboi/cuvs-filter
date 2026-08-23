@@ -12,7 +12,7 @@ import re
 import statistics
 from pathlib import Path
 
-WORKLOADS = ("yfcc", "emis")
+WORKLOADS = ("yfcc", "em", "emis", "r")
 METHODS = ("default_cagra", "default_cagra_accumulator", "navix_reference")
 RESOURCE_METHOD = {
     "default_cagra": "base",
@@ -24,7 +24,7 @@ LATEX_METHOD = {
     "default_cagra_accumulator": r"\methodretain{}",
     "navix_reference": r"\methodnavix{}",
 }
-WORKLOAD_LABEL = {"yfcc": "YFCC", "emis": "EMIS"}
+WORKLOAD_LABEL = {"yfcc": "YFCC", "em": "EM", "emis": "EMIS", "r": "R"}
 SCHEMA_VERSION = 9
 RESOURCE_PREFIX = "CAGRA_KERNEL_RESOURCES "
 
@@ -255,7 +255,9 @@ def write_outputs(result_root: Path, output: Path, summary: list[dict]) -> None:
     output.mkdir(parents=True, exist_ok=True)
     csv_path = output / "gpu_resource_work.csv"
     with csv_path.open("w", newline="") as destination:
-        writer = csv.DictWriter(destination, fieldnames=list(summary[0]))
+        writer = csv.DictWriter(
+            destination, fieldnames=list(summary[0]), lineterminator="\n"
+        )
         writer.writeheader()
         writer.writerows(summary)
 

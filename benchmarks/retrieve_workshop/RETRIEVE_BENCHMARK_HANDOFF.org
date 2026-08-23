@@ -39,7 +39,7 @@ The paper uses these immutable analyzed roots:
 | Masked exact | =/home/ubuntu/retrieve_workshop_runs/exact_l4_20260820T0255Z= | PASS; four workloads; native-L2 cutoff recall 1.0 |
 | Native CPU | =/home/ubuntu/retrieve_workshop_runs/cpu/cpu_context_20260820T2200Z= | PASS; 120/120 commands; 200 aggregate rows |
 | YFCC mechanism diagnostic | =/home/ubuntu/retrieve_workshop_runs/yfcc_schema8_g64_20260821T0245Z= | PASS; same-G64 frozen diagnostic-only evidence |
-| GPU resource/dynamic work | =/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z= | PASS; schema 9; fixed 1,000-query YFCC/EMIS samples |
+| GPU resource/dynamic work | =/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_all4_20260823T035316Z= | PASS; schema 9; fixed 1,000-query YFCC/EM/EMIS/R samples |
 
 The staged paper is =/home/ubuntu/retrieve-cagra-paper=.  Record its exact commit with =git
 rev-parse HEAD= after the final commit.  Its validated =main.pdf= is six pages and double-blind;
@@ -309,7 +309,7 @@ summarizer refuses to replace an existing archive.
 * GPU resource and dynamic-work table (schema 9)
 
 This table is a mechanism diagnostic, not a throughput result.  It fixes =L=64=, =W=1=, and
-=max_iterations=0= on the first 1,000 YFCC and EMIS queries.  Schema-9 kernels count adjacency
+=max_iterations=0= on the first 1,000 YFCC, EM, EMIS, and R queries. Schema-9 kernels count adjacency
 rows, logical predicate probes, distance calls, and legal admissions; separate non-diagnostic
 launches report production registers, shared memory, threads/CTA, and the occupancy-API active-CTA
 ceiling.
@@ -328,8 +328,8 @@ per-query mismatch in graph rows, distance evaluations, or legal admissions, and
 shared-memory increment to be exactly 84 bytes.
 
 The accepted root is
-=/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z=.  Its compact
-checked-in evidence is =benchmarks/retrieve_workshop/evidence/gpu_resource_work_schema9/=.  Exact
+=/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_all4_20260823T035316Z=. Its compact
+checked-in evidence is =benchmarks/retrieve_workshop/evidence/gpu_resource_work_schema9_all4/=. Exact
 counter semantics, commands, results, and interpretation are in
 =benchmarks/retrieve_workshop/resource_work/README.org=.
 
@@ -520,6 +520,38 @@ The publication input is
 reference ACORN-1, and reference ACORN-gamma appear in the figure.  The two ACORN + NaviX-seed
 controls remain in table/JSON outputs and are intentionally excluded from the native Pareto plot.
 
+* Near-target CPU/GPU NaviX context
+
+The general CPU-context curves above are not calibrated tightly enough for a fixed-quality
+CAGRA-NaviX/FAISS-NaviX ratio.  The sibling =cpu_navix_target= workflow reuses the same immutable
+FAISS graphs and manifests, calibrates integer =efSearch= near the paper targets, screens
+=threads={1,2,4,8,16,32}= on ArXiv, and freshly measures each selected point three times.  The deep
+YFCC point fixes 32 threads and explicitly accepts 0.7997 CPU recall against 0.8000 GPU recall;
+both achieved recalls must accompany its ratio.
+
+This is a method-matched but not topology- or hardware-matched comparison.  Report the result as a
+hardware-qualified QPS ratio on the named NVIDIA L4 and 16-core/32-thread Xeon VM.  Do not present
+it as an architecture-independent GPU speedup.  Both sides time resident-filter search; native CPU
+packed-bitmap-to-byte-mask conversion remains outside the timed call.
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter-retrieve
+/home/ubuntu/micromamba/envs/cuvs/bin/python \
+  benchmarks/retrieve_workshop/cpu_navix_target/test_pipeline.py
+/home/ubuntu/micromamba/envs/cuvs/bin/python \
+  benchmarks/retrieve_workshop/cpu_navix_target/run.py --preflight
+
+export RETRIEVE_CPU_NAVIX_RUN_ID=cpu_navix_target_<UTC_TAG>
+/home/ubuntu/micromamba/envs/cuvs/bin/python \
+  benchmarks/retrieve_workshop/cpu_navix_target/run.py \
+  --results-root /home/ubuntu/retrieve_workshop_runs/cpu \
+  --run-id "${RETRIEVE_CPU_NAVIX_RUN_ID}"
+#+end_src
+
+The publication inputs are =analysis/final_summary.csv=, =analysis/gpu_cpu_ratios.csv=, and
+=run.completed.json=.  Calibration, thread scaling, every raw shard, commands, graph fingerprints,
+binary/repository revisions, and hardware provenance remain under the same immutable result root.
+
 * Optional deterministic selectivity evidence
 
 This derives exact selectivity distributions from all 10,000 resident bitmap rows.  It is not a
@@ -553,7 +585,7 @@ export RETRIEVE_GPU_SUMMARY="${RETRIEVE_RESULT_ROOT}/analysis/summary_points.csv
 export RETRIEVE_EXACT_SUMMARY="${RETRIEVE_EXACT_RESULT_ROOT}/analysis/exact_summary.csv"
 export RETRIEVE_CPU_SUMMARY="${RETRIEVE_CPU_RESULTS_ROOT}/${RETRIEVE_CPU_RUN_ID}/analysis/summary.csv"
 export RETRIEVE_DIAGNOSTIC_MANIFEST=/home/ubuntu/cuvs-filter-retrieve/benchmarks/retrieve_workshop/evidence/diagnostic_manifest.json
-export RETRIEVE_RESOURCE_WORK_SUMMARY=/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/analysis/gpu_resource_work.json
+export RETRIEVE_RESOURCE_WORK_SUMMARY=/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_all4_20260823T035316Z/analysis/gpu_resource_work.json
 
 cd /home/ubuntu/retrieve-cagra-paper
 python3 scripts/prepare_current_results.py --check \
@@ -654,8 +686,8 @@ binary, library, hardware, data, and repetition identity auditable.
 - [X] CPU results are described as qualitative context, not absolute CPU/GPU speedup.
 - [X] Diagnostic claims come only from artifacts listed and SHA-256-verified in
   =diagnostic_manifest.json=.
-- [X] The resource-work table comes from schema-9 untimed counters and separately captured
-  production JIT attributes; its 22 inputs and exact instrumented sources are SHA-256-bound.
+- [X] The 12-row resource-work table comes from schema-9 untimed counters and separately captured
+  production JIT attributes; its 42 inputs and exact instrumented sources are SHA-256-bound.
 - [X] Paper staging, PDF provenance, unfinished-text scan, and six-page check all pass.
 - [X] The manuscript remains double-blind: no names, institutions, acknowledgments, or personally
   named fork links.

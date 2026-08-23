@@ -44,7 +44,7 @@ bridges with exact routing or a richer, GPU-friendly, predicate-agnostic topolog
 | Exact-control result root | =/home/ubuntu/retrieve_workshop_runs/exact_l4_20260820T0255Z= |
 | CPU-context result root | =/home/ubuntu/retrieve_workshop_runs/cpu/cpu_context_20260820T2200Z= |
 | Frozen YFCC diagnostic | =/home/ubuntu/retrieve_workshop_runs/yfcc_schema8_g64_20260821T0245Z= |
-| GPU resource-work diagnostic | =/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z= |
+| GPU resource-work diagnostic | =/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_all4_20260823T035316Z= |
 | GPU | NVIDIA L4, 23,034 MiB, compute capability 8.9 |
 | Driver | 580.173.02 |
 | Host CPU | 32 logical Intel Xeon CPUs at 2.20 GHz |
@@ -260,7 +260,7 @@ comparable recall, and neither method reaches 0.9 under B0.
 ** GPU dynamic work and resource footprint
 
 The following table fixes the same representative point, =L=64=, =W=1=, B0, for every method on
-the first 1,000 YFCC and EMIS queries.  Dynamic counters come from untimed schema-9 diagnostic
+the first 1,000 YFCC, EM, EMIS, and R queries. Dynamic counters come from untimed schema-9 diagnostic
 kernels.  Static resources come from the corresponding production, non-diagnostic JIT kernel.
 =Seed words= counts packed 32-bit words loaded by NaviX's strict bitmap prepass and is separate from
 logical traversal predicate probes.  =Legal admissions= excludes the ten initial seeds.  =CTAs/SM=
@@ -269,11 +269,17 @@ is the CUDA occupancy API's resource ceiling, not a measured achieved-occupancy 
 | Workload | Method | Graph rows/query | Seed words/query | Predicate probes/query | Distance evaluations/query | Legal admissions/query | Threads/CTA | Registers/thread | Dynamic SMEM bytes (delta from Base) | Active CTAs/SM |
 |-
 | YFCC | CAGRA-Base | 68.0 | 0.0 | 168.2 | 3,088.8 | 92.9 | 64 | 64 | 2,121 | 16 |
-| YFCC | CAGRA-Retain | 68.0 | 0.0 | 2,206.7 | 3,088.8 | 92.9 | 64 | 64 | 2,205 (+84) | 16 |
+| YFCC | CAGRA-Retain | 68.0 | 0.0 | 2,206.6 | 3,088.8 | 92.9 | 64 | 64 | 2,205 (+84) | 16 |
 | YFCC | CAGRA-NaviX | 3,228.1 | 6,570.6 | 206,596.7 | 2,224.3 | 1,093.3 | 64 | 63 | 2,388 (+267) | 16 |
+| EM | CAGRA-Base | 68.0 | 0.0 | 145.2 | 1,224.7 | 394.0 | 256 | 64 | 17,225 | 4 |
+| EM | CAGRA-Retain | 68.0 | 0.0 | 318.6 | 1,224.7 | 394.0 | 256 | 64 | 17,309 (+84) | 4 |
+| EM | CAGRA-NaviX | 701.9 | 32.1 | 22,462.2 | 2,107.1 | 1,236.7 | 256 | 64 | 17,364 (+139) | 4 |
 | EMIS | CAGRA-Base | 67.9 | 0.0 | 145.1 | 1,223.7 | 215.8 | 256 | 64 | 17,225 | 4 |
 | EMIS | CAGRA-Retain | 67.9 | 0.0 | 866.3 | 1,223.7 | 215.8 | 256 | 64 | 17,309 (+84) | 4 |
 | EMIS | CAGRA-NaviX | 662.5 | 33.2 | 21,198.8 | 1,556.5 | 1,033.0 | 256 | 64 | 17,364 (+139) | 4 |
+| R | CAGRA-Base | 68.0 | 0.0 | 145.3 | 1,224.8 | 455.2 | 256 | 64 | 17,225 | 4 |
+| R | CAGRA-Retain | 68.0 | 0.0 | 348.0 | 1,224.8 | 455.2 | 256 | 64 | 17,309 (+84) | 4 |
+| R | CAGRA-NaviX | 600.0 | 32.0 | 19,200.3 | 1,694.4 | 1,088.2 | 256 | 64 | 17,364 (+139) | 4 |
 
 The table validates the implementation story directly.  Base and Retain read identical graph rows,
 compute identical distance vectors, admit identical legal candidates, use the same register count,
@@ -281,12 +287,12 @@ and retain the same active-CTA ceiling.  Retain's only shared-memory increment i
 bounded top-=k= result state; its additional predicate and accumulator instructions do not modify
 navigation.  NaviX likewise does not lose the resource-limited active-CTA ceiling.
 
-NaviX's cost is instead highly workload-dependent dynamic work.  On YFCC it reads 4.87 times as
-many graph rows and performs 9.75 times as many traversal predicate probes as on EMIS, but admits
-only 1.06 times as many legal children.  Its legal-admission yield is 0.529% per probe on YFCC
-versus 4.873% on EMIS, a 9.2-times difference.  It even performs fewer vector-distance evaluations
-than Base on YFCC.  Sparse two-hop graph-ID inspection and bitmap testing—not distance arithmetic,
-register pressure, shared-memory occupancy, or an idle traversal—therefore explain the YFCC cost.
+NaviX's cost is instead highly workload-dependent dynamic work. Its legal-admission yields are
+5.51%, 4.87%, and 5.67% per probe on EM, EMIS, and R, versus 0.529% on YFCC. YFCC reads 4.60--5.38
+times as many NaviX graph rows as the ArXiv workloads while producing no more legal admissions. It
+even performs fewer vector-distance evaluations than Base on YFCC. Sparse two-hop graph-ID
+inspection and bitmap testing—not distance arithmetic, register pressure, shared-memory occupancy,
+or an idle traversal—therefore explain the YFCC cost.
 At this representative point, recalls are 0.3331/0.5266/0.7257 for Base/Retain/NaviX on YFCC and
 0.3727/0.5393/0.9672 on EMIS.
 
@@ -474,7 +480,7 @@ export RETRIEVE_GPU_SUMMARY=/home/ubuntu/retrieve_workshop_runs/gpu_l4_degreeawa
 export RETRIEVE_EXACT_SUMMARY=/home/ubuntu/retrieve_workshop_runs/exact_l4_20260820T0255Z/analysis/exact_summary.csv
 export RETRIEVE_CPU_SUMMARY=/home/ubuntu/retrieve_workshop_runs/cpu/cpu_context_20260820T2200Z/analysis/summary.csv
 export RETRIEVE_DIAGNOSTIC_MANIFEST=/home/ubuntu/cuvs-filter-retrieve/benchmarks/retrieve_workshop/evidence/diagnostic_manifest.json
-export RETRIEVE_RESOURCE_WORK_SUMMARY=/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z/analysis/gpu_resource_work.json
+export RETRIEVE_RESOURCE_WORK_SUMMARY=/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_all4_20260823T035316Z/analysis/gpu_resource_work.json
 make PYTHON=/home/ubuntu/micromamba/envs/cuvs/bin/python data
 make PYTHON=/home/ubuntu/micromamba/envs/cuvs/bin/python paper
 make PYTHON=/home/ubuntu/micromamba/envs/cuvs/bin/python check
@@ -492,7 +498,7 @@ make PYTHON=/home/ubuntu/micromamba/envs/cuvs/bin/python check
 | Exact hash manifest | =/home/ubuntu/retrieve_workshop_runs/exact_l4_20260820T0255Z/analysis/final_hash_manifest.json= | Final |
 | CPU summary | =/home/ubuntu/retrieve_workshop_runs/cpu/cpu_context_20260820T2200Z/analysis/summary.csv= | Final |
 | CPU plot | =/home/ubuntu/retrieve_workshop_runs/cpu/cpu_context_20260820T2200Z/analysis/cpu_context_pareto.png= | Final |
-| Resource-work summary | =benchmarks/retrieve_workshop/evidence/gpu_resource_work_schema9/gpu_resource_work.json= | PASS; 22 SHA-256-bound inputs |
+| Resource-work summary | =benchmarks/retrieve_workshop/evidence/gpu_resource_work_schema9_all4/gpu_resource_work.json= | PASS; 42 SHA-256-bound inputs |
 | Resource-work guide | =benchmarks/retrieve_workshop/resource_work/README.org= | Current |
 | Paper source and staged data | =/home/ubuntu/retrieve-cagra-paper=; record =git rev-parse HEAD= after final commit | Final local tree |
 | Paper PDF | =/home/ubuntu/retrieve-cagra-paper/main.pdf= | PASS, 6 pages, anonymous |

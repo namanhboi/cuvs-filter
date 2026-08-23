@@ -82,7 +82,7 @@ def main() -> None:
         "data_root": str(args.data_root.resolve()),
         "contract": {
             "diagnostic_schema_version": 9,
-            "workloads": ["yfcc", "emis"],
+            "workloads": ["yfcc", "em", "emis", "r"],
             "methods": [
                 "default_cagra",
                 "default_cagra_accumulator",

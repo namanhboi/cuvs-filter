@@ -18,7 +18,7 @@ from generate_configs import (  # noqa: E402
     search_point,
 )
 
-WORKLOADS = ("yfcc", "emis")
+WORKLOADS = ("yfcc", "em", "emis", "r")
 ITOPK = 64
 SEARCH_WIDTH = 1
 MAX_ITERATIONS = 0

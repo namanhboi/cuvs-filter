@@ -1,0 +1,16 @@
+#+TITLE: Frozen Four-Workload Schema-9 GPU Resource-Work Evidence
+
+This directory is the compact, checked-in copy of the accepted Table 5 run at
+=/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_all4_20260823T035316Z=.  It covers
+the first 1,000 queries of YFCC, ArXiv-EM, ArXiv-EMIS, and ArXiv-R at =L=64=, =W=1=, and B0 for
+CAGRA-Base, CAGRA-Retain, and CAGRA-NaviX.
+
+The archive contains nine generated config files, four ordinary correctness JSON files, four
+production resource logs, twelve schema-9 manifests and query summaries, executable/source/GPU
+provenance, and the validated CSV/JSON/LaTeX outputs.  Large seed and result-index binaries are
+omitted because neither the table nor its validation invariants read them.
+
+=gpu_resource_work.json= SHA-256-binds all 42 inputs in the original immutable result root.  Each
+bound file is preserved here at the same relative path and was verified byte-for-byte after copy.
+Re-run the analyzer against the original root to regenerate the summary; use this archive for
+review and long-term inspection rather than combining files from different runs.

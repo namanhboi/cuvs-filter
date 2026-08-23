@@ -22,3 +22,28 @@ benchmarks/retrieve_workshop/matched_recall/run_matched_recall.sh all
 The final paper inputs are =analysis/final_summary.csv=, =analysis/selected_points.csv=, and
 =analysis/provenance.json=. For YFCC, each repetition is five serial search calls and aggregate
 QPS is =10000 / sum(shard_seconds)=. No recall interpolation is performed.
+
+* Tight paper-target refinement
+
+The paper refinement uses requested, rather than rounded, =L=. CAGRA computes B0 from the caller's
+requested =L/W= and then rounds the internal itopk capacity upward to 32 elements. Consequently a
+request such as =L=65= uses a 96-element internal buffer but a B0 numerator of 65. The refinement
+accepts =10 <= L <= 512=, tunes =W in {1,2}=, and accounts for the rounded capacity when checking
+visited-hash feasibility.
+
+It reuses the frozen broad sweep only to identify brackets, writes all new data to a separate
+result root, calibrates every distinct =(rounded internal L, B0 iterations)= execution in each
+bracket, reruns up to four in-window finalists three times, and finally reruns one selected point
+per workload/method three times. The four intentionally deep YFCC/EMIS Base/Retain endpoints are
+preserved. Run it with:
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter-retrieve
+export RETRIEVE_MATCHED_BASELINE=/home/ubuntu/retrieve_workshop_runs/matched_recall_b0first_20260821_v1/analysis/measurements.csv
+export RETRIEVE_RESULT_ROOT=/home/ubuntu/retrieve_workshop_runs/matched_recall_tight_$(date -u +%Y%m%d_%H%M%S)
+benchmarks/retrieve_workshop/matched_recall/run_tight_matched_recall.sh all
+#+end_src
+
+The closed target windows are =[0.800,0.802]= on YFCC and =[0.950,0.952]= on each ArXiv workload.
+Inside a window the winner is the highest three-run median QPS, with no interpolation. The final
+=paper_final= group contains exactly 12 configurations.

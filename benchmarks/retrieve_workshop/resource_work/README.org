@@ -4,7 +4,8 @@
 
 This experiment produces the mechanism-level table in the RETRIEVE paper.  It compares
 =default_cagra= (Base), =default_cagra_accumulator= (Retain), and =navix_reference= (NaviX) at the
-same =L=64=, =W=1=, automatic =B0= budget on fixed 1,000-query YFCC and ArXiv-EMIS samples.
+same =L=64=, =W=1=, automatic =B0= budget on fixed 1,000-query YFCC, ArXiv-EM, ArXiv-EMIS, and
+ArXiv-R samples.
 It is deliberately separate from throughput measurement:
 
 - schema-9 diagnostic kernels count dynamic work but are never timed;
@@ -57,24 +58,31 @@ state, and all six instrumented source files.  =analyze.py= SHA-256-binds every 
 * Frozen paper result
 
 The accepted run is
-=/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_20260821T0510Z=.  A compact copy of
+=/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_all4_20260823T035316Z=. A compact copy of
 all table inputs and outputs is checked in under
-=benchmarks/retrieve_workshop/evidence/gpu_resource_work_schema9/=.  The analyzer reports:
+=benchmarks/retrieve_workshop/evidence/gpu_resource_work_schema9_all4/=. The analyzer reports:
 
 | Workload | Method | Graph rows | Seed words | Predicate probes | Distance evals | Legal admissions | Threads | Regs | Dynamic SMEM | CTAs/SM |
 |-
 | YFCC | Base | 68.0 | 0.0 | 168.2 | 3,088.8 | 92.9 | 64 | 64 | 2,121 | 16 |
-| YFCC | Retain | 68.0 | 0.0 | 2,206.7 | 3,088.8 | 92.9 | 64 | 64 | 2,205 (+84) | 16 |
+| YFCC | Retain | 68.0 | 0.0 | 2,206.6 | 3,088.8 | 92.9 | 64 | 64 | 2,205 (+84) | 16 |
 | YFCC | NaviX | 3,228.1 | 6,570.6 | 206,596.7 | 2,224.3 | 1,093.3 | 64 | 63 | 2,388 (+267) | 16 |
+| EM | Base | 68.0 | 0.0 | 145.2 | 1,224.7 | 394.0 | 256 | 64 | 17,225 | 4 |
+| EM | Retain | 68.0 | 0.0 | 318.6 | 1,224.7 | 394.0 | 256 | 64 | 17,309 (+84) | 4 |
+| EM | NaviX | 701.9 | 32.1 | 22,462.2 | 2,107.1 | 1,236.7 | 256 | 64 | 17,364 (+139) | 4 |
 | EMIS | Base | 67.9 | 0.0 | 145.1 | 1,223.7 | 215.8 | 256 | 64 | 17,225 | 4 |
 | EMIS | Retain | 67.9 | 0.0 | 866.3 | 1,223.7 | 215.8 | 256 | 64 | 17,309 (+84) | 4 |
 | EMIS | NaviX | 662.5 | 33.2 | 21,198.8 | 1,556.5 | 1,033.0 | 256 | 64 | 17,364 (+139) | 4 |
+| R | Base | 68.0 | 0.0 | 145.3 | 1,224.8 | 455.2 | 256 | 64 | 17,225 | 4 |
+| R | Retain | 68.0 | 0.0 | 348.0 | 1,224.8 | 455.2 | 256 | 64 | 17,309 (+84) | 4 |
+| R | NaviX | 600.0 | 32.0 | 19,200.3 | 1,694.4 | 1,088.2 | 256 | 64 | 17,364 (+139) | 4 |
 
 Retain therefore changes result preservation, not traversal: Base and Retain have identical graph
 rows, distance work, and legal admissions and use the same registers and active CTAs/SM.  NaviX
-also does not lower the resource-limited active-CTA ceiling.  Its weakness on YFCC is dynamic work
-quality: it reads 4.87 times the graph rows and issues 9.75 times the traversal probes used on EMIS,
-but admits only 1.06 times as many legal children.  Legal admissions per probe are 0.529% on YFCC
-and 4.873% on EMIS, a 9.2-times yield gap.  Moreover, NaviX performs fewer vector distance
-evaluations than Base on YFCC; sparse two-hop graph inspection and bitmap testing, not vector
-arithmetic or static occupancy, dominate that case.
+also does not lower the resource-limited active-CTA ceiling. The three ArXiv workloads confirm that
+the static resources are degree-specialization properties, while dynamic work changes with the
+predicate: NaviX admits 5.51%, 4.87%, and 5.67% of its probes on EM, EMIS, and R, versus only 0.529%
+on YFCC. YFCC therefore requires 4.60--5.38 times as many NaviX graph-row reads as the ArXiv
+workloads while producing no more passing admissions. It also performs fewer vector distances than
+Base, so sparse two-hop graph inspection and bitmap testing—not distance arithmetic or static
+occupancy—dominate that case.

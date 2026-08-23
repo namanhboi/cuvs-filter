@@ -15,7 +15,6 @@ import json
 import math
 import statistics
 import sys
-from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -34,8 +33,9 @@ from generate_configs import (  # noqa: E402
 WORKLOADS = ("yfcc", "em", "emis", "r")
 METHODS = ("default_cagra", "default_cagra_accumulator", "navix_reference")
 WIDTHS = (1, 2, 4)
+TUNING_WIDTHS = (1, 2)
 ANCHOR_L = (32, 64, 128, 256, 512)
-MIN_L = 32
+MIN_L = 10
 MAX_L = 512
 L_QUANTUM = 32
 MAX_ITERATIONS = 7569
@@ -46,6 +46,26 @@ TARGETS = {"yfcc": 0.80, "em": 0.95, "emis": 0.95, "r": 0.95}
 TARGET_WINDOW = 0.002
 EXPECTED_QUERIES = 10_000
 MAX_QUERIES = 512
+
+# Only these cells need tighter B0 calibration for the paper.  The other four cells already have
+# valid, intentionally deep endpoints and are rerun unchanged in the final 12-cell measurement.
+TIGHT_PAIRS = (
+    ("yfcc", "navix_reference"),
+    ("em", "default_cagra"),
+    ("em", "default_cagra_accumulator"),
+    ("em", "navix_reference"),
+    ("emis", "navix_reference"),
+    ("r", "default_cagra"),
+    ("r", "default_cagra_accumulator"),
+    ("r", "navix_reference"),
+)
+
+LOCKED_POINTS = (
+    {"workload": "yfcc", "method": "default_cagra", "itopk": 512, "search_width": 4, "max_iterations": 2046},
+    {"workload": "yfcc", "method": "default_cagra_accumulator", "itopk": 64, "search_width": 1, "max_iterations": 675},
+    {"workload": "emis", "method": "default_cagra", "itopk": 512, "search_width": 4, "max_iterations": 4092},
+    {"workload": "emis", "method": "default_cagra_accumulator", "itopk": 512, "search_width": 4, "max_iterations": 536},
+)
 
 MEASUREMENT_FIELDS = (
     "group",
@@ -134,9 +154,18 @@ def target(workload: str) -> float:
     return TARGETS[workload]
 
 
-def resolved_b0(itopk: int, width: int, dataset_size: int, degree: int) -> int:
-    if itopk % L_QUANTUM or not MIN_L <= itopk <= MAX_L:
+def internal_itopk(itopk: int) -> int:
+    """Return CAGRA's 32-element internal top-k capacity for a requested L."""
+    if not MIN_L <= itopk <= MAX_L:
         raise ValueError(f"invalid SINGLE_CTA L={itopk}")
+    return ((itopk + L_QUANTUM - 1) // L_QUANTUM) * L_QUANTUM
+
+
+def resolved_b0(itopk: int, width: int, dataset_size: int, degree: int) -> int:
+    # search_plan.cuh computes the automatic iteration budget from the caller-requested L and only
+    # then rounds the actual in-kernel itopk capacity to 32.  Requested non-multiple values
+    # therefore provide real, fine-grained B0 tuning even when they share an internal capacity.
+    internal_itopk(itopk)
     iterations = itopk // width
     reachable = 1
     while reachable < dataset_size:
@@ -161,7 +190,7 @@ def visit_multiplier(method: str) -> int:
 def hash_nodes(workload: str, method: str, itopk: int, width: int, maximum: int) -> int:
     degree = 64 if workload == "yfcc" else 32
     iterations = resolved_iterations(workload, itopk, width, maximum)
-    return itopk + width * degree * visit_multiplier(method) * iterations
+    return internal_itopk(itopk) + width * degree * visit_multiplier(method) * iterations
 
 
 def hash_feasible(workload: str, method: str, itopk: int, width: int, maximum: int) -> bool:
@@ -187,8 +216,8 @@ def normalize_point(row: dict) -> dict[str, object]:
     maximum = int(row["max_iterations"])
     if workload not in WORKLOADS or method not in METHODS:
         raise ValueError(f"invalid matched-recall point: {row}")
-    if itopk % L_QUANTUM or not MIN_L <= itopk <= MAX_L:
-        raise ValueError(f"L must be a multiple of 32 in [32,512]: {row}")
+    if not MIN_L <= itopk <= MAX_L:
+        raise ValueError(f"requested L must be in [{MIN_L},{MAX_L}]: {row}")
     if width not in WIDTHS:
         raise ValueError(f"W must be one of {WIDTHS}: {row}")
     if not 0 <= maximum <= MAX_ITERATIONS:
@@ -216,9 +245,18 @@ def write_group(
     group: str,
     repetitions: int,
     points: list[dict],
+    stage: str | None = None,
 ) -> None:
     if repetitions not in (1, 3):
         raise ValueError("matched-recall groups use one or three repetitions")
+    if stage is None:
+        stage = "final" if repetitions == 3 else "calibration"
+    if stage not in {"calibration", "finalist", "final"}:
+        raise ValueError(f"invalid matched-recall stage {stage!r}")
+    if stage == "calibration" and repetitions != 1:
+        raise ValueError("calibration groups use one repetition")
+    if stage in {"finalist", "final"} and repetitions != 3:
+        raise ValueError(f"{stage} groups use three repetitions")
     normalized = [normalize_point(row) for row in points]
     if len({key(row) for row in normalized}) != len(normalized):
         raise ValueError("duplicate point in requested group")
@@ -227,7 +265,6 @@ def write_group(
     group_root = result_root / "configs" / group
     if group_root.exists():
         raise FileExistsError(group_root)
-    stage = "final" if repetitions == 3 else "calibration"
     group_index = {
         "schema_version": 1,
         "experiment": "retrieve_workshop_matched_recall",
@@ -386,6 +423,245 @@ def calibration_rows(result_root: Path) -> list[dict[str, object]]:
 
 def measured_keys(rows: list[dict[str, object]]) -> set[tuple[str, str, int, int, int]]:
     return {key(row) for row in rows}
+
+
+def execution_fingerprint(workload: str, itopk: int, width: int) -> tuple[int, int]:
+    """Kernel capacity and effective B0 budget produced by a requested (L, W)."""
+    return (internal_itopk(itopk), resolved_iterations(workload, itopk, width, 0))
+
+
+def load_baseline_measurements(path: Path) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for row in read_csv(path):
+        if str(row.get("stage", "")) != "calibration" or int(row["max_iterations"]) != 0:
+            continue
+        rows.append(
+            {
+                "workload": str(row["workload"]),
+                "method": str(row["method"]),
+                "itopk": int(row["itopk"]),
+                "search_width": int(row["search_width"]),
+                "recall": float(row["recall"]),
+            }
+        )
+    if not rows:
+        raise ValueError(f"no B0 calibration rows in {path}")
+    return rows
+
+
+def tight_refinement_points(baseline_path: Path) -> dict:
+    """Enumerate every distinct requested-L execution between measured target brackets."""
+    baseline = load_baseline_measurements(baseline_path)
+    points: list[dict[str, object]] = []
+    brackets: list[dict[str, object]] = []
+    for workload, method in TIGHT_PAIRS:
+        goal = target(workload)
+        for width in TUNING_WIDTHS:
+            local = sorted(
+                (
+                    row
+                    for row in baseline
+                    if row["workload"] == workload
+                    and row["method"] == method
+                    and int(row["search_width"]) == width
+                ),
+                key=lambda row: int(row["itopk"]),
+            )
+            passing = [row for row in local if float(row["recall"]) >= goal]
+            if not passing:
+                raise ValueError(f"baseline has no B0 upper bracket for {workload}/{method}/W{width}")
+            upper = min(int(row["itopk"]) for row in passing)
+            failures = [
+                int(row["itopk"])
+                for row in local
+                if int(row["itopk"]) < upper and float(row["recall"]) < goal
+            ]
+            lower = max(failures) if failures else MIN_L
+            if lower > upper:
+                raise ValueError(f"malformed bracket for {workload}/{method}/W{width}")
+            seen_fingerprints: set[tuple[int, int]] = set()
+            emitted = 0
+            for requested_l in range(lower, upper + 1):
+                fingerprint = execution_fingerprint(workload, requested_l, width)
+                if fingerprint in seen_fingerprints:
+                    continue
+                seen_fingerprints.add(fingerprint)
+                points.append(
+                    {
+                        "workload": workload,
+                        "method": method,
+                        "itopk": requested_l,
+                        "search_width": width,
+                        "max_iterations": 0,
+                    }
+                )
+                emitted += 1
+            brackets.append(
+                {
+                    "workload": workload,
+                    "method": method,
+                    "search_width": width,
+                    "lower_requested_l": lower,
+                    "upper_requested_l": upper,
+                    "distinct_executions": emitted,
+                }
+            )
+    return {
+        "schema_version": 2,
+        "experiment": "retrieve_workshop_tight_matched_recall",
+        "generated_utc": datetime.now(timezone.utc).isoformat(),
+        "baseline_measurements": str(baseline_path.resolve()),
+        "baseline_sha256": sha256(baseline_path),
+        "targets": TARGETS,
+        "target_window": TARGET_WINDOW,
+        "tuning_widths": list(TUNING_WIDTHS),
+        "brackets": brackets,
+        "points": points,
+    }
+
+
+def grouped_stage_rows(
+    result_root: Path, stage: str, expected_repetitions: int
+) -> list[dict[str, object]]:
+    grouped: dict[tuple[str, str, int, int, int], list[dict[str, object]]] = {}
+    for row in measurements(result_root):
+        if row["stage"] == stage:
+            if int(row["queries"]) != EXPECTED_QUERIES:
+                raise ValueError(f"{stage} row does not cover {EXPECTED_QUERIES} queries")
+            if float(row["filter_violations"]) or float(row["sentinel_errors"]):
+                raise ValueError(f"{stage} correctness failure")
+            if (
+                row["method"] != "default_cagra"
+                and float(row["duplicate_output_query_rate"]) != 0
+            ):
+                raise ValueError(f"{stage} Retain/NaviX output is not duplicate-free")
+            grouped.setdefault(key(row), []).append(row)
+    output: list[dict[str, object]] = []
+    for identity, members in sorted(grouped.items()):
+        if len(members) != expected_repetitions or sorted(
+            int(row["repetition_index"]) for row in members
+        ) != list(range(expected_repetitions)):
+            raise ValueError(
+                f"{stage} point has the wrong repetition set: {identity}"
+            )
+        recalls = [float(row["recall"]) for row in members]
+        qps = [float(row["qps"]) for row in members]
+        first = members[0]
+        output.append(
+            {
+                "workload": first["workload"],
+                "method": first["method"],
+                "itopk": int(first["itopk"]),
+                "search_width": int(first["search_width"]),
+                "max_iterations": int(first["max_iterations"]),
+                "recall_median": statistics.median(recalls),
+                "recall_min": min(recalls),
+                "recall_max": max(recalls),
+                "qps_median": statistics.median(qps),
+                "repetitions": len(members),
+            }
+        )
+    return output
+
+
+def tight_finalists(result_root: Path) -> dict:
+    rows = grouped_stage_rows(result_root, "calibration", 1)
+    selected: list[dict[str, object]] = []
+    decisions: list[dict[str, object]] = []
+    for workload, method in TIGHT_PAIRS:
+        goal = target(workload)
+        local = [row for row in rows if row["workload"] == workload and row["method"] == method]
+        within = [
+            row
+            for row in local
+            if float(row["recall_median"]) >= goal
+            and float(row["recall_median"]) <= goal + TARGET_WINDOW + 1e-12
+        ]
+        if within:
+            candidates = sorted(within, key=lambda row: float(row["qps_median"]), reverse=True)[:4]
+            rule = "four fastest calibration points inside the target window"
+        else:
+            candidates = sorted(
+                local,
+                key=lambda row: (
+                    abs(float(row["recall_median"]) - goal),
+                    -float(row["qps_median"]),
+                ),
+            )[:4]
+            rule = "no calibration point in the target window; four closest measured points"
+        if not candidates:
+            raise ValueError(f"missing tight calibration data for {workload}/{method}")
+        points = [
+            {
+                "workload": workload,
+                "method": method,
+                "itopk": int(row["itopk"]),
+                "search_width": int(row["search_width"]),
+                "max_iterations": 0,
+            }
+            for row in candidates
+        ]
+        selected.extend(points)
+        decisions.append({"workload": workload, "method": method, "selection_rule": rule, "points": points})
+    return {
+        "schema_version": 2,
+        "experiment": "retrieve_workshop_tight_matched_recall",
+        "generated_utc": datetime.now(timezone.utc).isoformat(),
+        "stage": "finalist",
+        "decisions": decisions,
+        "points": selected,
+    }
+
+
+def tight_paper_points(result_root: Path) -> dict:
+    rows = grouped_stage_rows(result_root, "finalist", 3)
+    selected: list[dict[str, object]] = []
+    decisions: list[dict[str, object]] = []
+    for workload, method in TIGHT_PAIRS:
+        goal = target(workload)
+        local = [row for row in rows if row["workload"] == workload and row["method"] == method]
+        within = [
+            row
+            for row in local
+            if float(row["recall_min"]) >= goal
+            and float(row["recall_median"]) <= goal + TARGET_WINDOW + 1e-12
+        ]
+        if within:
+            chosen = max(within, key=lambda row: float(row["qps_median"]))
+            rule = "highest three-run median QPS inside the target window"
+        else:
+            qualifying = [row for row in local if float(row["recall_min"]) >= goal]
+            if qualifying:
+                chosen = min(
+                    qualifying,
+                    key=lambda row: (float(row["recall_median"]) - goal, -float(row["qps_median"])),
+                )
+                rule = "target reached but no finalist remained inside the window; smallest overshoot"
+            else:
+                chosen = max(local, key=lambda row: (float(row["recall_median"]), float(row["qps_median"])))
+                rule = "target not reached; maximum measured recall"
+        point = {
+            "workload": workload,
+            "method": method,
+            "itopk": int(chosen["itopk"]),
+            "search_width": int(chosen["search_width"]),
+            "max_iterations": 0,
+        }
+        selected.append(point)
+        decisions.append({"workload": workload, "method": method, "selection_rule": rule, "point": point})
+    selected.extend(dict(row) for row in LOCKED_POINTS)
+    if len(selected) != len(WORKLOADS) * len(METHODS) or len({key(row) for row in selected}) != len(selected):
+        raise ValueError("tight paper selection must contain exactly one point per workload/method")
+    return {
+        "schema_version": 2,
+        "experiment": "retrieve_workshop_tight_matched_recall",
+        "generated_utc": datetime.now(timezone.utc).isoformat(),
+        "stage": "final",
+        "selection_contract": "highest final median QPS with recall_min>=target and recall_median<=target+0.002",
+        "decisions": decisions,
+        "locked_points": [dict(row) for row in LOCKED_POINTS],
+        "points": sorted(selected, key=lambda row: (WORKLOADS.index(str(row["workload"])), METHODS.index(str(row["method"])))),
+    }
 
 
 def pareto(rows: list[dict[str, object]]) -> list[dict[str, object]]:
@@ -689,6 +965,7 @@ def provenance(result_root: Path, summaries: list[dict], selected: list[dict]) -
         if (result_root / "raw" / path.parent.parent.name / path.parent.name).is_dir()
     ]
     raw_files = sorted((result_root / "raw").glob("*/*/shard_*.json"))
+    state_files = sorted((result_root / "state").glob("*.json"))
     analysis_files = [
         result_root / "analysis" / "measurements.csv",
         result_root / "analysis" / "final_summary.csv",
@@ -718,6 +995,9 @@ def provenance(result_root: Path, summaries: list[dict], selected: list[dict]) -
         },
         "config_manifests": [{"path": str(path.resolve()), "sha256": sha256(path)} for path in manifests],
         "raw_results": [{"path": str(path.resolve()), "sha256": sha256(path)} for path in raw_files],
+        "selection_state": [
+            {"path": str(path.resolve()), "sha256": sha256(path)} for path in state_files
+        ],
         "analysis_inputs": [
             {"path": str(path.resolve()), "sha256": sha256(path)} for path in analysis_files
         ],
@@ -739,7 +1019,20 @@ def main() -> None:
     generate.add_argument("--data-root", type=Path, required=True)
     generate.add_argument("--group", required=True)
     generate.add_argument("--repetitions", type=int, choices=(1, 3), required=True)
+    generate.add_argument("--stage", choices=("calibration", "finalist", "final"))
     generate.add_argument("--points", type=Path, required=True)
+
+    refine = subparsers.add_parser("tight-refinement-points")
+    refine.add_argument("--baseline-measurements", type=Path, required=True)
+    refine.add_argument("--output", type=Path, required=True)
+
+    finalist = subparsers.add_parser("tight-finalists")
+    finalist.add_argument("--result-root", type=Path, required=True)
+    finalist.add_argument("--output", type=Path, required=True)
+
+    paper = subparsers.add_parser("tight-paper-points")
+    paper.add_argument("--result-root", type=Path, required=True)
+    paper.add_argument("--output", type=Path, required=True)
 
     analyze = subparsers.add_parser("analyze")
     analyze.add_argument("--result-root", type=Path, required=True)
@@ -766,8 +1059,24 @@ def main() -> None:
             group=args.group,
             repetitions=args.repetitions,
             points=list(payload["points"]),
+            stage=args.stage,
         )
         print(json.dumps({"group": args.group, "points": len(payload["points"])}))
+    elif args.command == "tight-refinement-points":
+        payload = tight_refinement_points(args.baseline_measurements)
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        print(json.dumps({"points": len(payload["points"]), "brackets": len(payload["brackets"])}))
+    elif args.command == "tight-finalists":
+        payload = tight_finalists(args.result_root)
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        print(json.dumps({"points": len(payload["points"])}))
+    elif args.command == "tight-paper-points":
+        payload = tight_paper_points(args.result_root)
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        print(json.dumps({"points": len(payload["points"])}))
     elif args.command == "analyze":
         rows = measurements(args.result_root)
         write_csv(args.result_root / "analysis" / "measurements.csv", MEASUREMENT_FIELDS, rows)

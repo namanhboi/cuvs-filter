@@ -1,0 +1,81 @@
+{
+  "dataset": {
+    "name": "retrieve-yfcc-correctness-q00000-01000",
+    "base_file": "yfcc-10M/base.10M.u8bin",
+    "query_file": "/home/ubuntu/cuvs-filter/datasets/navix_bitmap/yfcc/correctness_1000/shard_00000_01000/query.bin",
+    "groundtruth_neighbors_file": "/home/ubuntu/cuvs-filter/datasets/navix_bitmap/yfcc/correctness_1000/shard_00000_01000/groundtruth.ibin",
+    "distance": "euclidean",
+    "dtype": "uint8",
+    "filter": {
+      "kind": "bitmap",
+      "file": "/home/ubuntu/cuvs-filter/datasets/navix_bitmap/yfcc/correctness_1000/shard_00000_01000/filter.bitmap"
+    }
+  },
+  "search_basic_param": {
+    "batch_size": 1000,
+    "k": 10
+  },
+  "index": [
+    {
+      "name": "cagra-g64-ig128",
+      "algo": "cuvs_cagra",
+      "file": "yfcc-10M/cagra_g64_ig128.index",
+      "build_param": {
+        "graph_build_algo": "NN_DESCENT",
+        "graph_degree": 64,
+        "intermediate_graph_degree": 128
+      },
+      "search_params": [
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "max_queries": 1024,
+          "itopk": 64,
+          "search_width": 1,
+          "max_iterations": 0,
+          "favor_udf_passing_accumulator": false,
+          "require_identity_source_indices": true,
+          "bitmap_method": "default_cagra",
+          "favor_diagnostics_output": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_all4_20260823T035316Z/diagnostics/yfcc/default_cagra",
+          "favor_diagnostics_groundtruth": "/home/ubuntu/cuvs-filter/datasets/navix_bitmap/yfcc/correctness_1000/shard_00000_01000/groundtruth.ibin",
+          "favor_diagnostics_dataset": "yfcc",
+          "favor_diagnostics_variant": "default_cagra"
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "max_queries": 1024,
+          "itopk": 64,
+          "search_width": 1,
+          "max_iterations": 0,
+          "favor_udf_passing_accumulator": true,
+          "require_identity_source_indices": true,
+          "bitmap_method": "default_cagra_accumulator",
+          "favor_diagnostics_output": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_all4_20260823T035316Z/diagnostics/yfcc/default_cagra_accumulator",
+          "favor_diagnostics_groundtruth": "/home/ubuntu/cuvs-filter/datasets/navix_bitmap/yfcc/correctness_1000/shard_00000_01000/groundtruth.ibin",
+          "favor_diagnostics_dataset": "yfcc",
+          "favor_diagnostics_variant": "default_cagra_accumulator"
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "max_queries": 1024,
+          "itopk": 64,
+          "search_width": 1,
+          "max_iterations": 0,
+          "favor_udf_passing_accumulator": false,
+          "require_identity_source_indices": true,
+          "bitmap_method": "navix_reference",
+          "navix_mode": "adaptive_kuzu",
+          "navix_scheduler": "tiled",
+          "navix_bitmap_seeds": true,
+          "navix_kernel_variant": "reference",
+          "favor_diagnostics_output": "/home/ubuntu/retrieve_workshop_runs/gpu_resource_work_schema9_all4_20260823T035316Z/diagnostics/yfcc/navix_reference",
+          "favor_diagnostics_groundtruth": "/home/ubuntu/cuvs-filter/datasets/navix_bitmap/yfcc/correctness_1000/shard_00000_01000/groundtruth.ibin",
+          "favor_diagnostics_dataset": "yfcc",
+          "favor_diagnostics_variant": "navix_reference"
+        }
+      ]
+    }
+  ]
+}

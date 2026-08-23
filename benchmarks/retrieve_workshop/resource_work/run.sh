@@ -32,7 +32,7 @@ capture_provenance() {
 run_mode() {
   local mode=$1
   mkdir -p "${result_root}/raw/${mode}" "${result_root}/resources"
-  for workload in yfcc emis; do
+  while IFS= read -r workload; do
     local config="${result_root}/configs/${mode}/${workload}.json"
     local raw="${result_root}/raw/${mode}/${workload}.json"
     local log="${result_root}/resources/${workload}.log"
@@ -59,7 +59,9 @@ run_mode() {
         --benchmark_report_aggregates_only=false \
         --benchmark_out_format=json --benchmark_out="${raw}" "${config}"
     fi
-  done
+  done < <("${python_bin}" -c \
+    'import json,sys; print("\n".join(json.load(open(sys.argv[1]))["workloads"]))' \
+    "${result_root}/configs/manifest.json")
 }
 
 analyze() {
