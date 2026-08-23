@@ -99,6 +99,8 @@ class RawPoint:
     workload: str
     graph_degree: int
     intermediate_graph_degree: int
+    expected_shards: int
+    expected_queries: int
     shard_index: int
     first_query: int
     repetition_index: int
@@ -255,6 +257,8 @@ def load_group(path: Path, manifest: dict, raw_root: Path) -> list[RawPoint]:
     workload = str(manifest["workload"])
     graph_degree = int(manifest["graph_degree"])
     intermediate_graph_degree = int(manifest["intermediate_graph_degree"])
+    expected_shards = int(manifest["expected_shards"])
+    expected_queries = int(manifest["expected_queries"])
     if graph_degree <= 0 or intermediate_graph_degree < graph_degree:
         raise ValueError(
             f"invalid graph degrees in {path}: "
@@ -413,6 +417,8 @@ def load_group(path: Path, manifest: dict, raw_root: Path) -> list[RawPoint]:
                     workload=workload,
                     graph_degree=graph_degree,
                     intermediate_graph_degree=intermediate_graph_degree,
+                    expected_shards=expected_shards,
+                    expected_queries=expected_queries,
                     shard_index=shard_index,
                     first_query=first_query,
                     repetition_index=repetition,
@@ -475,10 +481,15 @@ def aggregate_repetitions(points: list[RawPoint]) -> list[RepetitionPoint]:
         ) = key
         total_queries = sum(row.queries for row in members)
         total_seconds = sum(row.seconds for row in members)
-        expected_shards = (
-            5 if workload == "yfcc" and phase == "throughput" else 1
-        )
-        expected_queries = 1_000 if phase == "correctness" else 10_000
+        expectations = {
+            (row.expected_shards, row.expected_queries) for row in members
+        }
+        if len(expectations) != 1:
+            raise ValueError(
+                f"inconsistent aggregate contract for {group}/{workload}/{method}/"
+                f"rep{repetition}: {sorted(expectations)}"
+            )
+        expected_shards, expected_queries = expectations.pop()
         if (
             len(members) != expected_shards
             or total_queries != expected_queries

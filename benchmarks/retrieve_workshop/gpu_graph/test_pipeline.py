@@ -53,7 +53,7 @@ def make_source_manifests(root: Path) -> None:
         path.write_bytes(relative.encode())
     for phase in ("correctness", "throughput"):
         for workload in WORKLOADS:
-            if workload == "yfcc" and phase == "throughput":
+            if phase == "throughput":
                 counts = (2048, 2048, 2048, 2048, 1808)
             else:
                 counts = (1000 if phase == "correctness" else 10000,)
