@@ -71,9 +71,15 @@ test_gate() {
   is_done test && return
   env LD_PRELOAD="${libcuvs}${LD_PRELOAD:+:${LD_PRELOAD}}" \
     "${repo_dir}/cpp/build/gtests/NEIGHBORS_ANN_CAGRA_FILTER_BITMAP_TEST" --gtest_color=no
-  MPLBACKEND=Agg "${python_bin}" "${repo_dir}/benchmarks/retrieve_workshop/gpu_graph/test_pipeline.py"
-  MPLBACKEND=Agg "${python_bin}" "${repo_dir}/benchmarks/retrieve_workshop/matched_recall/test_matched_recall.py"
-  MPLBACKEND=Agg "${python_bin}" "${repo_dir}/benchmarks/retrieve_workshop/exact_bitmap/test_pipeline.py"
+  # These legacy synthetic suites construct the default medium-dataset fixture. Keep the
+  # production A100 profile from leaking into their subprocesses; the A100-specific suite below
+  # supplies and validates the large-dataset profile explicitly.
+  env -u RETRIEVE_DATASET_PROFILE MPLBACKEND=Agg \
+    "${python_bin}" "${repo_dir}/benchmarks/retrieve_workshop/gpu_graph/test_pipeline.py"
+  env -u RETRIEVE_DATASET_PROFILE MPLBACKEND=Agg \
+    "${python_bin}" "${repo_dir}/benchmarks/retrieve_workshop/matched_recall/test_matched_recall.py"
+  env -u RETRIEVE_DATASET_PROFILE MPLBACKEND=Agg \
+    "${python_bin}" "${repo_dir}/benchmarks/retrieve_workshop/exact_bitmap/test_pipeline.py"
   MPLBACKEND=Agg "${python_bin}" "${script_dir}/test_pipeline.py"
   mark_done test
 }
