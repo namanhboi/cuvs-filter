@@ -158,8 +158,13 @@ def summarize(result_root: Path) -> list[dict]:
     manifests: dict[tuple[str, str], dict] = {}
     resources_by_workload: dict[str, dict[str, dict]] = {}
     raw_by_workload: dict[str, dict[str, dict]] = {}
+    config_manifest_path = result_root / "configs" / "manifest.json"
+    config_manifest = json.loads(config_manifest_path.read_text())
+    contracts = config_manifest.get("dataset_contracts", {})
+    if set(contracts) != set(WORKLOADS):
+        raise ValueError(f"resource manifest lacks dataset contracts: {config_manifest_path}")
     for workload in WORKLOADS:
-        graph_degree = 64 if workload == "yfcc" else 32
+        graph_degree = int(contracts[workload]["graph_degree"])
         resources_by_workload[workload] = load_resources(
             result_root / "resources" / f"{workload}.log", graph_degree
         )

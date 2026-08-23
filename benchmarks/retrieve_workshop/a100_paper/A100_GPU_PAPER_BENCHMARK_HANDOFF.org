@@ -1,0 +1,265 @@
+#+title: A100-80GB GPU paper benchmark handoff
+#+options: toc:2
+
+* Purpose and scope
+
+This package regenerates the GPU-derived inputs for the RETRIEVE CAGRA paper on one full NVIDIA
+A100 80GB.  It covers YFCC-10M and the official =SPCL/arxiv-for-fanns-large= EM, EMIS, and R query
+sets.  All graph methods use the same native cuVS NN-descent CAGRA graph at graph/intermediate
+degree 64/128, resident per-query bitmaps, =SINGLE_CTA=, =k=10=, and =max_queries=512=.
+
+The package produces:
+
+- the three-method B0 QPS--recall sweeps (CAGRA-Base, CAGRA-Retain, and CAGRA-NaviX), plus the
+  matched deterministic-seed controls already defined by the paper artifact;
+- freshly calibrated matched-recall points at 0.80 on YFCC and 0.95 on all three ArXiv workloads;
+- public cuVS masked exact-scan points;
+- the untimed schema-9 dynamic-work counters and compiled CUDA resource table;
+- exact bitmap-derived selectivity/cardinality statistics;
+- a same-G64 YFCC mechanism capture for Base/Retain GT-seen and NaviX B0/deep exhaustion/yield;
+- a hash-bound GPU-only bundle, a four-panel plot, and LaTeX table rows.
+
+It deliberately does *not* rerun FAISS-NaviX or ACORN.  The old CPU rows use ArXiv-medium and must
+not be divided into the new ArXiv-large GPU QPS to claim a method-matched speedup.  Keep them as
+separately qualified context, rerun them on ArXiv-large, or remove the ratio table.
+
+* Recommended machine
+
+The Brev =a100-80gb.1x= instance with 500GB storage is the intended configuration.  One A100 is
+enough; the search code does not use the second GPU in =a100-80gb.2x=.  Require:
+
+- one full, non-MIG A100 80GB, compute capability 8.0, with no competing GPU process;
+- at least 120GB host RAM;
+- at least 12 vCPUs (sufficient, although JSON metadata reduction and bitmap hashing are slower
+  than on 24--32 cores);
+- 500GB persistent storage.  The working set is normally well below this, but 500GB leaves room
+  for the 41.7GiB raw fvecs, the separate 41.7GiB fbin, bitmaps, the YFCC f32 exact-scan cache,
+  graph/build workspace, raw results, and a failed partial build without deleting evidence.
+
+Do not use a MIG slice.  A slice exposes less memory and fewer SMs, changes graph-build feasibility
+and search throughput, and is not an A100-80GB result.  Record whether Brev supplied PCIe or SXM;
+the preflight records the exact GPU name/UUID/driver, but the paper must name the observed model.
+
+* Files and contracts
+
+The entry point is:
+
+#+begin_src sh
+benchmarks/retrieve_workshop/a100_paper/run.sh
+#+end_src
+
+The immutable dataset profile is
+=profiles/a100_yfcc10m_arxiv_large.json=.  It is the single source of truth for N, dimension,
+bitmap namespace, dtype, graph path, degree, and matched-recall widths.  Setting
+=RETRIEVE_DATASET_PROFILE= changes all GPU-graph, matched-recall, and resource-work generators at
+once.  Without that environment variable, the historical YFCC/ArXiv-medium behavior remains
+unchanged.
+
+The ArXiv-large geometry enforced by preparation is 2,735,264 base vectors by 4,096 float32
+dimensions, plus at least 10,000 query vectors.  Its =ground_truth_*.ivecs= files are parsed as
+count-prefixed rows: the first uint32 is the row count (normally 100), followed by that many node
+IDs.  The first ten distinct IDs are retained, padded only if a source row has fewer than ten, and
+every retained ID is checked against the relevant predicate.
+
+ArXiv predicates exactly match the benchmark definition:
+
+- EM: =number_of_sub_categories == query.label=;
+- EMIS: =query.label in candidate.main_categories=;
+- R: =range_start <= candidate.update_date <= range_end=.
+
+Preparation streams both fvec conversions.  It parses =database_attributes.jsonl= once into compact
+numeric arrays and never materializes the base vectors or millions of Python dictionaries in RAM.
+Correctness is one 1,000-query bitmap.  Throughput uses shards
+=2048+2048+2048+2048+1808= for every workload.  Each bitmap GT is predicate-validated before its
+transactional output directory is renamed into place.
+
+* Fresh instance setup
+
+Clone the fork and check out the exact benchmark branch/commit.  Create or reuse the normal cuVS
+micromamba environment and install =huggingface_hub= into it.  Do not edit the checkout after the
+commit is selected: preflight rejects a dirty worktree.
+
+Choose persistent paths and set the tag *once*:
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter
+export CUDA_VISIBLE_DEVICES=0
+export PYTHON=/home/ubuntu/micromamba/envs/cuvs/bin/python
+export RETRIEVE_RUN_TAG=$(date -u +%Y%m%dT%H%M%SZ)
+export RETRIEVE_DATA_ROOT=/home/ubuntu/retrieve_data
+export RETRIEVE_A100_RUN_ROOT=/home/ubuntu/retrieve_workshop_runs/a100_gpu_${RETRIEVE_RUN_TAG}
+export RETRIEVE_ARXIV_LARGE_RAW=${RETRIEVE_DATA_ROOT}/arxiv-for-fanns-large
+export RETRIEVE_YFCC_SOURCE=/path/to/big-ann-benchmarks/data/yfcc100M
+export PARALLEL_LEVEL=12
+#+end_src
+
+=RETRIEVE_YFCC_SOURCE= must contain:
+
+- =base.10M.u8bin= and =query.public.100K.u8bin=;
+- =base.metadata.10M.spmat= and =query.metadata.public.100K.spmat=;
+- =GT.public.ibin=.
+
+The runner makes non-destructive symlinks under
+=${RETRIEVE_DATA_ROOT}/yfcc-10M=.  Existing files are retained.  It never copies the YFCC base.
+
+Download ArXiv explicitly.  The =all= stage intentionally does not initiate a network download:
+
+#+begin_src sh
+${PYTHON} -m pip install huggingface_hub
+benchmarks/retrieve_workshop/a100_paper/run.sh download-arxiv
+#+end_src
+
+The nine official Hugging Face files are downloaded into =RETRIEVE_ARXIV_LARGE_RAW=.  Confirm that
+the storage is persistent before starting a spot/preemptible instance.
+
+* Complete production run
+
+Run the full pipeline without another GPU job:
+
+#+begin_src sh
+benchmarks/retrieve_workshop/a100_paper/run.sh all
+#+end_src
+
+The stages execute serially and never overlap graph construction, exact scan, or graph search:
+
+1. =preflight=: clean Git state, one A100-80GB/CC8.0, MIG off, no compute process, >=110GiB RAM,
+   >=12 CPUs, and >=350GiB free storage;
+2. =build=: libcuvs, the bitmap gtest, CAGRA benchmark, and brute-force benchmark for =80-real=;
+3. =test=: CUDA bitmap test plus all CPU-only pipeline tests;
+4. =prepare=: YFCC bitmaps and bounded ArXiv-large conversion/metadata/GT/bitmaps;
+5. =build-graphs=: native cuVS NN-descent G64/IG128 graphs and SHA-256 records;
+6. =correctness=: 1,000 queries, one repetition, short timing gate;
+7. =b0=: 10,000 queries, three repetitions, six fixed B0 cells;
+8. =matched-recall=: adaptive B0 calibration over requested integer L and W in {1,2}, then fresh
+   three-run finalists; explicit depth is proposed only if no B0 point reaches the target;
+9. =exact=: resident-bitmap cuVS exact scan, one correctness and three throughput repetitions;
+10. =resource-work=: =L=64,W=1,B0= untimed schema-9 counters and production kernel resources;
+11. =diagnostics=: YFCC =L=512,W=2,B0= retention and NaviX B0/deep schema-9 mechanism captures;
+12. =dataset-stats=: exact popcounts over all 10,000 bitmap rows;
+13. =analyze= and =bundle=: strict correctness checks, figures, tables, hashes, and claim mapping.
+
+The total duration depends heavily on Brev storage and graph build.  Budget several hours to a day,
+not minutes.  The calibration stage is intentionally data-dependent.  Twelve vCPUs primarily slow
+download decompression, JSON parsing, graph preparation, and hashing; timed search itself is GPU
+bound.
+
+* Running and resuming individual stages
+
+Every stage is callable by name:
+
+#+begin_src sh
+benchmarks/retrieve_workshop/a100_paper/run.sh preflight
+benchmarks/retrieve_workshop/a100_paper/run.sh build
+benchmarks/retrieve_workshop/a100_paper/run.sh test
+benchmarks/retrieve_workshop/a100_paper/run.sh prepare
+benchmarks/retrieve_workshop/a100_paper/run.sh build-graphs
+benchmarks/retrieve_workshop/a100_paper/run.sh correctness
+benchmarks/retrieve_workshop/a100_paper/run.sh b0
+benchmarks/retrieve_workshop/a100_paper/run.sh matched-recall
+benchmarks/retrieve_workshop/a100_paper/run.sh exact
+benchmarks/retrieve_workshop/a100_paper/run.sh resource-work
+benchmarks/retrieve_workshop/a100_paper/run.sh diagnostics
+benchmarks/retrieve_workshop/a100_paper/run.sh dataset-stats
+benchmarks/retrieve_workshop/a100_paper/run.sh analyze
+benchmarks/retrieve_workshop/a100_paper/run.sh bundle
+#+end_src
+
+Keep the literal values of =RETRIEVE_RUN_TAG=, =RETRIEVE_DATA_ROOT=, and
+=RETRIEVE_A100_RUN_ROOT= in the resuming shell.  Completed top-level stages have UTC markers under
+=.done/=.  A nonblocking =flock= prevents two orchestration processes from sharing a result root.
+The profile SHA-256 is pinned on first use and cannot change inside that root.
+
+Raw-result writers refuse overwrites.  If interruption leaves a truncated final raw JSON, inspect
+the orchestrator log, remove only that exact incomplete file, and resume the same stage.  Never set
+a broad overwrite flag against a paper result root, and never delete completed raw repetitions to
+make a desired median.  Preparation uses transactional directories and =--reuse-valid=; an invalid
+cache is an error rather than an implicit rebuild.
+
+* Timing and fairness
+
+Graph methods time the complete cuVS-bench search call with the index, vectors, and bitmap already
+resident; index loading and bitmap materialization are excluded.  Every throughput point covers
+the same 10,000 queries and reports the median of three runs with min--max retained.  Shard QPS is
+computed as 10,000 divided by the sum of shard search seconds, not the arithmetic mean of shard
+QPS.  Correctness uses 1,000 queries and one repetition and is not a paper throughput point.
+
+The exact point times bitmap counting, query norms, sparse/dense masked distance work, top-k,
+sentinel normalization, and temporary device allocation/deallocation.  Predicate evaluation,
+bitmap creation/upload, and YFCC u8-to-f32 conversion are outside timed search.  A shared input hash
+cache prevents the unchanged 41.7GiB ArXiv base from being reread for SHA-256 once per predicate;
+the cache key includes resolved path, byte size, and nanosecond mtime, while every emitted source
+record still carries the content hash.
+
+Matched recall uses requested integer L values even though CAGRA rounds its internal frontier
+capacity to 32.  This is valid because the B0 formula uses caller-requested L before the internal
+capacity rounding.  The tuner deduplicates equal =(internal capacity, resolved B0)= executions.
+Only W=1 and W=2 are used in this A100 profile.  A selected point reports L, W, configured
+=max_iterations=, resolved iterations, achieved recall, QPS, and all correctness counters.
+
+* Pass/fail rules
+
+Do not use a result if any of these checks fails:
+
+- filter violations or invalid-sentinel ordering errors are nonzero;
+- valid-GT fraction or exact native-L2 cutoff validation violates the analyzer contract;
+- Retain or NaviX returns duplicate valid IDs;
+- a 10,000-query throughput repetition is incomplete or a shard is missing;
+- graph degree/index path differs between the three graph methods;
+- Base and Retain schema-9 traversal work or GT-seen masks differ per query;
+- a diagnostic manifest reports =timing_valid=true= (diagnostics are never throughput evidence);
+- GPU UUID, binary/library hash, data root, profile hash, or Git commit changes within a run;
+- the final workload uses a different shard set across methods.
+
+The benchmark deliberately tolerates Base duplicate outputs only as a measured correctness field;
+recall uses distinct valid output IDs, so a repeated ID never earns multiple credit.
+
+* Outputs used by the paper
+
+The final directory is:
+
+#+begin_src text
+${RETRIEVE_A100_RUN_ROOT}/paper_gpu_bundle/
+#+end_src
+
+Important files are:
+
+- =gpu_qps_recall_a100.pdf= and =.png=: one-row, four-panel B0/matched/exact visual check;
+- =gpu_matched_recall_rows.tex=: achieved recall, QPS, and =(L,W,I)= for all methods/workloads;
+- =gpu_headline_inputs.json=: matched and exact rows without derived prose;
+- =b0/summary_points.csv= and =matched_recall/selected_points.csv=;
+- =exact_scan/exact_summary.csv=;
+- =resource_work/gpu_resource_work.{csv,json,tex}=;
+- =mechanism_diagnostics/mechanism_summary.json=;
+- =dataset_stats/workload_selectivity_summary.json=;
+- =claim_to_source.json=: which file supports each GPU claim;
+- =manifest.json=: byte size and SHA-256 of every bundled input/output.
+
+The plot uses y=0 as its lower bound, places the four workloads on one wide row, includes the
+freshly selected near-target points as open method markers, and includes the masked exact point.
+There is no interpolated target line or target star.  A hollow selected marker is a measured point,
+not an estimate.
+
+Before replacing paper text, compare achieved target quality, not just QPS.  State explicitly that
+ArXiv is now 2.735M rather than 100K and update the dataset/build table from G32/IG64 to G64/IG128.
+Old ArXiv-medium selectivity, correlation, CPU speedup, and locality numbers do not automatically
+transfer.  YFCC remains the same dataset/degree and can be compared across devices only with the
+GPU model and run conditions named.
+
+* Developer validation without an A100
+
+The package has CPU-only synthetic tests.  They verify the profile contract, packed-bit order,
+transactional bitmap sharding and GT checks, all four generator paths, bundle completeness, plot
+creation, and hashing:
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter
+MPLBACKEND=Agg ${PYTHON} benchmarks/retrieve_workshop/a100_paper/test_pipeline.py
+MPLBACKEND=Agg ${PYTHON} benchmarks/retrieve_workshop/gpu_graph/test_pipeline.py
+MPLBACKEND=Agg ${PYTHON} benchmarks/retrieve_workshop/matched_recall/test_matched_recall.py
+MPLBACKEND=Agg ${PYTHON} benchmarks/retrieve_workshop/exact_bitmap/test_pipeline.py
+bash -n benchmarks/retrieve_workshop/a100_paper/run.sh
+git diff --check
+#+end_src
+
+These tests do not certify A100 performance.  Production evidence exists only after the hardware
+preflight, CUDA gtest, complete measurements, strict analyzers, and final bundle all pass.

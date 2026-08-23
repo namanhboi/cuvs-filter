@@ -17,6 +17,7 @@ from generate_configs import (  # noqa: E402
     dataset_paths,
     search_point,
 )
+from dataset_profile import load_profile, profile_record  # noqa: E402
 
 WORKLOADS = ("yfcc", "em", "emis", "r")
 ITOPK = 64
@@ -27,6 +28,7 @@ DIAGNOSTIC_SCHEMA = 9
 
 def build(output: Path, data_root: Path, diagnostic_root: Path) -> dict:
     configs: dict[str, dict[str, str]] = {}
+    dataset_contracts: dict[str, dict[str, int]] = {}
     for workload in WORKLOADS:
         paths = dataset_paths(data_root, workload, "correctness", 64)
         source_manifest = json.loads(paths.manifest.read_text())
@@ -80,6 +82,12 @@ def build(output: Path, data_root: Path, diagnostic_root: Path) -> dict:
             path.write_text(json.dumps(payload, indent=2) + "\n")
             workload_configs[mode] = str(path.resolve())
         configs[workload] = workload_configs
+        dataset_contracts[workload] = {
+            "dataset_size": paths.dataset_size,
+            "dimension": paths.dimension,
+            "graph_degree": paths.graph_degree,
+            "intermediate_graph_degree": paths.intermediate_graph_degree,
+        }
 
     manifest = {
         "schema_version": 1,
@@ -92,6 +100,8 @@ def build(output: Path, data_root: Path, diagnostic_root: Path) -> dict:
         "search_width": SEARCH_WIDTH,
         "max_iterations": MAX_ITERATIONS,
         "configs": configs,
+        "dataset_profile": profile_record(load_profile()),
+        "dataset_contracts": dataset_contracts,
     }
     output.mkdir(parents=True, exist_ok=True)
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")

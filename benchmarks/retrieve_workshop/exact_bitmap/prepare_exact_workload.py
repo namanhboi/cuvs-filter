@@ -36,10 +36,32 @@ def sha256(path: Path) -> str:
 
 def file_record(path: Path) -> dict[str, object]:
     path = path.resolve()
+    stat = path.stat()
+    cache_name = os.environ.get("RETRIEVE_HASH_CACHE", "").strip()
+    cache_path = Path(cache_name).resolve() if cache_name else None
+    cache: dict[str, object] = {}
+    key = str(path)
+    if cache_path is not None and cache_path.is_file():
+        cache = json.loads(cache_path.read_text())
+        row = cache.get(key, {})
+        if (
+            int(row.get("bytes", -1)) == stat.st_size
+            and int(row.get("mtime_ns", -1)) == stat.st_mtime_ns
+            and isinstance(row.get("sha256"), str)
+        ):
+            return {"path": key, "bytes": stat.st_size, "sha256": row["sha256"]}
+    digest = sha256(path)
+    if cache_path is not None:
+        cache[key] = {
+            "bytes": stat.st_size,
+            "mtime_ns": stat.st_mtime_ns,
+            "sha256": digest,
+        }
+        atomic_write_json(cache_path, cache)
     return {
-        "path": str(path),
-        "bytes": path.stat().st_size,
-        "sha256": sha256(path),
+        "path": key,
+        "bytes": stat.st_size,
+        "sha256": digest,
     }
 
 

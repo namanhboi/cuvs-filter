@@ -8,6 +8,8 @@ if [[ ! -d "${data_root}" && -d /home/ubuntu/cuvs-filter/datasets ]]; then
   data_root=/home/ubuntu/cuvs-filter/datasets
 fi
 bitmap_root=${RETRIEVE_BITMAP_ROOT:-"${data_root}/navix_bitmap"}
+arxiv_namespace=${RETRIEVE_ARXIV_BITMAP_NAMESPACE:-arxiv}
+arxiv_dataset_dir=${RETRIEVE_ARXIV_DATASET_DIR:-arxiv-for-fanns-medium}
 exact_data_root=${RETRIEVE_EXACT_DATA_ROOT:-"${data_root}/retrieve_workshop/exact_bitmap"}
 result_root=${RETRIEVE_EXACT_RESULT_ROOT:-"${repo_dir}/benchmarks/retrieve_workshop/exact_bitmap/results"}
 bench_bin=${RETRIEVE_EXACT_BENCH_BIN:-"${repo_dir}/cpp/build/bench/ann/CUVS_BRUTE_FORCE_ANN_BENCH"}
@@ -39,9 +41,9 @@ prepare_data() {
     "${exact_data_root}/yfcc/throughput_10000" --converted-base "${yfcc_float_base}"
   for predicate in em emis r; do
     for phase in correctness_1000 throughput_10000; do
-      prepare_one "${bitmap_root}/arxiv/${predicate}/${phase}/manifest.json" \
-        "${data_root}/arxiv-for-fanns-medium/base.fbin" float32 \
-        "${exact_data_root}/arxiv/${predicate}/${phase}"
+      prepare_one "${bitmap_root}/${arxiv_namespace}/${predicate}/${phase}/manifest.json" \
+        "${data_root}/${arxiv_dataset_dir}/base.fbin" float32 \
+        "${exact_data_root}/${arxiv_namespace}/${predicate}/${phase}"
     done
   done
 }
@@ -61,16 +63,17 @@ generate_configs() {
   generate_one yfcc throughput "${exact_data_root}/yfcc/throughput_10000/manifest.json"
   for predicate in em emis r; do
     generate_one "${predicate}" correctness \
-      "${exact_data_root}/arxiv/${predicate}/correctness_1000/manifest.json"
+      "${exact_data_root}/${arxiv_namespace}/${predicate}/correctness_1000/manifest.json"
     generate_one "${predicate}" throughput \
-      "${exact_data_root}/arxiv/${predicate}/throughput_10000/manifest.json"
+      "${exact_data_root}/${arxiv_namespace}/${predicate}/throughput_10000/manifest.json"
   done
 }
 
 ensure_binary() {
   if [[ ! -x "${bench_bin}" || ! -f "${build_libcuvs}" ]]; then
     (cd "${repo_dir}" && \
-      ./build.sh bench-ann -n --limit-bench-ann=CUVS_BRUTE_FORCE_ANN_BENCH --gpu-arch=89-real)
+      ./build.sh bench-ann -n --limit-bench-ann=CUVS_BRUTE_FORCE_ANN_BENCH \
+        --gpu-arch="${RETRIEVE_GPU_ARCH:-89-real}")
   fi
   if [[ ! -x "${bench_bin}" || ! -f "${build_libcuvs}" ]]; then
     echo "cuVS brute-force ANN benchmark build did not produce the expected files" >&2

@@ -29,11 +29,13 @@ from generate_configs import (  # noqa: E402
     point_identity,
     search_point,
 )
+from dataset_profile import load_profile, profile_record, workload_spec  # noqa: E402
 
 WORKLOADS = ("yfcc", "em", "emis", "r")
 METHODS = ("default_cagra", "default_cagra_accumulator", "navix_reference")
-WIDTHS = (1, 2, 4)
-TUNING_WIDTHS = (1, 2)
+PROFILE = load_profile()
+WIDTHS = tuple(int(value) for value in PROFILE["matched_widths"])
+TUNING_WIDTHS = tuple(value for value in WIDTHS if value in (1, 2))
 ANCHOR_L = (32, 64, 128, 256, 512)
 MIN_L = 10
 MAX_L = 512
@@ -177,8 +179,9 @@ def resolved_b0(itopk: int, width: int, dataset_size: int, degree: int) -> int:
 def resolved_iterations(workload: str, itopk: int, width: int, maximum: int) -> int:
     if maximum:
         return maximum
-    dataset_size = 10_000_000 if workload == "yfcc" else 100_000
-    degree = 64 if workload == "yfcc" else 32
+    spec = workload_spec(workload, PROFILE)
+    dataset_size = int(spec["dataset_size"])
+    degree = int(spec["graph_degree"])
     return resolved_b0(itopk, width, dataset_size, degree)
 
 
@@ -188,7 +191,7 @@ def visit_multiplier(method: str) -> int:
 
 
 def hash_nodes(workload: str, method: str, itopk: int, width: int, maximum: int) -> int:
-    degree = 64 if workload == "yfcc" else 32
+    degree = int(workload_spec(workload, PROFILE)["graph_degree"])
     iterations = resolved_iterations(workload, itopk, width, maximum)
     return internal_itopk(itopk) + width * degree * visit_multiplier(method) * iterations
 
@@ -272,6 +275,7 @@ def write_group(
         "stage": stage,
         "repetitions": repetitions,
         "targets": TARGETS,
+        "dataset_profile": profile_record(PROFILE),
         "points": normalized,
     }
     for workload in WORKLOADS:
@@ -722,15 +726,25 @@ def next_points(result_root: Path) -> tuple[str, list[dict[str, object]]]:
                         left_pass = float(left["recall"]) >= goal
                         right_pass = float(right["recall"]) >= goal
                         gap = int(right["itopk"]) - int(left["itopk"])
-                        if left_pass != right_pass and gap > L_QUANTUM:
-                            midpoint_index = (
-                                (int(left["itopk"]) // L_QUANTUM)
-                                + (int(right["itopk"]) // L_QUANTUM)
-                            ) // 2
-                            midpoint = midpoint_index * L_QUANTUM
-                            candidate = (workload, method, midpoint, width, 0)
-                            if candidate not in observed:
-                                proposals.add(candidate)
+                        if left_pass != right_pass and gap > 1:
+                            # Requested L influences B0 before CAGRA rounds its internal frontier
+                            # capacity to a multiple of 32.  Refine requested integers and retain
+                            # only points with a distinct (capacity, B0) execution fingerprint.
+                            midpoint = (int(left["itopk"]) + int(right["itopk"])) // 2
+                            existing_fingerprints = {
+                                execution_fingerprint(workload, int(row["itopk"]), width)
+                                for row in local
+                            }
+                            candidates = sorted(
+                                range(int(left["itopk"]) + 1, int(right["itopk"])),
+                                key=lambda value: (abs(value - midpoint), value),
+                            )
+                            for requested_l in candidates:
+                                fingerprint = execution_fingerprint(workload, requested_l, width)
+                                candidate = (workload, method, requested_l, width, 0)
+                                if fingerprint not in existing_fingerprints and candidate not in observed:
+                                    proposals.add(candidate)
+                                    break
         reason = "b0_refinement"
 
     if proposals:
@@ -873,6 +887,7 @@ def candidate_selection(result_root: Path) -> dict:
         "target_window": TARGET_WINDOW,
         "max_l": MAX_L,
         "widths": list(WIDTHS),
+        "dataset_profile": profile_record(PROFILE),
         "max_iterations": MAX_ITERATIONS,
         "decisions": decisions,
         "points": selected,

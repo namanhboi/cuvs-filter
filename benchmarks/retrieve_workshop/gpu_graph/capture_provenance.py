@@ -99,12 +99,19 @@ def main() -> None:
             "fixed_contract": {
                 "gpu_algo": "SINGLE_CTA",
                 "k": 10,
-                "max_queries": 512,
-                "reported_throughput_repetitions": 3,
+                "max_queries": int(
+                    os.environ.get("RETRIEVE_PROVENANCE_MAX_QUERIES", "512")
+                ),
+                "reported_throughput_repetitions": int(
+                    os.environ.get("RETRIEVE_PROVENANCE_REPETITIONS", "3")
+                ),
                 "correctness_repetitions": 1,
                 "throughput_queries": 10000,
                 "correctness_queries": 1000,
-                "timing": "complete cuVS-bench search call; setup and index loading excluded",
+                "timing": os.environ.get(
+                    "RETRIEVE_PROVENANCE_TIMING",
+                    "complete cuVS-bench search call; setup and index loading excluded",
+                ),
                 "output_set_semantics": "distinct_valid_output_ids_v1",
             },
             "events": [],

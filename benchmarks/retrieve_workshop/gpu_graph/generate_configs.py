@@ -13,6 +13,8 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+from dataset_profile import load_profile, profile_record, workload_spec
+
 WORKLOADS = ("yfcc", "em", "emis", "r")
 K = 10
 MAX_QUERIES = 512
@@ -39,6 +41,8 @@ class DatasetPaths:
     dtype: str
     graph_degree: int
     intermediate_graph_degree: int
+    dataset_size: int
+    dimension: int
 
 
 def dataset_paths(
@@ -50,7 +54,11 @@ def dataset_paths(
     if workload not in WORKLOADS:
         raise ValueError(f"unknown workload {workload!r}")
     sample_count = "1000" if phase == "correctness" else "10000"
-    if workload == "yfcc":
+    profile = load_profile()
+    spec = workload_spec(workload, profile)
+    # Retain the historical command-line sensitivity switch only for the built-in profile.  An
+    # explicit profile is the single source of truth and must not be silently overridden.
+    if workload == "yfcc" and profile["source"] == "built-in":
         if yfcc_graph_degree not in (32, 64):
             raise ValueError(
                 "YFCC graph degree must be 32 (sensitivity) or 64 (primary)"
@@ -70,19 +78,18 @@ def dataset_paths(
             "uint8",
             yfcc_graph_degree,
             intermediate_graph_degree,
+            10_000_000,
+            192,
         )
     return DatasetPaths(
-        data_root
-        / "navix_bitmap"
-        / "arxiv"
-        / workload
-        / f"{phase}_{sample_count}"
-        / "manifest.json",
-        "arxiv-for-fanns-medium/base.fbin",
-        "arxiv-for-fanns-medium/cagra_g32_ig64.index",
-        "float",
-        32,
-        64,
+        data_root / str(spec["bitmap_directory"]) / f"{phase}_{sample_count}" / "manifest.json",
+        str(spec["base_file"]),
+        str(spec["index_file"]),
+        str(spec["dtype"]),
+        int(spec["graph_degree"]),
+        int(spec["intermediate_graph_degree"]),
+        int(spec["dataset_size"]),
+        int(spec["dimension"]),
     )
 
 
@@ -256,6 +263,9 @@ def write_group(
         "max_queries": MAX_QUERIES,
         "graph_degree": paths.graph_degree,
         "intermediate_graph_degree": paths.intermediate_graph_degree,
+        "dataset_size": paths.dataset_size,
+        "dimension": paths.dimension,
+        "dataset_profile": profile_record(),
         "repetitions": (
             CORRECTNESS_REPETITIONS
             if phase == "correctness"
