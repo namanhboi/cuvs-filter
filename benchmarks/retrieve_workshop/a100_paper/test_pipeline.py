@@ -22,11 +22,30 @@ sys.path.insert(0, str(RETRIEVE_DIR / "gpu_graph"))
 sys.path.insert(0, str(RETRIEVE_DIR.parent / "favor" / "navix_bitmap"))
 
 from dataset_profile import load_profile
+from mechanism_diagnostics import validate_base_retain_traversal
 from prepare_arxiv_large import materialize_phase, packed_words
 from prepare_bitmaps import Matrix
 
 
 class A100PipelineTest(unittest.TestCase):
+    def test_retain_predicate_probes_are_measured_not_equalized(self) -> None:
+        base = [
+            {
+                "iterations": "69",
+                "graph_rows_read": "68",
+                "predicate_probes": "163",
+                "distance_evaluations": "2687",
+                "passing_admissions": "11",
+                "gt_seen_mask": "31",
+            }
+        ]
+        retain = [dict(base[0], predicate_probes="2755")]
+        validate_base_retain_traversal(base, retain)
+
+        changed_traversal = [dict(retain[0], graph_rows_read="69")]
+        with self.assertRaisesRegex(ValueError, "graph_rows_read"):
+            validate_base_retain_traversal(base, changed_traversal)
+
     def test_bigann_groundtruth_accepts_trailing_distances(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "GT.public.ibin"

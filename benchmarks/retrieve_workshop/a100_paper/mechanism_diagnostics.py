@@ -86,6 +86,31 @@ def popcount_mean(rows: list[dict[str, str]], field: str) -> float:
     return sum(int(row[field]).bit_count() for row in rows) / (10 * len(rows))
 
 
+def validate_base_retain_traversal(
+    base: list[dict[str, str]], retain: list[dict[str, str]]
+) -> None:
+    """Prove that Retain changes result state, not graph traversal.
+
+    Predicate probes are deliberately excluded.  Retain evaluates the predicate
+    while offering distance-eligible candidates to its passing-result
+    accumulator, whereas Base evaluates it for parent retirement and terminal
+    output filtering.  Their probe counts are therefore useful measured work,
+    but they are not a traversal-equivalence invariant.
+    """
+    for query, (left, right) in enumerate(zip(base, retain, strict=True)):
+        for field in (
+            "iterations",
+            "graph_rows_read",
+            "distance_evaluations",
+            "passing_admissions",
+            "gt_seen_mask",
+        ):
+            if left[field] != right[field]:
+                raise ValueError(
+                    f"Base/Retain {field} differs at query {query}"
+                )
+
+
 def summarize(diagnostics: Path, output: Path) -> None:
     captures: dict[str, tuple[list[dict[str, str]], dict]] = {}
     for variant, method, itopk, width, iterations in VARIANTS:
@@ -110,18 +135,9 @@ def summarize(diagnostics: Path, output: Path) -> None:
 
     base = captures["base_l512_w2_b0"][0]
     retain = captures["retain_l512_w2_b0"][0]
-    for query, (left, right) in enumerate(zip(base, retain, strict=True)):
-        for field in (
-            "iterations",
-            "graph_rows_read",
-            "predicate_probes",
-            "distance_evaluations",
-            "gt_seen_mask",
-        ):
-            if left[field] != right[field]:
-                raise ValueError(
-                    f"Base/Retain {field} differs at query {query}"
-                )
+    validate_base_retain_traversal(base, retain)
+    base_predicate_probes = mean(base, "predicate_probes")
+    retain_predicate_probes = mean(retain, "predicate_probes")
     retention = {
         "configuration": {
             "itopk": 512,
@@ -137,6 +153,11 @@ def summarize(diagnostics: Path, output: Path) -> None:
         - mean(retain, "recall"),
         "distance_evaluations_per_query": mean(base, "distance_evaluations"),
         "graph_rows_per_query": mean(base, "graph_rows_read"),
+        "base_predicate_probes_per_query": base_predicate_probes,
+        "retain_predicate_probes_per_query": retain_predicate_probes,
+        "retain_additional_predicate_probes_per_query": (
+            retain_predicate_probes - base_predicate_probes
+        ),
     }
 
     navix: dict[str, dict[str, object]] = {}
@@ -189,7 +210,7 @@ def summarize(diagnostics: Path, output: Path) -> None:
             "gt_output_rate": popcount_mean(rows, "navix_gt_output_mask"),
         }
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "status": "PASS",
         "dataset": "YFCC-10M",
         "graph_degree": 64,

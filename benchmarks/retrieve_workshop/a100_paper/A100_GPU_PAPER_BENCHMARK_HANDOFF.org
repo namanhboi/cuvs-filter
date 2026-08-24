@@ -218,7 +218,9 @@ Do not use a result if any of these checks fails:
 - Retain or NaviX returns duplicate valid IDs;
 - a 10,000-query throughput repetition is incomplete or a shard is missing;
 - graph degree/index path differs between the three graph methods;
-- Base and Retain schema-9 traversal work or GT-seen masks differ per query;
+- Base and Retain schema-9 iterations, graph rows, distance evaluations, passing admissions, or
+  GT-seen masks differ per query. Predicate-probe counts are intentionally not equal: Retain tests
+  distance-eligible candidates for accumulator admission, and the summary reports that extra work;
 - a diagnostic manifest reports =timing_valid=true= (diagnostics are never throughput evidence);
 - GPU UUID, binary/library hash, data root, profile hash, or Git commit changes within a run;
 - the final workload uses a different shard set across methods.
