@@ -207,7 +207,33 @@ run_maxq_gate() {
   while IFS=$'\t' read -r cap workload config; do
     local raw="${root}/raw/maxq_${cap}/${workload}.json"
     mkdir -p "$(dirname "${raw}")"
-    test ! -e "${raw}" || { echo "refusing to overwrite ${raw}" >&2; exit 2; }
+    if test -e "${raw}"; then
+      if test -s "${raw}" && "${python_bin}" - "${raw}" "${config}" <<'PY'
+import json
+import pathlib
+import sys
+
+raw = json.loads(pathlib.Path(sys.argv[1]).read_text())
+config = json.loads(pathlib.Path(sys.argv[2]).read_text())
+expected = sum(len(index["search_params"]) for index in config["index"])
+observed = [
+    row
+    for row in raw.get("benchmarks", [])
+    if row.get("run_type") == "iteration"
+]
+if (
+    len(observed) != expected
+    or any(row.get("error_occurred") or row.get("skipped") for row in observed)
+):
+    raise SystemExit(1)
+PY
+      then
+        echo "resume: retaining complete max-query gate output ${raw}"
+        continue
+      fi
+      echo "refusing to reuse incomplete max-query gate output ${raw}; remove only this file and retry" >&2
+      exit 2
+    fi
     env LD_PRELOAD="${libcuvs}${LD_PRELOAD:+:${LD_PRELOAD}}" \
       "${bench_bin}" --search --mode=throughput --threads=1 \
       --data_prefix="${data_root}" --index_prefix="${data_root}" \

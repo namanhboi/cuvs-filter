@@ -144,20 +144,67 @@ def analyze(root: Path) -> None:
             validate_runtime_flags(record, label, method, path, cap)
             if round(finite(record, "n_queries", path)) != 2_048:
                 raise ValueError(f"gate point does not cover 2,048 queries: {key}")
-            errors = sum(
+            # Match the graph-paper analyzer's ID-set correctness contract.  An
+            # underfilled native CAGRA result can report a non-zero
+            # InvalidSentinelDistanceErrors rate even when its invalid IDs,
+            # sentinel ordering, filter membership, and set-valued recall are
+            # correct.  The exact-scan control has a stricter distance-sentinel
+            # contract, but applying that contract here incorrectly rejects
+            # native Base and Retain rows.
+            hard_errors = sum(
                 finite(record, field, path)
                 for field in (
                     "FilterViolations",
                     "InvalidSentinelErrors",
                     "SentinelOrderErrors",
-                    "InvalidSentinelDistanceErrors",
                 )
             )
+            invalid_sentinel_distance_errors = finite(
+                record, "InvalidSentinelDistanceErrors", path
+            )
             duplicates = finite(record, "DuplicateOutputQueries", path)
-            if errors != 0 or (method != "default_cagra" and duplicates != 0):
+            underfilled = finite(record, "UnderfilledQueries", path)
+            missing_slots = finite(record, "MissingResultSlots", path)
+            output_set_semantics = finite(
+                record, "OutputSetSemanticsVersion", path
+            )
+            valid_gt_fraction = finite(record, "ValidGTFraction", path)
+            if not all(
+                0.0 <= value <= 1.0
+                for value in (
+                    invalid_sentinel_distance_errors,
+                    duplicates,
+                    underfilled,
+                    missing_slots,
+                )
+            ):
+                raise ValueError(
+                    f"invalid diagnostic rate for maxq={cap}/{workload}/{key}: "
+                    f"sentinel_distance={invalid_sentinel_distance_errors}, "
+                    f"duplicates={duplicates}, underfilled={underfilled}, "
+                    f"missing_slots={missing_slots}"
+                )
+            if duplicates > underfilled + 1e-12:
+                raise ValueError(
+                    f"duplicate-query rate exceeds unique-underfill rate for "
+                    f"maxq={cap}/{workload}/{key}"
+                )
+            if not math.isclose(output_set_semantics, 1.0, abs_tol=1e-12):
+                raise ValueError(
+                    f"unsupported output-set semantics for maxq={cap}/{workload}/{key}: "
+                    f"{output_set_semantics}"
+                )
+            if not math.isclose(valid_gt_fraction, 1.0, abs_tol=1e-12):
+                raise ValueError(
+                    f"incomplete valid ground truth for maxq={cap}/{workload}/{key}: "
+                    f"{valid_gt_fraction}"
+                )
+            if hard_errors != 0 or (method != "default_cagra" and duplicates != 0):
                 raise ValueError(
                     f"correctness failure for maxq={cap}/{workload}/{key}: "
-                    f"errors={errors}, duplicates={duplicates}"
+                    f"hard_errors={hard_errors}, duplicates={duplicates}, "
+                    f"invalid_sentinel_distance_errors="
+                    f"{invalid_sentinel_distance_errors}"
                 )
             qps = finite(record, "items_per_second", path)
             recall = finite(record, "ValidGTRecall", path)
@@ -175,6 +222,11 @@ def analyze(root: Path) -> None:
                     "recall": recall,
                     "qps": qps,
                     "duplicate_output_queries": duplicates,
+                    "invalid_sentinel_distance_errors": (
+                        invalid_sentinel_distance_errors
+                    ),
+                    "underfilled_queries": underfilled,
+                    "missing_result_slots": missing_slots,
                 }
             )
             observed.add(key)

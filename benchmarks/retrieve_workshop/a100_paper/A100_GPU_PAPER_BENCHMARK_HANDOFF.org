@@ -196,11 +196,13 @@ The runner also pins =state/max_queries.txt= and refuses to combine results gene
 different cap.  Use a new run root for this 2,048-query experiment; do not resume a historical
 512-query A100 run.
 
-Raw-result writers refuse overwrites.  If interruption leaves a truncated final raw JSON, inspect
-the orchestrator log, remove only that exact incomplete file, and resume the same stage.  Never set
-a broad overwrite flag against a paper result root, and never delete completed raw repetitions to
-make a desired median.  Preparation uses transactional directories and =--reuse-valid=; an invalid
-cache is an error rather than an implicit rebuild.
+Raw-result writers refuse overwrites.  The =maxq-gate= is additionally restart-aware: it retains an
+existing JSON only when it parses and contains the expected number of completed iteration rows.  If
+interruption leaves a truncated final raw JSON, inspect the orchestrator log, remove only that exact
+incomplete file, and resume the same stage.  Never set a broad overwrite flag against a paper result
+root, and never delete completed raw repetitions to make a desired median.  Preparation uses
+transactional directories and =--reuse-valid=; an invalid cache is an error rather than an implicit
+rebuild.
 
 * Timing and fairness
 
@@ -226,6 +228,13 @@ bitmap creation/upload, and YFCC u8-to-f32 conversion are outside timed search. 
 cache prevents the unchanged 41.7GiB ArXiv base from being reread for SHA-256 once per predicate;
 the cache key includes resolved path, byte size, and nanosecond mtime, while every emitted source
 record still carries the content hash.
+
+Graph-search correctness uses distinct valid output IDs.  Filter violations, invalid output IDs,
+sentinel-order errors, and duplicates from Retain/NaviX are hard failures; the already documented
+native Base duplicate exception is reported without earning recall credit.  The benchmark also
+reports =InvalidSentinelDistanceErrors= for underfilled slots, but this diagnostic is not a hard
+failure for graph methods because their paper contract is ID-set based.  The exact-scan control
+retains its separate, stricter distance-boundary and sentinel validation.
 
 Matched recall uses requested integer L values even though CAGRA rounds its internal frontier
 capacity to 32.  This is valid because the B0 formula uses caller-requested L before the internal
