@@ -252,11 +252,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-root", type=Path, required=True)
     parser.add_argument("--profile", type=Path, required=True)
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="immutable bundle directory; defaults to RUN_ROOT/paper_gpu_bundle",
+    )
     args = parser.parse_args()
     root = args.run_root.resolve()
     profile_payload = json.loads(args.profile.read_text())
     max_queries, contract_paths = validate_max_queries_contract(root, profile_payload)
-    output = root / "paper_gpu_bundle"
+    output = args.output.resolve() if args.output else root / "paper_gpu_bundle"
     if output.exists():
         raise FileExistsError(
             f"refusing to replace immutable bundle: {output}"
@@ -287,6 +292,7 @@ def main() -> None:
         raise FileNotFoundError(
             "bundle inputs are incomplete:\n" + "\n".join(missing)
         )
+    output.mkdir(parents=True)
 
     copied: list[Path] = []
     for name, source in inputs.items():

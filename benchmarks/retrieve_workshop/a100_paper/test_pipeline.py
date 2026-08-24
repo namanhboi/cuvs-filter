@@ -608,6 +608,28 @@ class A100PipelineTest(unittest.TestCase):
             self.assertTrue(
                 (root / "paper_gpu_bundle/gpu_qps_recall_a100.pdf").is_file()
             )
+            original_manifest_hash = (
+                root / "paper_gpu_bundle/manifest.json"
+            ).read_bytes()
+            refined = root / "navix_refined_bundle/paper_gpu_bundle"
+            subprocess.run(
+                (
+                    sys.executable,
+                    str(SCRIPT_DIR / "bundle.py"),
+                    "--run-root",
+                    str(root),
+                    "--profile",
+                    str(SCRIPT_DIR / "profiles/a100_yfcc10m_arxiv_large.json"),
+                    "--output",
+                    str(refined),
+                ),
+                check=True,
+            )
+            self.assertTrue((refined / "manifest.json").is_file())
+            self.assertEqual(
+                (root / "paper_gpu_bundle/manifest.json").read_bytes(),
+                original_manifest_hash,
+            )
 
 
 if __name__ == "__main__":

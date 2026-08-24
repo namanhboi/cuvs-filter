@@ -22,26 +22,36 @@ require_runtime() {
 run_group() {
   local group=$1
   while IFS= read -r manifest; do
-    local workload destination
+    local workload destination repetitions
     workload=$(basename "$(dirname "${manifest}")")
     destination="${result_root}/raw/${group}/${workload}"
+    repetitions=$("${python_bin}" -c "import json; print(json.load(open('${manifest}'))['repetitions'])")
     mkdir -p "${destination}"
     while IFS= read -r config; do
       local name output
       name=$(basename "${config}" .json)
       output="${destination}/${name}.json"
       if test -e "${output}"; then
-        echo "resume: retain complete ${output}" >&2
-        continue
+        if "${python_bin}" "${script_dir}/matched_recall.py" validate-raw-output \
+          --raw "${output}" --config "${config}" --repetitions "${repetitions}" \
+          >/dev/null; then
+          echo "resume: retain complete ${output}" >&2
+          continue
+        fi
+        echo "incomplete benchmark output; remove only ${output} and rerun" >&2
+        exit 2
       fi
       env LD_PRELOAD="${build_libcuvs}${LD_PRELOAD:+:${LD_PRELOAD}}" \
         "${bench_bin}" --search --mode=throughput --threads=1 \
         --data_prefix="${data_root}" --index_prefix="${data_root}" \
-        --benchmark_repetitions="$("${python_bin}" -c "import json; print(json.load(open('${manifest}'))['repetitions'])")" \
+        --benchmark_repetitions="${repetitions}" \
         --benchmark_min_time="${min_time}" --benchmark_min_warmup_time=0.01 \
         --benchmark_enable_random_interleaving=true \
         --benchmark_report_aggregates_only=false \
         --benchmark_out_format=json --benchmark_out="${output}" "${config}"
+      "${python_bin}" "${script_dir}/matched_recall.py" validate-raw-output \
+        --raw "${output}" --config "${config}" --repetitions "${repetitions}" \
+        >/dev/null
     done < <(
       "${python_bin}" - "${manifest}" <<'PY'
 import json, pathlib, sys
@@ -50,6 +60,51 @@ for row in json.loads(pathlib.Path(sys.argv[1]).read_text())["configs"]:
 PY
     )
   done < <(find "${result_root}/configs/${group}" -mindepth 2 -maxdepth 2 -name manifest.json | sort)
+}
+
+run_navix_refinement() {
+  local calibration_group=navix_em_r_b0_calibration
+  local final_group=navix_em_r_b0_final
+  local calibration_points="${result_root}/state/navix_em_r_b0_points.json"
+  local final_points="${result_root}/state/navix_em_r_finalists.json"
+  local summary="${result_root}/analysis/navix_em_r_refinement_summary.json"
+  mkdir -p "${result_root}/state"
+
+  if ! test -f "${result_root}/configs/${calibration_group}/manifest.json"; then
+    if ! test -f "${calibration_points}"; then
+      "${python_bin}" "${script_dir}/matched_recall.py" navix-refinement-points \
+        --output "${calibration_points}"
+    fi
+    "${python_bin}" "${script_dir}/matched_recall.py" generate-group \
+      --result-root "${result_root}" --data-root "${data_root}" \
+      --group "${calibration_group}" --stage calibration --repetitions 1 \
+      --points "${calibration_points}"
+  elif ! test -f "${calibration_points}"; then
+    echo "missing immutable calibration point record ${calibration_points}" >&2
+    exit 2
+  fi
+  run_group "${calibration_group}"
+  "${python_bin}" "${script_dir}/matched_recall.py" analyze \
+    --result-root "${result_root}"
+
+  if ! test -f "${result_root}/configs/${final_group}/manifest.json"; then
+    if ! test -f "${final_points}"; then
+      "${python_bin}" "${script_dir}/matched_recall.py" navix-refinement-finalists \
+        --result-root "${result_root}" --output "${final_points}"
+    fi
+    "${python_bin}" "${script_dir}/matched_recall.py" generate-group \
+      --result-root "${result_root}" --data-root "${data_root}" \
+      --group "${final_group}" --stage final --repetitions 3 \
+      --points "${final_points}"
+  elif ! test -f "${final_points}"; then
+    echo "missing immutable finalist point record ${final_points}" >&2
+    exit 2
+  fi
+  run_group "${final_group}"
+  "${python_bin}" "${script_dir}/matched_recall.py" finalize \
+    --result-root "${result_root}"
+  "${python_bin}" "${script_dir}/matched_recall.py" validate-navix-refinement \
+    --result-root "${result_root}" --output "${summary}"
 }
 
 calibrate() {
@@ -111,13 +166,17 @@ case "${stage}" in
   analyze)
     "${python_bin}" "${script_dir}/matched_recall.py" finalize --result-root "${result_root}"
     ;;
+  navix-refine)
+    require_runtime navix-refine
+    run_navix_refinement
+    ;;
   all)
     require_runtime all
     calibrate
     run_final
     ;;
   *)
-    echo "usage: $0 {calibrate|final|analyze|all}" >&2
+    echo "usage: $0 {calibrate|final|analyze|navix-refine|all}" >&2
     exit 2
     ;;
 esac

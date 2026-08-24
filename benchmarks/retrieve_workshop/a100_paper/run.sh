@@ -14,6 +14,7 @@ bench_bin=${RETRIEVE_BENCH_BIN:-"${repo_dir}/cpp/build/bench/ann/CUVS_CAGRA_ANN_
 libcuvs=${RETRIEVE_LIBCUVS:-"${repo_dir}/cpp/build/libcuvs.so"}
 stage=${1:-all}
 minimum_free_gib=${RETRIEVE_MINIMUM_FREE_GIB:-350}
+refined_bundle_root=${RETRIEVE_REFINED_BUNDLE_ROOT:-"${run_root}/navix_refined_bundle"}
 
 max_queries=$("${python_bin}" - "${profile}" <<'PY'
 import json
@@ -260,6 +261,18 @@ run_matched() {
   mark_done matched
 }
 
+run_matched_navix_refinement() {
+  is_done matched_navix_refine && return
+  test -f "${run_root}/matched_recall/analysis/selected_points.csv" || {
+    echo "run the matched-recall stage before targeted NaviX refinement" >&2
+    exit 2
+  }
+  env RETRIEVE_RESULT_ROOT="${run_root}/matched_recall" \
+    "${repo_dir}/benchmarks/retrieve_workshop/matched_recall/run_matched_recall.sh" \
+      navix-refine
+  mark_done matched_navix_refine
+}
+
 run_exact() {
   is_done exact && return
   env RETRIEVE_EXACT_RESULT_ROOT="${run_root}/exact_bitmap" \
@@ -331,6 +344,18 @@ bundle() {
     --run-root "${run_root}" --profile "${profile}"
 }
 
+bundle_refined() {
+  is_done bundle_navix_refined && return
+  is_done matched_navix_refine || {
+    echo "run matched-navix-refine before creating the refined bundle" >&2
+    exit 2
+  }
+  env MPLBACKEND=Agg "${python_bin}" "${script_dir}/bundle.py" \
+    --run-root "${run_root}" --profile "${profile}" \
+    --output "${refined_bundle_root}/paper_gpu_bundle"
+  mark_done bundle_navix_refined
+}
+
 case "${stage}" in
   preflight) preflight ;;
   download-arxiv) download_arxiv ;;
@@ -342,12 +367,14 @@ case "${stage}" in
   correctness) run_gpu_stage correctness ;;
   b0) run_gpu_stage b0 ;;
   matched-recall) run_matched ;;
+  matched-navix-refine) run_matched_navix_refinement ;;
   exact) run_exact ;;
   resource-work) run_resource ;;
   diagnostics) run_mechanism_diagnostics ;;
   dataset-stats) run_dataset_stats ;;
   analyze) analyze_all ;;
   bundle) bundle ;;
+  bundle-navix-refined) bundle_refined ;;
   all)
     preflight
     build_binaries
@@ -358,6 +385,7 @@ case "${stage}" in
     run_gpu_stage correctness
     run_gpu_stage b0
     run_matched
+    run_matched_navix_refinement
     run_exact
     run_resource
     run_mechanism_diagnostics
@@ -366,7 +394,7 @@ case "${stage}" in
     bundle
     ;;
   *)
-    echo "usage: $0 {preflight|download-arxiv|build|test|prepare|build-graphs|maxq-gate|correctness|b0|matched-recall|exact|resource-work|diagnostics|dataset-stats|analyze|bundle|all}" >&2
+    echo "usage: $0 {preflight|download-arxiv|build|test|prepare|build-graphs|maxq-gate|correctness|b0|matched-recall|matched-navix-refine|exact|resource-work|diagnostics|dataset-stats|analyze|bundle|bundle-navix-refined|all}" >&2
     exit 2
     ;;
 esac

@@ -65,6 +65,9 @@ TIGHT_PAIRS = (
     ("r", "default_cagra_accumulator"),
     ("r", "navix_reference"),
 )
+NAVIX_REFINEMENT_WORKLOADS = ("em", "r")
+NAVIX_REFINEMENT_MAX_L = 31
+NAVIX_REFINEMENT_FINALISTS = 4
 
 LOCKED_POINTS = (
     {"workload": "yfcc", "method": "default_cagra", "itopk": 512, "search_width": 4, "max_iterations": 2046},
@@ -154,6 +157,48 @@ def read_csv(path: Path) -> list[dict[str, str]]:
         return []
     with path.open(newline="", encoding="utf-8") as source:
         return list(csv.DictReader(source))
+
+
+def validate_raw_output(
+    raw_path: Path, config_path: Path, repetitions: int
+) -> dict[str, int]:
+    """Reject partial Google Benchmark JSON before a resumable group skips it."""
+    if repetitions not in (1, 3):
+        raise ValueError("matched-recall raw output uses one or three repetitions")
+    raw = json.loads(raw_path.read_text())
+    config = json.loads(config_path.read_text())
+    expected_searches = sum(
+        len(index.get("search_params", [])) for index in config.get("index", [])
+    )
+    if expected_searches <= 0:
+        raise ValueError(f"benchmark config has no search points: {config_path}")
+    observations = [
+        row for row in raw.get("benchmarks", []) if row.get("run_type") == "iteration"
+    ]
+    if any(row.get("error_occurred") or row.get("skipped") for row in observations):
+        raise ValueError(f"benchmark output contains an error or skipped row: {raw_path}")
+    by_name: dict[str, list[dict]] = {}
+    for row in observations:
+        by_name.setdefault(str(row.get("name", "")), []).append(row)
+    if len(by_name) != expected_searches:
+        raise ValueError(
+            f"benchmark output has {len(by_name)}/{expected_searches} search points: {raw_path}"
+        )
+    expected_repetitions = list(range(repetitions))
+    for name, rows in by_name.items():
+        observed_repetitions = sorted(
+            int(row.get("repetition_index", -1)) for row in rows
+        )
+        if observed_repetitions != expected_repetitions:
+            raise ValueError(
+                f"benchmark {name!r} has repetitions {observed_repetitions}, "
+                f"expected {expected_repetitions}: {raw_path}"
+            )
+    return {
+        "search_points": expected_searches,
+        "repetitions": repetitions,
+        "iteration_rows": len(observations),
+    }
 
 
 def target(workload: str) -> float:
@@ -438,6 +483,40 @@ def execution_fingerprint(workload: str, itopk: int, width: int) -> tuple[int, i
     return (internal_itopk(itopk), resolved_iterations(workload, itopk, width, 0))
 
 
+def navix_refinement_points() -> dict:
+    """Enumerate all distinct below-L32 B0 executions for EM/R NaviX."""
+    points: list[dict[str, object]] = []
+    for workload in NAVIX_REFINEMENT_WORKLOADS:
+        for width in TUNING_WIDTHS:
+            fingerprints: set[tuple[int, int]] = set()
+            for requested_l in range(MIN_L, NAVIX_REFINEMENT_MAX_L + 1):
+                fingerprint = execution_fingerprint(workload, requested_l, width)
+                if fingerprint in fingerprints:
+                    continue
+                fingerprints.add(fingerprint)
+                points.append(
+                    {
+                        "workload": workload,
+                        "method": "navix_reference",
+                        "itopk": requested_l,
+                        "search_width": width,
+                        "max_iterations": 0,
+                    }
+                )
+    return {
+        "schema_version": 1,
+        "experiment": "retrieve_workshop_navix_em_r_refinement",
+        "generated_utc": datetime.now(timezone.utc).isoformat(),
+        "targets": {workload: target(workload) for workload in NAVIX_REFINEMENT_WORKLOADS},
+        "target_window": TARGET_WINDOW,
+        "selection_contract": (
+            "Every distinct below-L32 B0 execution for W in {1,2}; "
+            "no interpolation and no explicit iteration budget"
+        ),
+        "points": points,
+    }
+
+
 def load_baseline_measurements(path: Path) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     for row in read_csv(path):
@@ -570,6 +649,92 @@ def grouped_stage_rows(
             }
         )
     return output
+
+
+def select_navix_refinement_finalists(
+    rows: list[dict[str, object]],
+) -> dict:
+    """Select the fastest calibration points inside the closed target window."""
+    expected = {key(point) for point in navix_refinement_points()["points"]}
+    measured = {key(row): row for row in rows if key(row) in expected}
+    missing = sorted(expected - set(measured))
+    if missing:
+        raise ValueError(
+            f"NaviX EM/R refinement is missing {len(missing)} calibration points: "
+            f"{missing[:4]}"
+        )
+
+    selected: list[dict[str, object]] = []
+    decisions: list[dict[str, object]] = []
+    for workload in NAVIX_REFINEMENT_WORKLOADS:
+        goal = target(workload)
+        local = [
+            row
+            for identity, row in measured.items()
+            if identity[0] == workload and identity[1] == "navix_reference"
+        ]
+        within = [
+            row
+            for row in local
+            if float(row["recall_min"]) >= goal
+            and float(row["recall_median"]) <= goal + TARGET_WINDOW + 1e-12
+        ]
+        if not within:
+            nearest = sorted(
+                local,
+                key=lambda row: (
+                    abs(float(row["recall_median"]) - goal),
+                    -float(row["qps_median"]),
+                ),
+            )[:4]
+            summary = [
+                {
+                    "itopk": int(row["itopk"]),
+                    "search_width": int(row["search_width"]),
+                    "recall": float(row["recall_median"]),
+                }
+                for row in nearest
+            ]
+            raise ValueError(
+                f"no {workload} NaviX calibration point lies in "
+                f"[{goal:.3f},{goal + TARGET_WINDOW:.3f}]; nearest={summary}"
+            )
+        finalists = sorted(
+            within, key=lambda row: float(row["qps_median"]), reverse=True
+        )[:NAVIX_REFINEMENT_FINALISTS]
+        points = [
+            {
+                "workload": workload,
+                "method": "navix_reference",
+                "itopk": int(row["itopk"]),
+                "search_width": int(row["search_width"]),
+                "max_iterations": 0,
+            }
+            for row in finalists
+        ]
+        selected.extend(points)
+        decisions.append(
+            {
+                "workload": workload,
+                "selection_rule": "four fastest one-run points inside the target window",
+                "points": points,
+            }
+        )
+    return {
+        "schema_version": 1,
+        "experiment": "retrieve_workshop_navix_em_r_refinement",
+        "generated_utc": datetime.now(timezone.utc).isoformat(),
+        "stage": "final",
+        "targets": {workload: target(workload) for workload in NAVIX_REFINEMENT_WORKLOADS},
+        "target_window": TARGET_WINDOW,
+        "decisions": decisions,
+        "points": selected,
+    }
+
+
+def navix_refinement_finalists(result_root: Path) -> dict:
+    rows = grouped_stage_rows(result_root, "calibration", 1)
+    return select_navix_refinement_finalists(rows)
 
 
 def tight_finalists(result_root: Path) -> dict:
@@ -974,6 +1139,45 @@ def summarize_final(result_root: Path) -> tuple[list[dict[str, object]], list[di
     return summaries, selected
 
 
+def validate_navix_refinement(result_root: Path) -> dict:
+    """Require strict three-run EM/R NaviX target matches after refinement."""
+    _, selected = summarize_final(result_root)
+    output: list[dict[str, object]] = []
+    for workload in NAVIX_REFINEMENT_WORKLOADS:
+        local = [
+            row
+            for row in selected
+            if row["workload"] == workload and row["method"] == "navix_reference"
+        ]
+        if len(local) != 1:
+            raise ValueError(f"expected one selected NaviX point for {workload}")
+        row = local[0]
+        if (
+            not bool(row["target_reached"])
+            or not bool(row["within_target_window"])
+            or int(row["itopk"]) > NAVIX_REFINEMENT_MAX_L
+            or int(row["search_width"]) not in TUNING_WIDTHS
+            or int(row["max_iterations"]) != 0
+            or float(row["filter_violations"]) != 0
+            or float(row["sentinel_errors"]) != 0
+            or float(row["duplicate_output_query_rate_max"]) != 0
+        ):
+            raise ValueError(
+                f"selected {workload} NaviX refinement is not a strict, correct B0 match: {row}"
+            )
+        output.append(row)
+    return {
+        "schema_version": 1,
+        "experiment": "retrieve_workshop_navix_em_r_refinement",
+        "generated_utc": datetime.now(timezone.utc).isoformat(),
+        "selection_contract": (
+            "recall_min>=0.950, recall_median<=0.952, maximum final median QPS, "
+            "zero filter/sentinel/duplicate-output errors"
+        ),
+        "selected": output,
+    }
+
+
 def provenance(result_root: Path, summaries: list[dict], selected: list[dict]) -> dict:
     run_path = result_root / "provenance" / "run.json"
     if not run_path.is_file():
@@ -1071,6 +1275,22 @@ def main() -> None:
     paper.add_argument("--result-root", type=Path, required=True)
     paper.add_argument("--output", type=Path, required=True)
 
+    navix_points = subparsers.add_parser("navix-refinement-points")
+    navix_points.add_argument("--output", type=Path, required=True)
+
+    navix_finalists = subparsers.add_parser("navix-refinement-finalists")
+    navix_finalists.add_argument("--result-root", type=Path, required=True)
+    navix_finalists.add_argument("--output", type=Path, required=True)
+
+    navix_validate = subparsers.add_parser("validate-navix-refinement")
+    navix_validate.add_argument("--result-root", type=Path, required=True)
+    navix_validate.add_argument("--output", type=Path, required=True)
+
+    raw_validate = subparsers.add_parser("validate-raw-output")
+    raw_validate.add_argument("--raw", type=Path, required=True)
+    raw_validate.add_argument("--config", type=Path, required=True)
+    raw_validate.add_argument("--repetitions", type=int, choices=(1, 3), required=True)
+
     analyze = subparsers.add_parser("analyze")
     analyze.add_argument("--result-root", type=Path, required=True)
 
@@ -1114,6 +1334,24 @@ def main() -> None:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
         print(json.dumps({"points": len(payload["points"])}))
+    elif args.command == "navix-refinement-points":
+        payload = navix_refinement_points()
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        print(json.dumps({"points": len(payload["points"])}))
+    elif args.command == "navix-refinement-finalists":
+        payload = navix_refinement_finalists(args.result_root)
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        print(json.dumps({"points": len(payload["points"])}))
+    elif args.command == "validate-navix-refinement":
+        payload = validate_navix_refinement(args.result_root)
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        print(json.dumps({"selected": len(payload["selected"])}))
+    elif args.command == "validate-raw-output":
+        payload = validate_raw_output(args.raw, args.config, args.repetitions)
+        print(json.dumps(payload))
     elif args.command == "analyze":
         rows = measurements(args.result_root)
         write_csv(args.result_root / "analysis" / "measurements.csv", MEASUREMENT_FIELDS, rows)
