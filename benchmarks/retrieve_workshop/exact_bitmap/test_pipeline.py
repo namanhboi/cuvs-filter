@@ -383,6 +383,39 @@ class ExactPipelineTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("exact-control correctness failed", result.stderr)
 
+    def test_accepts_tightly_bounded_fast_f32_rank_k_exchange(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = create_fixture(root / "fixtures", "sparse")
+            generate(root, manifest, "yfcc", "smoke")
+            raw = root / "raw" / "smoke" / "yfcc" / "shard_00.json"
+            raw.parent.mkdir(parents=True, exist_ok=True)
+            record = raw_record(0, 0.75, 0.30)
+            record["NativeL2CutoffRecall"] = 0.99995
+            record["NativeL2CutoffErrors"] = 0.00005
+            raw.write_text(json.dumps({"benchmarks": [record]}) + "\n")
+            result = run(
+                str(SCRIPT_DIR / "analyze_exact.py"),
+                "--result-root",
+                str(root),
+                "--phase",
+                "smoke",
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(
+                (root / "analysis" / "exact_results.json").read_text()
+            )
+            contract = payload["correctness"]["numerical_contract"]
+            self.assertEqual(
+                contract["minimum_native_l2_cutoff_recall_per_shard"],
+                0.9999,
+            )
+            self.assertEqual(
+                contract["maximum_native_l2_cutoff_error_rate_per_shard"],
+                0.0001,
+            )
+
     def test_rejects_missing_and_duplicate_repetitions(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

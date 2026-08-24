@@ -94,11 +94,14 @@ non-unique legal tenth-distance cutoff.  ArXiv-R likewise reports 0.99999 canoni
 useful diagnostics, but no workload is required to reproduce one arbitrary canonical choice among
 equal-distance IDs.
 
-The tie-aware exactness gate instead requires =native_l2_cutoff_recall= equal to 1.0,
-=native_l2_cutoff_errors= equal to zero, and =native_l2_strict_prefix_errors= equal to zero.  Thus every unique legal
-output is within the official native squared-L2 rank-=k= cutoff, and every official GT ID strictly
-closer than that cutoff is retained; only IDs tied at the cutoff may be exchanged.  The native-L2
-validator runs after the timed search and is excluded from QPS.  Predicate violations,
+The timed float32 =L2Expanded= implementation uses cuVS's native accelerated dot products; its
+dense Ampere path includes FastF32/TF32.  The validator recomputes direct squared L2 in double.
+Those arithmetic contracts are not bit-identical.  The gate therefore requires per resident shard
+=native_l2_cutoff_recall >= 0.9999=, =native_l2_cutoff_errors <= 0.0001=, and
+=native_l2_strict_prefix_errors == 0=.  The first two bounds admit only a tightly bounded numerical
+exchange at the rank-=k= boundary; the third still requires every official GT ID strictly closer
+than the wide-accumulation cutoff.  All three values remain reported rather than hiding numerical
+disagreements.  The native-L2 validator runs after the timed search and is excluded from QPS.  Predicate violations,
 invalid-sentinel ID/distance/ordering errors, and duplicate-output queries must also be zero, and
 observed underfilled/missing output slots must exactly match legal GT cardinality.  ArXiv-EM has
 one intrinsically underfilled query whose fixed-width GT row contains out-of-range padding IDs;
@@ -106,6 +109,7 @@ those IDs are not neighbors and are excluded from all exact denominators.  The a
 requires the exact configured shard/repetition sets and a passing memory-preflight record for every
 production shard, and exits nonzero on any violation.
 
-Consequently, the native-L2 cutoff and strict-prefix conditions above are the authoritative
-exactness gate for every workload.  Canonical =valid_gt_recall= is always reported, but it is never
-used as a pass/fail threshold.
+Consequently, this control is exhaustive under cuVS's implemented float32 metric, not a claim that
+the accelerated expanded-L2 arithmetic is identical to direct double accumulation.  The bounded
+native-L2 cutoff and zero strict-prefix conditions above are the authoritative production gate.
+Canonical =valid_gt_recall= is always reported, but it is never used as a pass/fail threshold.

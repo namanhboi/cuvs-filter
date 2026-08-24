@@ -140,8 +140,9 @@ def write_gpu_plot(
             if row["workload"] == workload and row["phase"] == "throughput"
         ]
         for row in exact_rows:
+            exact_recall = float(row["native_l2_cutoff_recall"])
             point = axis.scatter(
-                1.0,
+                exact_recall,
                 float(row["median_qps"]),
                 color="black",
                 marker="x",
@@ -151,7 +152,7 @@ def write_gpu_plot(
             if "Masked exact scan" not in labels:
                 handles.append(point)
                 labels.append("Masked exact scan")
-            x_values.append(1.0)
+            x_values.append(exact_recall)
         if x_values:
             low = min(x_values)
             axis.set_xlim(max(0.0, low - max(0.01, 0.04 * (1.0 - low))), 1.005)

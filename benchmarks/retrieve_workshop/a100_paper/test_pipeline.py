@@ -245,7 +245,7 @@ class A100PipelineTest(unittest.TestCase):
             with (root / "exact_bitmap/analysis/exact_summary.csv").open(
                 "w", newline=""
             ) as destination:
-                fields_exact = ["workload", "phase", "median_qps"]
+                fields_exact = ["workload", "phase", "median_qps", "native_l2_cutoff_recall"]
                 writer = csv.DictWriter(destination, fieldnames=fields_exact)
                 writer.writeheader()
                 writer.writerows(
@@ -253,6 +253,7 @@ class A100PipelineTest(unittest.TestCase):
                         "workload": workload,
                         "phase": "throughput",
                         "median_qps": 100,
+                        "native_l2_cutoff_recall": 0.99998,
                     }
                     for workload in ("yfcc", "em", "emis", "r")
                 )

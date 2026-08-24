@@ -473,18 +473,19 @@ queries/three repetitions.
 
 The publication input is
 =${RETRIEVE_EXACT_RESULT_ROOT}/analysis/exact_summary.csv=.  The adjacent measurement CSVs,
-=exact_results.json=, run provenance, and memory-preflight records form its audit trail.  Exact
-results pass only with =native_l2_cutoff_recall= equal to 1.0, zero native-L2 cutoff errors, and zero
-native-L2 strict-prefix errors, together with zero filter violations, zero sentinel-ID,
+=exact_results.json=, run provenance, and memory-preflight records form its audit trail.  The timed
+float32 =L2Expanded= control uses native accelerated dot products; its dense Ampere path uses FastF32/TF32;
+the post-timing cutoff validator uses direct squared L2 accumulated in double.  Because those
+arithmetic contracts are not bit-identical, production results require per shard
+=native_l2_cutoff_recall >= 0.9999=, =native_l2_cutoff_errors <= 0.0001=, and
+=native_l2_strict_prefix_errors == 0=, together with zero filter violations, zero sentinel-ID,
 sentinel-order, and sentinel-distance errors, zero duplicates, and the expected legal underfill
-(including ArXiv-EM's one intrinsically underfilled query).  =valid_gt_recall= records canonical
-fixed-ID agreement as a diagnostic for every workload; it is not an exactness threshold because
-any workload can have a non-unique legal rank-10 boundary.  Observed tie-aware checks include YFCC
-canonical-ID agreement of 0.9974 on the 1,000-query correctness set and 0.99726 over the full
-10,000-query set, plus ArXiv-R agreement of 0.99999 over 100,000 reported slots.  All of those
-results have native-L2 cutoff recall 1.0 and zero cutoff/strict-prefix errors, so the differing IDs
-are legal cutoff-tie choices.  The native-distance gate, not canonical ID identity, is
-authoritative for every workload.
+(including ArXiv-EM's one intrinsically underfilled query).  This admits only tightly bounded
+rank-10 numerical exchanges while requiring every official neighbor strictly inside the double
+cutoff.  =valid_gt_recall= records canonical fixed-ID agreement as a diagnostic for every workload;
+it is not an exactness threshold because any workload can have a non-unique legal rank-10 boundary.
+The L4 reference happens to report cutoff recall 1.0; any A100 boundary disagreements remain
+visible in the published CSV/JSON rather than being hidden.
 
 * Native CPU context
 

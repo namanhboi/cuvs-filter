@@ -109,7 +109,21 @@ run_group() {
     local tag
     tag=$(printf 'shard_%02d' "${shard}")
     if [[ -e "${raw_dir}/${tag}.json" && "${RETRIEVE_EXACT_OVERWRITE:-0}" != 1 ]]; then
-      echo "refusing to overwrite ${raw_dir}/${tag}.json; set RETRIEVE_EXACT_OVERWRITE=1 explicitly" >&2
+      if "${python_bin}" -c '
+import json, sys
+path, expected = sys.argv[1], int(sys.argv[2])
+payload = json.load(open(path))
+rows = [row for row in payload.get("benchmarks", []) if row.get("run_type") == "iteration"]
+indices = sorted(int(row.get("repetition_index", -1)) for row in rows)
+valid = (indices == list(range(expected)) and
+         all(not row.get("error_occurred") and not row.get("skipped") for row in rows))
+raise SystemExit(0 if valid else 1)
+' "${raw_dir}/${tag}.json" "${repetitions}"; then
+        echo "resume: retain complete exact result ${raw_dir}/${tag}.json"
+        shard=$((shard + 1))
+        continue
+      fi
+      echo "refusing to overwrite incomplete ${raw_dir}/${tag}.json; set RETRIEVE_EXACT_OVERWRITE=1 explicitly" >&2
       exit 1
     fi
     local memory_args=()

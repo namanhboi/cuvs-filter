@@ -138,7 +138,7 @@ The stages execute serially and never overlap graph construction, exact scan, or
 7. =b0=: 10,000 queries, three repetitions, six fixed B0 cells;
 8. =matched-recall=: adaptive B0 calibration over requested integer L and W in {1,2}, then fresh
    three-run finalists; explicit depth is proposed only if no B0 point reaches the target;
-9. =exact=: resident-bitmap cuVS exact scan, one correctness and three throughput repetitions;
+9. =exact=: resident-bitmap cuVS exhaustive scan, one correctness and three throughput repetitions;
 10. =resource-work=: =L=64,W=1,B0= untimed schema-9 counters and production kernel resources;
 11. =diagnostics=: YFCC =L=512,W=2,B0= retention and NaviX B0/deep schema-9 mechanism captures;
 12. =dataset-stats=: exact popcounts over all 10,000 bitmap rows;
@@ -201,6 +201,13 @@ capacity to 32.  This is valid because the B0 formula uses caller-requested L be
 capacity rounding.  The tuner deduplicates equal =(internal capacity, resolved B0)= executions.
 Only W=1 and W=2 are used in this A100 profile.  A selected point reports L, W, configured
 =max_iterations=, resolved iterations, achieved recall, QPS, and all correctness counters.
+
+The exhaustive control times cuVS float32 =L2Expanded=; its dense A100 path uses FastF32/TF32,
+while the post-timing diagnostic recomputes direct squared L2 in double.  The exact
+analyzer therefore permits at most 0.01% rank-10 boundary disagreement per resident shard
+(=native_l2_cutoff_recall >= 0.9999= and =native_l2_cutoff_errors <= 0.0001=), but still requires
+zero =native_l2_strict_prefix_errors=.  Every disagreement remains reported; this is not a claim
+that TF32-expanded and direct-double arithmetic are bit-identical.
 
 * Pass/fail rules
 
