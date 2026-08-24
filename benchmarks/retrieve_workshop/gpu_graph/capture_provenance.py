@@ -63,6 +63,10 @@ def main() -> None:
         "--query-gpu=name,uuid,driver_version,memory.total,compute_cap",
         "--format=csv,noheader,nounits",
     )
+    current_git = {
+        "head": command("git", "-C", str(args.repo), "rev-parse", "HEAD"),
+        "status": command("git", "-C", str(args.repo), "status", "--short"),
+    }
     if destination.is_file():
         payload = json.loads(destination.read_text())
         if (
@@ -87,8 +91,6 @@ def main() -> None:
         if int(payload["fixed_contract"]["max_queries"]) != expected_max_queries:
             raise ValueError("max_queries changed within one result root")
     else:
-        git_head = command("git", "-C", str(args.repo), "rev-parse", "HEAD")
-        git_status = command("git", "-C", str(args.repo), "status", "--short")
         payload = {
             "schema_version": 2,
             "experiment": "retrieve_workshop_gpu_graph",
@@ -96,7 +98,7 @@ def main() -> None:
             "host": platform.node(),
             "platform": platform.platform(),
             "python": sys.version,
-            "git": {"head": git_head, "status": git_status},
+            "git": current_git,
             "gpu": current_gpu,
             "cpu": command("lscpu"),
             "benchmark_binary": {
@@ -131,6 +133,7 @@ def main() -> None:
             "utc": datetime.now(timezone.utc).isoformat(),
             "stage": args.stage,
             "argv": sys.argv,
+            "git": current_git,
             "relevant_environment": {
                 key: value
                 for key, value in sorted(os.environ.items())

@@ -222,7 +222,9 @@ points instead of silently accepting another overshoot.
 
 The refined bundle is written to a separate directory.  The existing
 =${RETRIEVE_A100_RUN_ROOT}/paper_gpu_bundle= and its archive are never replaced.  A fresh =all=
-run includes this refinement before creating its ordinary final bundle.
+run includes this refinement before creating its ordinary final bundle.  When refinement is
+appended to an older completed run, its provenance event records the current Git head/status while
+retaining the original run-creation Git identity.
 
 Keep the literal values of =RETRIEVE_RUN_TAG=, =RETRIEVE_DATA_ROOT=, and
 =RETRIEVE_A100_RUN_ROOT= in the resuming shell.  Completed top-level stages have UTC markers under
