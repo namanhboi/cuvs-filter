@@ -13,6 +13,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from dataset_profile import load_profile
+
 
 def command(*argv: str) -> dict:
     completed = subprocess.run(
@@ -45,6 +47,14 @@ def main() -> None:
     parser.add_argument("--libcuvs", type=Path, required=True)
     parser.add_argument("--data-root", type=Path, required=True)
     args = parser.parse_args()
+    expected_max_queries = int(
+        os.environ.get(
+            "RETRIEVE_PROVENANCE_MAX_QUERIES",
+            str(load_profile()["max_queries"]),
+        )
+    )
+    if expected_max_queries <= 0:
+        raise ValueError("provenance max_queries must be positive")
 
     destination = args.result_root / "provenance" / "run.json"
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -74,6 +84,8 @@ def main() -> None:
             raise ValueError("data root changed within one result root")
         if payload["host"] != platform.node() or payload["gpu"] != current_gpu:
             raise ValueError("host/GPU identity changed within one result root")
+        if int(payload["fixed_contract"]["max_queries"]) != expected_max_queries:
+            raise ValueError("max_queries changed within one result root")
     else:
         git_head = command("git", "-C", str(args.repo), "rev-parse", "HEAD")
         git_status = command("git", "-C", str(args.repo), "status", "--short")
@@ -99,9 +111,7 @@ def main() -> None:
             "fixed_contract": {
                 "gpu_algo": "SINGLE_CTA",
                 "k": 10,
-                "max_queries": int(
-                    os.environ.get("RETRIEVE_PROVENANCE_MAX_QUERIES", "512")
-                ),
+                "max_queries": expected_max_queries,
                 "reported_throughput_repetitions": int(
                     os.environ.get("RETRIEVE_PROVENANCE_REPETITIONS", "3")
                 ),

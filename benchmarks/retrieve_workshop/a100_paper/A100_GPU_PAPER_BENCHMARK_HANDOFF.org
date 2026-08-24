@@ -6,7 +6,9 @@
 This package regenerates the GPU-derived inputs for the RETRIEVE CAGRA paper on one full NVIDIA
 A100 80GB.  It covers YFCC-10M and the official =SPCL/arxiv-for-fanns-large= EM, EMIS, and R query
 sets.  All graph methods use the same native cuVS NN-descent CAGRA graph at graph/intermediate
-degree 64/128, resident per-query bitmaps, =SINGLE_CTA=, =k=10=, and =max_queries=512=.
+degree 64/128, resident per-query bitmaps, =SINGLE_CTA=, =k=10=, and =max_queries=2048=.
+The 2,048-query value is pinned in the A100 dataset profile and is validated in generated configs,
+raw benchmark labels, experiment provenance, analyzed evidence, and the final bundle.
 
 The package produces:
 
@@ -50,7 +52,7 @@ benchmarks/retrieve_workshop/a100_paper/run.sh
 
 The immutable dataset profile is
 =profiles/a100_yfcc10m_arxiv_large.json=.  It is the single source of truth for N, dimension,
-bitmap namespace, dtype, graph path, degree, and matched-recall widths.  Setting
+bitmap namespace, dtype, graph path, degree, =max_queries=, and matched-recall widths.  Setting
 =RETRIEVE_DATASET_PROFILE= changes all GPU-graph, matched-recall, and resource-work generators at
 once.  Without that environment variable, the historical YFCC/ArXiv-medium behavior remains
 unchanged.
@@ -134,15 +136,18 @@ The stages execute serially and never overlap graph construction, exact scan, or
 3. =test=: CUDA bitmap test plus all CPU-only pipeline tests;
 4. =prepare=: YFCC bitmaps and bounded ArXiv-large conversion/metadata/GT/bitmaps;
 5. =build-graphs=: native cuVS NN-descent G64/IG128 graphs and SHA-256 records;
-6. =correctness=: 1,000 queries, one repetition, short timing gate;
-7. =b0=: 10,000 queries, three repetitions, six fixed B0 cells;
-8. =matched-recall=: adaptive B0 calibration over requested integer L and W in {1,2}, then fresh
+6. =maxq-gate=: one full 2,048-query YFCC shard and one EMIS shard at caps 512, 1,024, and 2,048,
+   plus representative high-work 2,048-cap points; this detects allocation failures, mislabeled
+   caps, and gross host-scheduling sensitivity before the expensive sweep;
+7. =correctness=: 1,000 queries, one repetition, short timing gate;
+8. =b0=: 10,000 queries, three repetitions, six fixed B0 cells;
+9. =matched-recall=: adaptive B0 calibration over requested integer L and W in {1,2}, then fresh
    three-run finalists; explicit depth is proposed only if no B0 point reaches the target;
-9. =exact=: resident-bitmap cuVS exhaustive scan, one correctness and three throughput repetitions;
-10. =resource-work=: =L=64,W=1,B0= untimed schema-9 counters and production kernel resources;
-11. =diagnostics=: YFCC =L=512,W=2,B0= retention and NaviX B0/deep schema-9 mechanism captures;
-12. =dataset-stats=: exact popcounts over all 10,000 bitmap rows;
-13. =analyze= and =bundle=: strict correctness checks, figures, tables, hashes, and claim mapping.
+10. =exact=: resident-bitmap cuVS exhaustive scan, one correctness and three throughput repetitions;
+11. =resource-work=: =L=64,W=1,B0= untimed schema-9 counters and production kernel resources;
+12. =diagnostics=: YFCC =L=512,W=2,B0= retention and NaviX B0/deep schema-9 mechanism captures;
+13. =dataset-stats=: exact popcounts over all 10,000 bitmap rows;
+14. =analyze= and =bundle=: strict correctness checks, figures, tables, hashes, and claim mapping.
 
 The total duration depends heavily on Brev storage and graph build.  Budget several hours to a day,
 not minutes.  The calibration stage is intentionally data-dependent.  Twelve vCPUs primarily slow
@@ -159,6 +164,7 @@ benchmarks/retrieve_workshop/a100_paper/run.sh build
 benchmarks/retrieve_workshop/a100_paper/run.sh test
 benchmarks/retrieve_workshop/a100_paper/run.sh prepare
 benchmarks/retrieve_workshop/a100_paper/run.sh build-graphs
+benchmarks/retrieve_workshop/a100_paper/run.sh maxq-gate
 benchmarks/retrieve_workshop/a100_paper/run.sh correctness
 benchmarks/retrieve_workshop/a100_paper/run.sh b0
 benchmarks/retrieve_workshop/a100_paper/run.sh matched-recall
@@ -174,6 +180,9 @@ Keep the literal values of =RETRIEVE_RUN_TAG=, =RETRIEVE_DATA_ROOT=, and
 =RETRIEVE_A100_RUN_ROOT= in the resuming shell.  Completed top-level stages have UTC markers under
 =.done/=.  A nonblocking =flock= prevents two orchestration processes from sharing a result root.
 The profile SHA-256 is pinned on first use and cannot change inside that root.
+The runner also pins =state/max_queries.txt= and refuses to combine results generated with a
+different cap.  Use a new run root for this 2,048-query experiment; do not resume a historical
+512-query A100 run.
 
 Raw-result writers refuse overwrites.  If interruption leaves a truncated final raw JSON, inspect
 the orchestrator log, remove only that exact incomplete file, and resume the same stage.  Never set
@@ -188,6 +197,16 @@ resident; index loading and bitmap materialization are excluded.  Every throughp
 the same 10,000 queries and reports the median of three runs with min--max retained.  Shard QPS is
 computed as 10,000 divided by the sum of shard search seconds, not the arithmetic mean of shard
 QPS.  Correctness uses 1,000 queries and one repetition and is not a paper throughput point.
+
+Each full throughput shard submits at most 2,048 queries in one cuVS search call, and
+=max_queries=2048= permits that shard to be scheduled in one internal CAGRA session.  This does not
+mean 2,048 CTAs execute simultaneously: the GPU admits CTAs according to SM availability and the
+kernel's register/shared-memory limits, while excess CTAs remain queued.  The bitmap allocation is
+already one complete 2,048-row shard, so raising =max_queries= from 512 does not duplicate or grow
+the resident bitmap.  It increases bounded per-query global workspace and changes launch/session
+scheduling; per-CTA frontier and candidate state remain determined by =L=, =W=, graph degree, and
+the selected kernel.  The =maxq-gate= records both correctness and QPS sensitivity at 512, 1,024,
+and 2,048 before production data are collected.
 
 The exact point times bitmap counting, query norms, sparse/dense masked distance work, top-k,
 sentinel normalization, and temporary device allocation/deallocation.  Predicate evaluation,
@@ -223,6 +242,8 @@ Do not use a result if any of these checks fails:
   distance-eligible candidates for accumulator admission, and the summary reports that extra work;
 - a diagnostic manifest reports =timing_valid=true= (diagnostics are never throughput evidence);
 - GPU UUID, binary/library hash, data root, profile hash, or Git commit changes within a run;
+- any generated config, raw label, resource/diagnostic analysis, or provenance record reports a
+  =max_queries= value other than 2,048;
 - the final workload uses a different shard set across methods.
 
 The benchmark deliberately tolerates Base duplicate outputs only as a measured correctness field;
@@ -245,6 +266,7 @@ Important files are:
 - =exact_scan/exact_summary.csv=;
 - =resource_work/gpu_resource_work.{csv,json,tex}=;
 - =mechanism_diagnostics/mechanism_summary.json=;
+- =maxq_gate/max_queries_gate_{points.csv,summary.json}=;
 - =dataset_stats/workload_selectivity_summary.json=;
 - =claim_to_source.json=: which file supports each GPU claim;
 - =manifest.json=: byte size and SHA-256 of every bundled input/output.

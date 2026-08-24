@@ -108,7 +108,8 @@ def generate(root: Path, data: Path, *extra: str) -> None:
                 "schema_version": 2,
                 "data_root": str(data.resolve()),
                 "fixed_contract": {
-                    "output_set_semantics": "distinct_valid_output_ids_v1"
+                    "output_set_semantics": "distinct_valid_output_ids_v1",
+                    "max_queries": 512,
                 },
             }
         )
@@ -484,9 +485,11 @@ class PipelineTest(unittest.TestCase):
             )
             self.assertEqual(summary["correctness_error_total"], 0)
             self.assertEqual(summary["groups"], ["b0", "correctness"])
+            self.assertEqual(summary["max_queries"], 512)
             provenance = json.loads(
                 (root / "analysis" / "provenance.json").read_text()
             )
+            self.assertEqual(provenance["max_queries"], 512)
             self.assertIn(
                 "QPS=10000/sum(shard_seconds)", provenance["timing_contract"]
             )

@@ -14,12 +14,27 @@ bench_bin=${RETRIEVE_BENCH_BIN:-"${repo_dir}/cpp/build/bench/ann/CUVS_CAGRA_ANN_
 libcuvs=${RETRIEVE_LIBCUVS:-"${repo_dir}/cpp/build/libcuvs.so"}
 stage=${1:-all}
 
+max_queries=$("${python_bin}" - "${profile}" <<'PY'
+import json
+import pathlib
+import sys
+
+profile = json.loads(pathlib.Path(sys.argv[1]).read_text())
+print(int(profile.get("max_queries", 512)))
+PY
+)
+test "${max_queries}" = 2048 || {
+  echo "A100 paper profile must pin max_queries=2048, found ${max_queries}" >&2
+  exit 2
+}
+
 export RETRIEVE_DATASET_PROFILE="${profile}"
 export RETRIEVE_DATA_ROOT="${data_root}"
 export RETRIEVE_BENCH_BIN="${bench_bin}"
 export RETRIEVE_LIBCUVS="${libcuvs}"
 export PYTHON="${python_bin}"
 export RETRIEVE_GPU_ARCH=80-real
+export RETRIEVE_PROVENANCE_MAX_QUERIES="${max_queries}"
 export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
 
 mkdir -p "$(dirname "${run_root}")"
@@ -37,6 +52,14 @@ if test -f "${run_root}/state/profile.sha256"; then
 else
   printf '%s\n' "${profile_hash}" >"${run_root}/state/profile.sha256"
   cp "${profile}" "${run_root}/state/dataset_profile.json"
+fi
+if test -f "${run_root}/state/max_queries.txt"; then
+  test "$(<"${run_root}/state/max_queries.txt")" = "${max_queries}" || {
+    echo "max_queries changed inside immutable run root" >&2
+    exit 2
+  }
+else
+  printf '%s\n' "${max_queries}" >"${run_root}/state/max_queries.txt"
 fi
 
 done_marker() { printf '%s/.done/%s\n' "${run_root}" "$1"; }
@@ -169,6 +192,39 @@ run_gpu_stage() {
   mark_done "gpu_${mode}"
 }
 
+run_maxq_gate() {
+  is_done maxq_gate && return
+  local root="${run_root}/maxq_gate"
+  "${python_bin}" "${script_dir}/max_queries_gate.py" generate \
+    --data-root "${data_root}" --output "${root}"
+  env RETRIEVE_PROVENANCE_REPETITIONS=1 \
+    RETRIEVE_PROVENANCE_TIMING="max_queries scheduling sensitivity; one 2048-query shard" \
+    "${python_bin}" "${repo_dir}/benchmarks/retrieve_workshop/gpu_graph/capture_provenance.py" \
+      --result-root "${root}" --repo "${repo_dir}" --stage maxq-gate \
+      --bench-bin "${bench_bin}" --libcuvs "${libcuvs}" --data-root "${data_root}"
+  while IFS=$'\t' read -r cap workload config; do
+    local raw="${root}/raw/maxq_${cap}/${workload}.json"
+    mkdir -p "$(dirname "${raw}")"
+    test ! -e "${raw}" || { echo "refusing to overwrite ${raw}" >&2; exit 2; }
+    env LD_PRELOAD="${libcuvs}${LD_PRELOAD:+:${LD_PRELOAD}}" \
+      "${bench_bin}" --search --mode=throughput --threads=1 \
+      --data_prefix="${data_root}" --index_prefix="${data_root}" \
+      --benchmark_repetitions=1 --benchmark_min_time=0.05s \
+      --benchmark_min_warmup_time=0.01 --benchmark_report_aggregates_only=false \
+      --benchmark_out_format=json --benchmark_out="${raw}" "${config}"
+  done < <("${python_bin}" - "${root}/manifest.json" <<'PY'
+import json
+import pathlib
+import sys
+
+for row in json.loads(pathlib.Path(sys.argv[1]).read_text())["records"]:
+    print(f"{row['max_queries']}\t{row['workload']}\t{row['config']}")
+PY
+  )
+  "${python_bin}" "${script_dir}/max_queries_gate.py" analyze --root "${root}"
+  mark_done maxq_gate
+}
+
 run_matched() {
   is_done matched && return
   env RETRIEVE_RESULT_ROOT="${run_root}/matched_recall" \
@@ -200,7 +256,7 @@ run_mechanism_diagnostics() {
   mkdir -p "${root}/raw" "${root}/analysis"
   "${python_bin}" "${script_dir}/mechanism_diagnostics.py" generate \
     --data-root "${data_root}" --output "${root}/config.json" --diagnostics "${root}/captures"
-  env RETRIEVE_PROVENANCE_MAX_QUERIES=1024 RETRIEVE_PROVENANCE_REPETITIONS=1 \
+  env RETRIEVE_PROVENANCE_REPETITIONS=1 \
     RETRIEVE_PROVENANCE_TIMING="untimed schema-9 diagnostic; never throughput evidence" \
     "${python_bin}" "${repo_dir}/benchmarks/retrieve_workshop/gpu_graph/capture_provenance.py" \
       --result-root "${root}" --repo "${repo_dir}" --stage diagnostics \
@@ -212,7 +268,8 @@ run_mechanism_diagnostics() {
     --benchmark_min_warmup_time=0.001 --benchmark_report_aggregates_only=false \
     --benchmark_out_format=json --benchmark_out="${root}/raw/results.json" "${root}/config.json"
   "${python_bin}" "${script_dir}/mechanism_diagnostics.py" summarize \
-    --diagnostics "${root}/captures" --output "${root}/analysis/mechanism_summary.json"
+    --diagnostics "${root}/captures" --raw-results "${root}/raw/results.json" \
+    --output "${root}/analysis/mechanism_summary.json"
   mark_done mechanism_diagnostics
 }
 
@@ -253,6 +310,7 @@ case "${stage}" in
   test) test_gate ;;
   prepare) prepare_data ;;
   build-graphs) build_graphs ;;
+  maxq-gate) run_maxq_gate ;;
   correctness) run_gpu_stage correctness ;;
   b0) run_gpu_stage b0 ;;
   matched-recall) run_matched ;;
@@ -268,6 +326,7 @@ case "${stage}" in
     test_gate
     prepare_data
     build_graphs
+    run_maxq_gate
     run_gpu_stage correctness
     run_gpu_stage b0
     run_matched
@@ -279,7 +338,7 @@ case "${stage}" in
     bundle
     ;;
   *)
-    echo "usage: $0 {preflight|download-arxiv|build|test|prepare|build-graphs|correctness|b0|matched-recall|exact|resource-work|diagnostics|dataset-stats|analyze|bundle|all}" >&2
+    echo "usage: $0 {preflight|download-arxiv|build|test|prepare|build-graphs|maxq-gate|correctness|b0|matched-recall|exact|resource-work|diagnostics|dataset-stats|analyze|bundle|all}" >&2
     exit 2
     ;;
 esac

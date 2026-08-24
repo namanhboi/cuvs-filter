@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "name": "a100-yfcc10m-arxiv-large-g64",
+  "max_queries": 2048,
   "matched_widths": [1, 2],
   "datasets": {
     "yfcc": {

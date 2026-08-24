@@ -186,7 +186,11 @@ def point_key(row: dict) -> tuple[str, int, int, int]:
 
 
 def validate_runtime_flags(
-    record: dict, label: str, method: str, path: Path
+    record: dict,
+    label: str,
+    method: str,
+    path: Path,
+    expected_max_queries: int,
 ) -> None:
     accumulator = round(
         finite(record, "favor_udf_passing_accumulator", path, 0.0)
@@ -221,8 +225,10 @@ def validate_runtime_flags(
         raise ValueError(f"non-default filter mode in {path}: {label}")
     if round(finite(record, "k", path)) != 10:
         raise ValueError(f"paper run does not use k=10 in {path}")
-    if round(finite(record, "max_queries", path)) != 512:
-        raise ValueError(f"paper run does not use max_queries=512 in {path}")
+    if round(finite(record, "max_queries", path)) != expected_max_queries:
+        raise ValueError(
+            f"paper run does not use max_queries={expected_max_queries} in {path}"
+        )
     scheduler = label_value(label, "navix_scheduler")
     variant = label_value(label, "navix_kernel_variant")
     if method == "navix_reference":
@@ -348,7 +354,13 @@ def load_group(path: Path, manifest: dict, raw_root: Path) -> list[RawPoint]:
                     f"duplicate search point {key}, repetition {repetition} in {raw_path}"
                 )
             rows_by_repetition[repetition].add(key)
-            validate_runtime_flags(record, label, method, raw_path)
+            validate_runtime_flags(
+                record,
+                label,
+                method,
+                raw_path,
+                int(manifest["max_queries"]),
+            )
 
             queries = round(finite(record, "n_queries", raw_path))
             qps = finite(record, "items_per_second", raw_path)
@@ -928,6 +940,18 @@ def main() -> None:
         raise ValueError(
             "run provenance does not certify distinct-output recall/underfill semantics v1"
         )
+    expected_max_queries = int(fixed_contract.get("max_queries", -1))
+    if expected_max_queries <= 0:
+        raise ValueError("run provenance has no valid max_queries contract")
+    manifest_max_queries = {
+        int(json.loads(path.read_text()).get("max_queries", -1))
+        for path in used_manifests
+    }
+    if manifest_max_queries != {expected_max_queries}:
+        raise ValueError(
+            "config manifests disagree with run max_queries contract: "
+            f"provenance={expected_max_queries}, manifests={sorted(manifest_max_queries)}"
+        )
     data_root = Path(run_payload["data_root"])
 
     def data_path(value: str) -> Path:
@@ -977,6 +1001,7 @@ def main() -> None:
             "sha256": sha256(Path(__file__).resolve()),
         },
         "result_root": str(args.result_root.resolve()),
+        "max_queries": expected_max_queries,
         "target_recall": args.target_recall,
         "groups": sorted(available_groups),
         "timing_contract": (
@@ -1026,6 +1051,7 @@ def main() -> None:
         "summary_points": len(summary_points),
         "pareto_points": len(pareto_points),
         "groups": sorted(available_groups),
+        "max_queries": expected_max_queries,
         "correctness_error_total": sum(
             row.filter_violations
             + row.sentinel_errors

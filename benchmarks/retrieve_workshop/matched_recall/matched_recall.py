@@ -22,14 +22,19 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 GPU_GRAPH_DIR = SCRIPT_DIR.parent / "gpu_graph"
 sys.path.insert(0, str(GPU_GRAPH_DIR))
 
-from analyze_gpu_graph import aggregate_repetitions, load_group  # noqa: E402
-from generate_configs import (  # noqa: E402
+from analyze_gpu_graph import aggregate_repetitions, load_group
+from dataset_profile import (
+    load_profile,
+    profile_record,
+    workload_spec,
+)
+from generate_configs import (
+    MAX_QUERIES,
     config_payload,
     dataset_paths,
     point_identity,
     search_point,
 )
-from dataset_profile import load_profile, profile_record, workload_spec  # noqa: E402
 
 WORKLOADS = ("yfcc", "em", "emis", "r")
 METHODS = ("default_cagra", "default_cagra_accumulator", "navix_reference")
@@ -47,7 +52,6 @@ MAX_NORMAL_HASH_ENTRIES = (1 << MAX_NORMAL_HASH_BITLEN) * HASHMAP_MAX_FILL_RATE
 TARGETS = {"yfcc": 0.80, "em": 0.95, "emis": 0.95, "r": 0.95}
 TARGET_WINDOW = 0.002
 EXPECTED_QUERIES = 10_000
-MAX_QUERIES = 512
 
 # Only these cells need tighter B0 calibration for the paper.  The other four cells already have
 # valid, intentionally deep endpoints and are rerun unchanged in the final 12-cell measurement.
@@ -974,11 +978,28 @@ def provenance(result_root: Path, summaries: list[dict], selected: list[dict]) -
     run_path = result_root / "provenance" / "run.json"
     if not run_path.is_file():
         raise FileNotFoundError(run_path)
+    run_payload = json.loads(run_path.read_text())
+    provenance_max_queries = int(
+        run_payload.get("fixed_contract", {}).get("max_queries", -1)
+    )
+    if provenance_max_queries != MAX_QUERIES:
+        raise ValueError(
+            "matched-recall provenance/config max_queries mismatch: "
+            f"provenance={provenance_max_queries}, active_profile={MAX_QUERIES}"
+        )
     manifests = [
         path
         for path, _ in experiment_manifests(result_root)
         if (result_root / "raw" / path.parent.parent.name / path.parent.name).is_dir()
     ]
+    manifest_max_queries = {
+        int(json.loads(path.read_text()).get("max_queries", -1)) for path in manifests
+    }
+    if manifest_max_queries != {MAX_QUERIES}:
+        raise ValueError(
+            "matched-recall manifests mix max_queries values: "
+            f"{sorted(manifest_max_queries)}"
+        )
     raw_files = sorted((result_root / "raw").glob("*/*/shard_*.json"))
     state_files = sorted((result_root / "state").glob("*.json"))
     analysis_files = [
@@ -990,6 +1011,7 @@ def provenance(result_root: Path, summaries: list[dict], selected: list[dict]) -
         "schema_version": 1,
         "experiment": "retrieve_workshop_matched_recall",
         "generated_utc": datetime.now(timezone.utc).isoformat(),
+        "max_queries": MAX_QUERIES,
         "targets": TARGETS,
         "target_window": TARGET_WINDOW,
         "selection_contract": (

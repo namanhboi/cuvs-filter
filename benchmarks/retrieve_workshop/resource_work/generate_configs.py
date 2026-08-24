@@ -11,13 +11,14 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR.parent / "gpu_graph"))
 
-from generate_configs import (  # noqa: E402
+from dataset_profile import load_profile, profile_record
+from generate_configs import (
+    MAX_QUERIES,
     PRIMARY_METHODS,
     config_payload,
     dataset_paths,
     search_point,
 )
-from dataset_profile import load_profile, profile_record  # noqa: E402
 
 WORKLOADS = ("yfcc", "em", "emis", "r")
 ITOPK = 64
@@ -51,10 +52,9 @@ def build(output: Path, data_root: Path, diagnostic_root: Path) -> dict:
             diagnostic = dict(row)
             diagnostic.update(
                 {
-                    # The diagnostic session writes one capture per internal query chunk. Keep the
-                    # fixed 1,000-query sample in one untimed chunk; max_queries is only a host
-                    # scheduling cap and does not change per-query traversal or kernel resources.
-                    "max_queries": 1_024,
+                    # Keep the fixed sample in one capture while using the identical planner
+                    # contract as the production resource kernel.
+                    "max_queries": MAX_QUERIES,
                     "favor_diagnostics_output": str(
                         (diagnostic_root / workload / method).resolve()
                     ),
@@ -99,6 +99,7 @@ def build(output: Path, data_root: Path, diagnostic_root: Path) -> dict:
         "itopk": ITOPK,
         "search_width": SEARCH_WIDTH,
         "max_iterations": MAX_ITERATIONS,
+        "max_queries": MAX_QUERIES,
         "configs": configs,
         "dataset_profile": profile_record(load_profile()),
         "dataset_contracts": dataset_contracts,

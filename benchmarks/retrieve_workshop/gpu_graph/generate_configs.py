@@ -17,7 +17,7 @@ from dataset_profile import load_profile, profile_record, workload_spec
 
 WORKLOADS = ("yfcc", "em", "emis", "r")
 K = 10
-MAX_QUERIES = 512
+MAX_QUERIES = int(load_profile()["max_queries"])
 THROUGHPUT_REPETITIONS = 3
 CORRECTNESS_REPETITIONS = 1
 B0_CELLS = ((64, 1), (128, 1), (128, 2), (256, 1), (256, 2), (512, 2))
@@ -94,14 +94,22 @@ def dataset_paths(
 
 
 def search_point(
-    method: str, itopk: int, width: int, max_iterations: int
+    method: str,
+    itopk: int,
+    width: int,
+    max_iterations: int,
+    *,
+    max_queries: int | None = None,
 ) -> dict:
     if method not in METHODS:
         raise ValueError(f"unknown method {method!r}")
+    effective_max_queries = MAX_QUERIES if max_queries is None else int(max_queries)
+    if effective_max_queries <= 0:
+        raise ValueError("max_queries must be positive")
     row: dict[str, object] = {
         "algo": "single_cta",
         "filter_mode": "default",
-        "max_queries": MAX_QUERIES,
+        "max_queries": effective_max_queries,
         "itopk": itopk,
         "search_width": width,
         "max_iterations": max_iterations,
@@ -195,6 +203,12 @@ def write_group(
     searches: list[dict],
     yfcc_graph_degree: int,
 ) -> None:
+    max_query_values = {int(row["max_queries"]) for row in searches}
+    if len(max_query_values) != 1:
+        raise ValueError(
+            f"{group}/{workload} mixes max_queries values: {sorted(max_query_values)}"
+        )
+    max_queries = next(iter(max_query_values))
     paths = dataset_paths(
         data_root, workload, phase, yfcc_graph_degree
     )
@@ -260,7 +274,7 @@ def write_group(
         "phase": phase,
         "workload": workload,
         "k": K,
-        "max_queries": MAX_QUERIES,
+        "max_queries": max_queries,
         "graph_degree": paths.graph_degree,
         "intermediate_graph_degree": paths.intermediate_graph_degree,
         "dataset_size": paths.dataset_size,

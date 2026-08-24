@@ -19,6 +19,7 @@ WORKLOADS = ("yfcc", "em", "emis", "r")
 DEFAULT_PROFILE: dict[str, Any] = {
     "schema_version": 1,
     "name": "legacy-yfcc10m-arxiv-medium",
+    "max_queries": 512,
     "matched_widths": [1, 2, 4],
     "datasets": {
         "yfcc": {
@@ -69,6 +70,9 @@ def _validate(profile: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("matched_widths must be a nonempty subset of 1, 2, 4")
     if len(set(widths)) != len(widths):
         raise ValueError("matched_widths contains duplicates")
+    max_queries = int(profile.get("max_queries", 512))
+    if max_queries <= 0:
+        raise ValueError("max_queries must be positive")
     for workload, row in datasets.items():
         required = {
             "bitmap_directory",
@@ -102,6 +106,7 @@ def _validate(profile: dict[str, Any]) -> dict[str, Any]:
                 f"{workload} intermediate degree is smaller than graph degree"
             )
     profile["matched_widths"] = list(widths)
+    profile["max_queries"] = max_queries
     return profile
 
 
@@ -137,4 +142,5 @@ def profile_record(profile: dict[str, Any] | None = None) -> dict[str, Any]:
         "name": active["name"],
         "source": active.get("source", "built-in"),
         "sha256": active.get("sha256"),
+        "max_queries": int(active["max_queries"]),
     }

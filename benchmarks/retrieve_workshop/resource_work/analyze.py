@@ -78,7 +78,7 @@ def load_resources(path: Path, graph_degree: int) -> dict[str, dict]:
     return result
 
 
-def load_raw_correctness(path: Path) -> dict[str, dict]:
+def load_raw_correctness(path: Path, expected_max_queries: int) -> dict[str, dict]:
     payload = json.loads(path.read_text())
     result: dict[str, dict] = {}
     for record in payload.get("benchmarks", []):
@@ -97,6 +97,10 @@ def load_raw_correctness(path: Path) -> dict[str, dict]:
             raise ValueError(f"{method} does not use W=1 in {path}")
         if int(round(float(record.get("max_iterations", -1)))) != 0:
             raise ValueError(f"{method} does not use B0 in {path}")
+        if round(float(record.get("max_queries", -1))) != expected_max_queries:
+            raise ValueError(
+                f"{method} does not use max_queries={expected_max_queries} in {path}"
+            )
         sentinel_errors = sum(
             float(record.get(key, 0.0))
             for key in (
@@ -160,6 +164,9 @@ def summarize(result_root: Path) -> list[dict]:
     raw_by_workload: dict[str, dict[str, dict]] = {}
     config_manifest_path = result_root / "configs" / "manifest.json"
     config_manifest = json.loads(config_manifest_path.read_text())
+    expected_max_queries = int(config_manifest.get("max_queries", -1))
+    if expected_max_queries <= 0:
+        raise ValueError(f"resource manifest has invalid max_queries: {config_manifest_path}")
     contracts = config_manifest.get("dataset_contracts", {})
     if set(contracts) != set(WORKLOADS):
         raise ValueError(f"resource manifest lacks dataset contracts: {config_manifest_path}")
@@ -169,7 +176,14 @@ def summarize(result_root: Path) -> list[dict]:
             result_root / "resources" / f"{workload}.log", graph_degree
         )
         raw_by_workload[workload] = load_raw_correctness(
-            result_root / "raw" / "resources" / f"{workload}.json"
+            result_root / "raw" / "resources" / f"{workload}.json",
+            expected_max_queries,
+        )
+        # Diagnostic telemetry is untimed, but its search plan must still use the same
+        # max_queries contract as the production resource capture.
+        load_raw_correctness(
+            result_root / "raw" / "diagnostics" / f"{workload}.json",
+            expected_max_queries,
         )
         for method in METHODS:
             directory = result_root / "diagnostics" / workload / method
@@ -231,6 +245,7 @@ def summarize(result_root: Path) -> list[dict]:
                     "itopk": 64,
                     "search_width": 1,
                     "max_iterations": 0,
+                    "max_queries": expected_max_queries,
                     "recall": diagnostic_recall,
                     "graph_rows_per_query": mean(diagnostic_rows, "graph_rows_read"),
                     "seed_bitmap_words_per_query": mean(diagnostic_rows, "seed_inspected_units"),
@@ -286,7 +301,13 @@ def write_outputs(result_root: Path, output: Path, summary: list[dict]) -> None:
         "schema_version": 1,
         "status": "PASS",
         "diagnostic_schema_version": SCHEMA_VERSION,
-        "configuration": {"queries": 1_000, "itopk": 64, "search_width": 1, "max_iterations": 0},
+        "configuration": {
+            "queries": 1_000,
+            "itopk": 64,
+            "search_width": 1,
+            "max_iterations": 0,
+            "max_queries": int(summary[0]["max_queries"]),
+        },
         "rows": summary,
         "evidence": [
             {

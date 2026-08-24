@@ -12,6 +12,10 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR.parent / "gpu_graph"))
+
+from dataset_profile import load_profile
 
 INSTRUMENTED_SOURCES = (
     "cpp/bench/ann/src/cuvs/cuvs_cagra_wrapper.h",
@@ -92,6 +96,7 @@ def main() -> None:
             "itopk": 64,
             "search_width": 1,
             "max_iterations": 0,
+            "max_queries": int(load_profile()["max_queries"]),
             "diagnostics_are_timed": False,
             "resources_from_production_kernel": True,
         },

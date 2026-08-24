@@ -7,6 +7,7 @@ import argparse
 import csv
 import json
 import math
+import re
 import sys
 from pathlib import Path
 
@@ -15,6 +16,7 @@ GPU_DIR = SCRIPT_DIR.parent / "gpu_graph"
 sys.path.insert(0, str(GPU_DIR))
 
 from generate_configs import (
+    MAX_QUERIES,
     config_payload,
     dataset_paths,
     search_point,
@@ -27,6 +29,34 @@ VARIANTS = (
     ("navix_l64_w1_i1044", "navix_reference", 64, 1, 1044),
     ("navix_l512_w2_i1044", "navix_reference", 512, 2, 1044),
 )
+
+
+def label_value(label: str, key: str) -> str:
+    match = re.search(rf'(?:^|#){re.escape(key)}="([^"]+)"', label)
+    return match.group(1) if match else ""
+
+
+def validate_raw_results(path: Path) -> None:
+    payload = json.loads(path.read_text())
+    expected = {row[0] for row in VARIANTS}
+    observed: set[str] = set()
+    for record in payload.get("benchmarks", []):
+        if record.get("run_type") != "iteration":
+            continue
+        variant = label_value(str(record.get("label", "")), "favor_diagnostics_variant")
+        if variant not in expected:
+            continue
+        if variant in observed:
+            raise ValueError(f"duplicate mechanism result for {variant}: {path}")
+        if round(float(record.get("max_queries", -1))) != MAX_QUERIES:
+            raise ValueError(
+                f"mechanism result does not use max_queries={MAX_QUERIES}: {variant}"
+            )
+        if round(float(record.get("n_queries", -1))) != 1_000:
+            raise ValueError(f"mechanism result does not cover 1,000 queries: {variant}")
+        observed.add(variant)
+    if observed != expected:
+        raise ValueError(f"mechanism raw results are incomplete: missing {sorted(expected - observed)}")
 
 
 def generate(data_root: Path, output: Path, diagnostics: Path) -> None:
@@ -44,7 +74,7 @@ def generate(data_root: Path, output: Path, diagnostics: Path) -> None:
         row = search_point(method, itopk, width, iterations)
         row.update(
             {
-                "max_queries": 1_024,
+                "max_queries": MAX_QUERIES,
                 "favor_diagnostics_output": str(
                     (diagnostics / variant).resolve()
                 ),
@@ -111,7 +141,8 @@ def validate_base_retain_traversal(
                 )
 
 
-def summarize(diagnostics: Path, output: Path) -> None:
+def summarize(diagnostics: Path, raw_results: Path, output: Path) -> None:
+    validate_raw_results(raw_results)
     captures: dict[str, tuple[list[dict[str, str]], dict]] = {}
     for variant, method, itopk, width, iterations in VARIANTS:
         directory = diagnostics / variant
@@ -215,6 +246,7 @@ def summarize(diagnostics: Path, output: Path) -> None:
         "dataset": "YFCC-10M",
         "graph_degree": 64,
         "queries": 1_000,
+        "max_queries": MAX_QUERIES,
         "timing_valid": False,
         "retention": retention,
         "navix": navix,
@@ -232,6 +264,7 @@ def main() -> None:
     generate_parser.add_argument("--diagnostics", type=Path, required=True)
     summarize_parser = subparsers.add_parser("summarize")
     summarize_parser.add_argument("--diagnostics", type=Path, required=True)
+    summarize_parser.add_argument("--raw-results", type=Path, required=True)
     summarize_parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if args.command == "generate":
@@ -241,7 +274,11 @@ def main() -> None:
             args.diagnostics.resolve(),
         )
     else:
-        summarize(args.diagnostics.resolve(), args.output.resolve())
+        summarize(
+            args.diagnostics.resolve(),
+            args.raw_results.resolve(),
+            args.output.resolve(),
+        )
 
 
 if __name__ == "__main__":

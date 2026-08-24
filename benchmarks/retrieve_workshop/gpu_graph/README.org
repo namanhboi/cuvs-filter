@@ -4,9 +4,11 @@
 
 This directory freezes the SINGLE_CTA, resident per-query bitmap experiment used by the
 RETRIEVE paper.  It does not expose a public cuVS option.  YFCC uses CAGRA G=64/IG=128; the
-ArXiv-medium workloads use G=32/IG=64.  All runs use =k=10=, =max_queries=512=, and squared L2
-through cuVS-bench.  The analyzer records both degrees in every row and refuses to merge different
-graph identities.
+ArXiv-medium workloads use G=32/IG=64.  All runs use =k=10= and squared L2 through cuVS-bench.
+The historical built-in profile uses =max_queries=512=; an explicit dataset profile may override
+the cap (the A100 YFCC/ArXiv-large profile pins 2,048).  The generator records the resolved value
+and the analyzer rejects raw labels that do not match it.  The analyzer likewise records both
+degrees in every row and refuses to merge different graph identities.
 
 The primary comparison is:
 

@@ -30,10 +30,12 @@ benchmark-private =CUVS_CAGRA_LOG_RESOURCES= environment variable.
 | Dynamic SMEM | Production launch dynamic shared memory. The paper also reports the byte delta from Base. |
 | Active CTAs/SM | =cudaOccupancyMaxActiveBlocksPerMultiprocessor= for the production launch. This is a resource ceiling, not a measured achieved-occupancy percentage. |
 
-The 1,000-query diagnostic configs use =max_queries=1024= solely so the existing session writes
-one complete capture rather than overwriting a 512-query chunk with the final 488 queries.
-Production resource configs retain the paper's normal =max_queries=512=.  This host scheduling
-cap does not change per-query traversal, kernel resources, =L=, =W=, or =B0=.
+Production and diagnostic configs use the same =max_queries= value from the active dataset
+profile.  The historical default profile uses 512; the A100 paper profile uses 2,048, so its
+1,000-query resource and diagnostic samples each execute as one host-side CAGRA session.  The
+analyzer rejects a mismatch between production raw data, diagnostic raw data, the config manifest,
+and provenance.  This host scheduling cap does not change per-query traversal, kernel resources,
+=L=, =W=, or =B0=.
 
 * Build and run
 

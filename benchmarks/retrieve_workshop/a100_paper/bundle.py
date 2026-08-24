@@ -43,6 +43,48 @@ def csv_rows(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(source))
 
 
+def json_payload(path: Path) -> dict:
+    if not path.is_file():
+        raise FileNotFoundError(path)
+    return json.loads(path.read_text())
+
+
+def validate_max_queries_contract(root: Path, profile: dict) -> tuple[int, list[Path]]:
+    expected = int(profile.get("max_queries", 512))
+    if expected != 2_048:
+        raise ValueError(f"A100 bundle requires max_queries=2048, found {expected}")
+    contracts = [
+        root / "gpu_graph/provenance/run.json",
+        root / "matched_recall/provenance/run.json",
+        root / "resource_work/provenance/run.json",
+        root / "mechanism_diagnostics/provenance/run.json",
+        root / "maxq_gate/provenance/run.json",
+    ]
+    observed = (
+        int(json_payload(contracts[0])["fixed_contract"]["max_queries"]),
+        int(json_payload(contracts[1])["fixed_contract"]["max_queries"]),
+        int(json_payload(contracts[2])["contract"]["max_queries"]),
+        int(json_payload(contracts[3])["fixed_contract"]["max_queries"]),
+        int(json_payload(contracts[4])["fixed_contract"]["max_queries"]),
+    )
+    if any(value != expected for value in observed):
+        raise ValueError(f"mixed max_queries contracts in A100 run: {observed}")
+    resource = json_payload(root / "resource_work/analysis/gpu_resource_work.json")
+    mechanism = json_payload(
+        root / "mechanism_diagnostics/analysis/mechanism_summary.json"
+    )
+    gpu_analysis = json_payload(root / "gpu_graph/analysis/provenance.json")
+    matched_analysis = json_payload(root / "matched_recall/analysis/provenance.json")
+    if (
+        int(resource["configuration"]["max_queries"]) != expected
+        or int(mechanism["max_queries"]) != expected
+        or int(gpu_analysis["max_queries"]) != expected
+        or int(matched_analysis["max_queries"]) != expected
+    ):
+        raise ValueError("analyzed evidence uses the wrong max_queries")
+    return expected, contracts
+
+
 METHODS = {
     "default_cagra": ("CAGRA-Base", "#1f77b4", "o"),
     "default_cagra_accumulator": ("CAGRA-Retain", "#d62728", "s"),
@@ -212,6 +254,8 @@ def main() -> None:
     parser.add_argument("--profile", type=Path, required=True)
     args = parser.parse_args()
     root = args.run_root.resolve()
+    profile_payload = json.loads(args.profile.read_text())
+    max_queries, contract_paths = validate_max_queries_contract(root, profile_payload)
     output = root / "paper_gpu_bundle"
     if output.exists():
         raise FileExistsError(
@@ -225,6 +269,7 @@ def main() -> None:
         "resource_work": root / "resource_work" / "analysis",
         "mechanism_diagnostics": root / "mechanism_diagnostics" / "analysis",
         "dataset_stats": root / "dataset_stats",
+        "maxq_gate": root / "maxq_gate" / "analysis",
         "preflight": root / "provenance",
     }
     required = (
@@ -234,6 +279,7 @@ def main() -> None:
         inputs["resource_work"] / "gpu_resource_work.csv",
         inputs["mechanism_diagnostics"] / "mechanism_summary.json",
         inputs["dataset_stats"] / "workload_selectivity_summary.json",
+        inputs["maxq_gate"] / "max_queries_gate_summary.json",
         inputs["preflight"] / "a100_preflight.json",
     )
     missing = [str(path) for path in required if not path.is_file()]
@@ -245,6 +291,11 @@ def main() -> None:
     copied: list[Path] = []
     for name, source in inputs.items():
         copied.extend(copy_tree_files(source, output / name))
+    for path in contract_paths:
+        target = output / "run_contracts" / path.parent.parent.name / path.name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, target)
+        copied.append(target)
 
     selected = csv_rows(required[1])
     exact = csv_rows(required[2])
@@ -280,6 +331,7 @@ def main() -> None:
         "cuda_resources_and_dynamic_work": "resource_work/gpu_resource_work.csv",
         "yfcc_gt_seen_retention_and_navix_failure": "mechanism_diagnostics/mechanism_summary.json",
         "workload_cardinality_and_selectivity": "dataset_stats/workload_selectivity_summary.json",
+        "max_queries_2048_memory_and_scheduling_gate": "maxq_gate/max_queries_gate_summary.json",
         "hardware_and_run_identity": "preflight/a100_preflight.json",
     }
     (output / "claim_to_source.json").write_text(
@@ -287,9 +339,13 @@ def main() -> None:
     )
     copied.append(output / "claim_to_source.json")
     manifest = {
-        "schema_version": 1,
+        "schema_version": 2,
         "created_utc": datetime.now(timezone.utc).isoformat(),
-        "profile": json.loads(args.profile.read_text()),
+        "profile": profile_payload,
+        "execution_contract": {
+            "max_queries": max_queries,
+            "throughput_shards": [2048, 2048, 2048, 2048, 1808],
+        },
         "run_root": str(root),
         "files": [
             {

@@ -21,6 +21,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 sys.path.insert(0, str(RETRIEVE_DIR / "gpu_graph"))
 sys.path.insert(0, str(RETRIEVE_DIR.parent / "favor" / "navix_bitmap"))
 
+from bundle import validate_max_queries_contract
 from dataset_profile import load_profile
 from mechanism_diagnostics import validate_base_retain_traversal
 from prepare_arxiv_large import materialize_phase, packed_words
@@ -70,6 +71,7 @@ class A100PipelineTest(unittest.TestCase):
             SCRIPT_DIR / "profiles" / "a100_yfcc10m_arxiv_large.json"
         )
         self.assertEqual(profile["matched_widths"], [1, 2])
+        self.assertEqual(profile["max_queries"], 2_048)
         self.assertEqual(profile["datasets"]["yfcc"]["graph_degree"], 64)
         self.assertEqual(profile["datasets"]["em"]["dataset_size"], 2_735_264)
         self.assertEqual(profile["datasets"]["emis"]["dimension"], 4096)
@@ -157,6 +159,7 @@ class A100PipelineTest(unittest.TestCase):
                             / f"shard_{first:05d}"
                         )
                         shard.mkdir(parents=True)
+                        (shard / "groundtruth.ibin").write_bytes(b"fixture")
                         shards.append(
                             {
                                 "first_query": first,
@@ -193,6 +196,13 @@ class A100PipelineTest(unittest.TestCase):
             )
             self.assertEqual(manifest["dataset_size"], 2_735_264)
             self.assertEqual(manifest["graph_degree"], 64)
+            self.assertEqual(manifest["max_queries"], 2_048)
+            self.assertTrue(
+                all(
+                    int(search["max_queries"]) == 2_048
+                    for search in config["index"][0]["search_params"]
+                )
+            )
             self.assertEqual(
                 config["dataset"]["base_file"],
                 "arxiv-for-fanns-large/base.fbin",
@@ -200,6 +210,213 @@ class A100PipelineTest(unittest.TestCase):
             self.assertEqual(
                 config["index"][0]["file"],
                 "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            )
+            for group_manifest_path in output.glob("*/*/manifest.json"):
+                group_manifest = json.loads(group_manifest_path.read_text())
+                self.assertEqual(group_manifest["max_queries"], 2_048)
+                for shard in group_manifest["configs"]:
+                    shard_config = json.loads(Path(shard["config"]).read_text())
+                    self.assertEqual(
+                        {
+                            int(row["max_queries"])
+                            for row in shard_config["index"][0]["search_params"]
+                        },
+                        {2_048},
+                    )
+
+            matched_root = root / "matched"
+            matched_points = root / "matched_points.json"
+            matched_points.write_text(
+                json.dumps(
+                    {
+                        "points": [
+                            {
+                                "workload": "emis",
+                                "method": "default_cagra_accumulator",
+                                "itopk": 64,
+                                "search_width": 1,
+                                "max_iterations": 0,
+                            }
+                        ]
+                    }
+                )
+                + "\n"
+            )
+            subprocess.run(
+                (
+                    sys.executable,
+                    str(RETRIEVE_DIR / "matched_recall" / "matched_recall.py"),
+                    "generate-group",
+                    "--result-root",
+                    str(matched_root),
+                    "--data-root",
+                    str(data),
+                    "--group",
+                    "synthetic",
+                    "--repetitions",
+                    "1",
+                    "--points",
+                    str(matched_points),
+                ),
+                env=environment,
+                check=True,
+            )
+            matched_manifest = json.loads(
+                (matched_root / "configs/synthetic/emis/manifest.json").read_text()
+            )
+            self.assertEqual(matched_manifest["max_queries"], 2_048)
+            for shard in matched_manifest["configs"]:
+                matched_config = json.loads(Path(shard["config"]).read_text())
+                self.assertEqual(
+                    matched_config["index"][0]["search_params"][0]["max_queries"],
+                    2_048,
+                )
+
+            gate = root / "maxq_gate"
+            subprocess.run(
+                (
+                    sys.executable,
+                    str(SCRIPT_DIR / "max_queries_gate.py"),
+                    "generate",
+                    "--data-root",
+                    str(data),
+                    "--output",
+                    str(gate),
+                ),
+                env=environment,
+                check=True,
+            )
+            gate_manifest = json.loads((gate / "manifest.json").read_text())
+            self.assertEqual(gate_manifest["caps"], [512, 1024, 2048])
+            self.assertEqual(gate_manifest["production_cap"], 2_048)
+            self.assertEqual(len(gate_manifest["records"]), 6)
+            for record in gate_manifest["records"]:
+                gate_config = json.loads(Path(record["config"]).read_text())
+                self.assertEqual(
+                    {int(row["max_queries"]) for row in gate_config["index"][0]["search_params"]},
+                    {int(record["max_queries"])},
+                )
+                benchmarks = []
+                for point in record["search_points"]:
+                    method = point["method"]
+                    label = (
+                        f'bitmap_method="{method}"#algo="single_cta"#'
+                        'filter_mode="default"'
+                    )
+                    if method == "navix_reference":
+                        label += (
+                            '#navix_mode="adaptive_kuzu"#navix_scheduler="tiled"'
+                            '#navix_kernel_variant="reference"'
+                        )
+                    benchmarks.append(
+                        {
+                            "run_type": "iteration",
+                            "label": label,
+                            "itopk": point["itopk"],
+                            "search_width": point["search_width"],
+                            "max_iterations": point["max_iterations"],
+                            "max_queries": record["max_queries"],
+                            "n_queries": 2_048,
+                            "k": 10,
+                            "favor_udf_passing_accumulator": int(
+                                "accumulator" in method
+                            ),
+                            "navix_bitmap_seeds": int(
+                                method == "navix_reference"
+                            ),
+                            "require_identity_source_indices": 1,
+                            "FilterViolations": 0,
+                            "InvalidSentinelErrors": 0,
+                            "SentinelOrderErrors": 0,
+                            "InvalidSentinelDistanceErrors": 0,
+                            "DuplicateOutputQueries": 0,
+                            "items_per_second": 10_000,
+                            "ValidGTRecall": 0.8,
+                        }
+                    )
+                raw = (
+                    gate
+                    / "raw"
+                    / f"maxq_{record['max_queries']}"
+                    / f"{record['workload']}.json"
+                )
+                raw.parent.mkdir(parents=True, exist_ok=True)
+                raw.write_text(json.dumps({"benchmarks": benchmarks}) + "\n")
+            subprocess.run(
+                (
+                    sys.executable,
+                    str(SCRIPT_DIR / "max_queries_gate.py"),
+                    "analyze",
+                    "--root",
+                    str(gate),
+                ),
+                env=environment,
+                check=True,
+            )
+            gate_summary = json.loads(
+                (gate / "analysis/max_queries_gate_summary.json").read_text()
+            )
+            self.assertEqual(gate_summary["status"], "PASS")
+            self.assertEqual(gate_summary["production_max_queries"], 2_048)
+            self.assertEqual(len(gate_summary["sensitivity"]), 6)
+
+            resource_root = root / "resource"
+            subprocess.run(
+                (
+                    sys.executable,
+                    str(RETRIEVE_DIR / "resource_work/generate_configs.py"),
+                    "--output",
+                    str(resource_root / "configs"),
+                    "--data-root",
+                    str(data),
+                    "--diagnostic-root",
+                    str(resource_root / "captures"),
+                ),
+                env=environment,
+                check=True,
+            )
+            resource_manifest = json.loads(
+                (resource_root / "configs/manifest.json").read_text()
+            )
+            self.assertEqual(resource_manifest["max_queries"], 2_048)
+            for workload in ("yfcc", "em", "emis", "r"):
+                for mode in ("resources", "diagnostics"):
+                    resource_config = json.loads(
+                        (
+                            resource_root / f"configs/{mode}/{workload}.json"
+                        ).read_text()
+                    )
+                    self.assertEqual(
+                        {
+                            int(row["max_queries"])
+                            for row in resource_config["index"][0]["search_params"]
+                        },
+                        {2_048},
+                    )
+
+            mechanism_config = root / "mechanism.json"
+            subprocess.run(
+                (
+                    sys.executable,
+                    str(SCRIPT_DIR / "mechanism_diagnostics.py"),
+                    "generate",
+                    "--data-root",
+                    str(data),
+                    "--output",
+                    str(mechanism_config),
+                    "--diagnostics",
+                    str(root / "mechanism_captures"),
+                ),
+                env=environment,
+                check=True,
+            )
+            mechanism = json.loads(mechanism_config.read_text())
+            self.assertEqual(
+                {
+                    int(row["max_queries"])
+                    for row in mechanism["index"][0]["search_params"]
+                },
+                {2_048},
             )
 
     def test_bundle_is_hash_bound_and_contains_all_four_workloads(
@@ -213,8 +430,14 @@ class A100PipelineTest(unittest.TestCase):
                 root / "exact_bitmap/analysis",
                 root / "resource_work/analysis",
                 root / "mechanism_diagnostics/analysis",
+                root / "maxq_gate/analysis",
                 root / "dataset_stats",
                 root / "provenance",
+                root / "gpu_graph/provenance",
+                root / "matched_recall/provenance",
+                root / "resource_work/provenance",
+                root / "mechanism_diagnostics/provenance",
+                root / "maxq_gate/provenance",
             ):
                 directory.mkdir(parents=True)
 
@@ -279,12 +502,56 @@ class A100PipelineTest(unittest.TestCase):
             (root / "resource_work/analysis/gpu_resource_work.csv").write_text(
                 "workload,method\nyfcc,default_cagra\n"
             )
+            (root / "resource_work/analysis/gpu_resource_work.json").write_text(
+                json.dumps({"configuration": {"max_queries": 2_048}}) + "\n"
+            )
+            for experiment in ("gpu_graph", "matched_recall"):
+                (root / experiment / "analysis/provenance.json").write_text(
+                    json.dumps({"max_queries": 2_048}) + "\n"
+                )
+            (root / "mechanism_diagnostics/analysis/mechanism_summary.json").write_text(
+                json.dumps({"max_queries": 2_048}) + "\n"
+            )
+            (root / "maxq_gate/analysis/max_queries_gate_summary.json").write_text(
+                json.dumps(
+                    {
+                        "status": "PASS",
+                        "production_max_queries": 2_048,
+                    }
+                )
+                + "\n"
+            )
             for path in (
-                root / "mechanism_diagnostics/analysis/mechanism_summary.json",
                 root / "dataset_stats/workload_selectivity_summary.json",
                 root / "provenance/a100_preflight.json",
             ):
                 path.write_text("{}\n")
+            for experiment in (
+                "gpu_graph",
+                "matched_recall",
+                "mechanism_diagnostics",
+                "maxq_gate",
+            ):
+                (root / experiment / "provenance/run.json").write_text(
+                    json.dumps({"fixed_contract": {"max_queries": 2_048}}) + "\n"
+                )
+            (root / "resource_work/provenance/run.json").write_text(
+                json.dumps({"contract": {"max_queries": 2_048}}) + "\n"
+            )
+            profile = json.loads(
+                (SCRIPT_DIR / "profiles/a100_yfcc10m_arxiv_large.json").read_text()
+            )
+            observed, contracts = validate_max_queries_contract(root, profile)
+            self.assertEqual(observed, 2_048)
+            self.assertEqual(len(contracts), 5)
+            (root / "mechanism_diagnostics/provenance/run.json").write_text(
+                json.dumps({"fixed_contract": {"max_queries": 1_024}}) + "\n"
+            )
+            with self.assertRaisesRegex(ValueError, "mixed max_queries"):
+                validate_max_queries_contract(root, profile)
+            (root / "mechanism_diagnostics/provenance/run.json").write_text(
+                json.dumps({"fixed_contract": {"max_queries": 2_048}}) + "\n"
+            )
             subprocess.run(
                 (
                     sys.executable,
@@ -298,6 +565,10 @@ class A100PipelineTest(unittest.TestCase):
             )
             manifest = json.loads(
                 (root / "paper_gpu_bundle/manifest.json").read_text()
+            )
+            self.assertEqual(manifest["schema_version"], 2)
+            self.assertEqual(
+                manifest["execution_contract"]["max_queries"], 2_048
             )
             self.assertGreater(len(manifest["files"]), 8)
             self.assertTrue(
