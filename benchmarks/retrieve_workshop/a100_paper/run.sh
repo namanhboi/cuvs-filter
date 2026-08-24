@@ -13,6 +13,7 @@ yfcc_source=${RETRIEVE_YFCC_SOURCE:-}
 bench_bin=${RETRIEVE_BENCH_BIN:-"${repo_dir}/cpp/build/bench/ann/CUVS_CAGRA_ANN_BENCH"}
 libcuvs=${RETRIEVE_LIBCUVS:-"${repo_dir}/cpp/build/libcuvs.so"}
 stage=${1:-all}
+minimum_free_gib=${RETRIEVE_MINIMUM_FREE_GIB:-350}
 
 max_queries=$("${python_bin}" - "${profile}" <<'PY'
 import json
@@ -71,7 +72,8 @@ preflight() {
   local extra=()
   test "${RETRIEVE_ALLOW_NON_A100:-0}" = 1 && extra+=(--allow-non-a100)
   "${python_bin}" "${script_dir}/preflight.py" --repo "${repo_dir}" \
-    --data-root "${data_root}" --run-root "${run_root}" --profile "${profile}" "${extra[@]}"
+    --data-root "${data_root}" --run-root "${run_root}" --profile "${profile}" \
+    --minimum-free-gib "${minimum_free_gib}" "${extra[@]}"
   mark_done preflight
 }
 

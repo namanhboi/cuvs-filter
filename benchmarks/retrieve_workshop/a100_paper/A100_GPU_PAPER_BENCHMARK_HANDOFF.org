@@ -97,6 +97,18 @@ export RETRIEVE_YFCC_SOURCE=/path/to/big-ann-benchmarks/data/yfcc100M
 export PARALLEL_LEVEL=12
 #+end_src
 
+The default preflight requires 350GiB free because it allows for a fresh ArXiv conversion, graph
+build, and failed temporary artifacts.  When the prepared datasets, bitmap manifests, and both
+G64/IG128 indexes already exist and will be reused, an explicit lower guard is permitted:
+
+#+begin_src sh
+export RETRIEVE_MINIMUM_FREE_GIB=340
+#+end_src
+
+The chosen threshold and observed free space are recorded in =a100_preflight.json=.  Do not lower
+the guard for a fresh preparation/build, and do not use it to continue when available space is
+close to the expected result size.
+
 =RETRIEVE_YFCC_SOURCE= must contain:
 
 - =base.10M.u8bin= and =query.public.100K.u8bin=;

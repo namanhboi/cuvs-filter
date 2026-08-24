@@ -127,6 +127,7 @@ def main() -> None:
         "gpu_query": gpu_rows,
         "compute_apps": apps.stdout.strip().splitlines(),
         "disk_free_gib": free_gib,
+        "minimum_free_gib": args.minimum_free_gib,
         "host_memory_gib": memory_gib,
         "logical_cpus": cpus,
         "python_executable": sys.executable,
