@@ -644,6 +644,11 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
         compact_invalid_to_end_of_list<TOPK_BY_BITONIC_SORT>(
           result_indices_buffer, result_distances_buffer, internal_topk);
         if (threadIdx.x == 0) { *terminate_flag = 0; }
+        if constexpr (BITONIC_SORT_AND_MERGE_MULTI_WARPS) {
+          // Compaction is performed by the first warp. Do not let the second merge warp read the
+          // shared top-k buffer while the first warp is still rewriting it.
+          __syncthreads();
+        }
       }
       topk_by_bitonic_sort_and_merge<BITONIC_SORT_AND_MERGE_MULTI_WARPS>(
         result_distances_buffer,
@@ -1636,6 +1641,8 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
     // Preserve logical distance order while compacting the physically swizzled bitonic buffer.
     compact_invalid_to_end_of_list<TOPK_BY_BITONIC_SORT>(
       result_indices_buffer, result_distances_buffer, internal_topk);
+    // The first warp produces the compacted list; every warp consumes it below.
+    __syncthreads();
 
     // If the sufficient number of valid indexes are not in the internal topk, pick up from the
     // candidate list.

@@ -1105,6 +1105,59 @@ TEST_P(CagraBitmapFilterDegree64Test, LegacyNavixBitmapMatchesEquivalentUdfExact
   expect_same(run(udf_filter, false), run(bitmap_filter, true));
 }
 
+TEST_P(CagraBitmapFilterDegree64Test, K100SparseDefaultOutputHasValidPrefix)
+{
+  constexpr std::int64_t result_k = 100;
+  auto predicate = [](std::int64_t query_id, std::int64_t source_id) {
+    return (source_id + 3 * query_id) % 4 == 0;
+  };
+  device_bitmap bitmap(res, kQueries, kRows, predicate);
+  auto filter = bitmap.filter();
+  bool observed_underfilled = false;
+  bool observed_full        = false;
+
+  for (auto itopk : {std::uint32_t{128}, std::uint32_t{256}, std::uint32_t{512}}) {
+    for (auto width : {std::uint32_t{1}, std::uint32_t{2}}) {
+      SCOPED_TRACE(::testing::Message() << "L=" << itopk << ", W=" << width);
+      auto search_params         = params(result_k, -1.0f);
+      search_params.algo         = cagra::search_algo::SINGLE_CTA;
+      search_params.itopk_size   = itopk;
+      search_params.search_width = width;
+
+      // Repeat the search to exercise the CTA-wide handoff from the first-warp compaction to the
+      // full-block top-k merge. A missing block barrier makes the valid-prefix property racy.
+      for (int repetition = 0; repetition < 16; ++repetition) {
+        SCOPED_TRACE(::testing::Message() << "repetition=" << repetition);
+        auto result = search_dynamic(res, filter, search_params, result_k);
+        for (std::int64_t query_id = 0; query_id < kQueries; ++query_id) {
+          bool saw_sentinel       = false;
+          float previous_distance = -std::numeric_limits<float>::infinity();
+          std::vector<std::uint32_t> valid_ids;
+          for (std::int64_t rank = 0; rank < result_k; ++rank) {
+            const auto position = static_cast<std::size_t>(query_id * result_k + rank);
+            const auto node     = result.neighbors[position];
+            const auto distance = result.distances[position];
+            if (node == std::numeric_limits<std::uint32_t>::max()) {
+              saw_sentinel = true;
+              continue;
+            }
+            EXPECT_FALSE(saw_sentinel);
+            EXPECT_TRUE(predicate(query_id, node));
+            EXPECT_GE(distance, previous_distance);
+            EXPECT_EQ(std::find(valid_ids.begin(), valid_ids.end(), node), valid_ids.end());
+            valid_ids.push_back(node);
+            previous_distance = distance;
+          }
+          observed_underfilled |= saw_sentinel;
+          observed_full |= !saw_sentinel;
+        }
+      }
+    }
+  }
+  EXPECT_TRUE(observed_underfilled);
+  EXPECT_TRUE(observed_full);
+}
+
 INSTANTIATE_TEST_CASE_P(CagraBitmapFilters,
                         CagraBitmapFilterTest,
                         ::testing::Values(cagra::search_algo::SINGLE_CTA,

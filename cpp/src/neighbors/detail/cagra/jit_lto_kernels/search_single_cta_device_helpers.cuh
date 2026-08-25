@@ -626,7 +626,8 @@ RAFT_DEVICE_INLINE_FUNCTION void topk_by_bitonic_sort_and_merge(
  * The bitonic top-k buffer is physically swizzled. Reading and writing by logical rank preserves
  * its sorted invariant; compacting physical positions would exchange values across rank pairs at
  * every warp boundary. All source values in a warp are loaded before any destination is written,
- * so the in-place compaction is safe.
+ * so the in-place compaction is safe. Only the first warp performs the writes; callers must issue
+ * a CTA-wide barrier before another warp consumes either array.
  */
 template <bool SWIZZLED, class IdxT, class DistanceT>
 RAFT_DEVICE_INLINE_FUNCTION void compact_invalid_to_end_of_list(IdxT* const index_array,
