@@ -191,6 +191,7 @@ def validate_runtime_flags(
     method: str,
     path: Path,
     expected_max_queries: int,
+    expected_k: int = 10,
 ) -> None:
     accumulator = round(
         finite(record, "favor_udf_passing_accumulator", path, 0.0)
@@ -223,8 +224,8 @@ def validate_runtime_flags(
         raise ValueError(f"non-SINGLE_CTA result in {path}: {label}")
     if label_value(label, "filter_mode") != "default":
         raise ValueError(f"non-default filter mode in {path}: {label}")
-    if round(finite(record, "k", path)) != 10:
-        raise ValueError(f"paper run does not use k=10 in {path}")
+    if round(finite(record, "k", path)) != expected_k:
+        raise ValueError(f"run does not use k={expected_k} in {path}")
     if round(finite(record, "max_queries", path)) != expected_max_queries:
         raise ValueError(
             f"paper run does not use max_queries={expected_max_queries} in {path}"
@@ -265,6 +266,9 @@ def load_group(path: Path, manifest: dict, raw_root: Path) -> list[RawPoint]:
     intermediate_graph_degree = int(manifest["intermediate_graph_degree"])
     expected_shards = int(manifest["expected_shards"])
     expected_queries = int(manifest["expected_queries"])
+    expected_k = int(manifest["k"])
+    if not 1 <= expected_k <= 512:
+        raise ValueError(f"invalid result width k={expected_k} in {path}")
     if graph_degree <= 0 or intermediate_graph_degree < graph_degree:
         raise ValueError(
             f"invalid graph degrees in {path}: "
@@ -360,6 +364,7 @@ def load_group(path: Path, manifest: dict, raw_root: Path) -> list[RawPoint]:
                 method,
                 raw_path,
                 int(manifest["max_queries"]),
+                expected_k,
             )
 
             queries = round(finite(record, "n_queries", raw_path))
@@ -711,6 +716,7 @@ def plot_workload(
     methods: tuple[str, ...],
     suffix: str,
     title_suffix: str,
+    k: int,
 ) -> None:
     selected = [
         row
@@ -757,7 +763,7 @@ def plot_workload(
     minimum = min(row.recall_median for row in selected)
     axis.set_xlim(max(0.0, minimum - 0.02), 1.0)
     axis.set_ylim(bottom=0)
-    axis.set_xlabel("Recall@10")
+    axis.set_xlabel(f"Recall@{k}")
     axis.set_ylabel("Queries per second")
     axis.set_title(f"{WORKLOAD_LABELS[workload]}: {title_suffix}")
     axis.grid(alpha=0.25)
@@ -839,6 +845,12 @@ def main() -> None:
     output = args.output or args.result_root / "analysis"
     output.mkdir(parents=True, exist_ok=True)
     manifests = load_manifests(config_root)
+    manifest_k_values = {int(manifest["k"]) for _, manifest in manifests}
+    if len(manifest_k_values) != 1:
+        raise ValueError(
+            f"result root mixes result widths: {sorted(manifest_k_values)}"
+        )
+    expected_k = next(iter(manifest_k_values))
     available_groups = {
         path.parent.parent.name
         for path, manifest in manifests
@@ -908,6 +920,7 @@ def main() -> None:
                 PRIMARY_METHODS,
                 "gpu_graph_qps_recall",
                 "GPU graph search (3-repetition median)",
+                expected_k,
             )
             plot_workload(
                 output,
@@ -916,6 +929,7 @@ def main() -> None:
                 SEED_METHODS,
                 "matched_seed_control",
                 "matched deterministic passing-seed control",
+                expected_k,
             )
 
     raw_files = sorted({Path(row.source_file) for row in raw_points})
@@ -943,6 +957,11 @@ def main() -> None:
     expected_max_queries = int(fixed_contract.get("max_queries", -1))
     if expected_max_queries <= 0:
         raise ValueError("run provenance has no valid max_queries contract")
+    if int(fixed_contract.get("k", -1)) != expected_k:
+        raise ValueError(
+            "run provenance disagrees with config result width: "
+            f"provenance={fixed_contract.get('k')}, manifests={expected_k}"
+        )
     manifest_max_queries = {
         int(json.loads(path.read_text()).get("max_queries", -1))
         for path in used_manifests
@@ -1002,6 +1021,7 @@ def main() -> None:
         },
         "result_root": str(args.result_root.resolve()),
         "max_queries": expected_max_queries,
+        "k": expected_k,
         "target_recall": args.target_recall,
         "groups": sorted(available_groups),
         "timing_contract": (
@@ -1052,6 +1072,7 @@ def main() -> None:
         "pareto_points": len(pareto_points),
         "groups": sorted(available_groups),
         "max_queries": expected_max_queries,
+        "k": expected_k,
         "correctness_error_total": sum(
             row.filter_violations
             + row.sentinel_errors

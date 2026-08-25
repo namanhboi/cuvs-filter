@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "name": "a100-yfcc10m-arxiv-large-g64-k100",
+  "max_queries": 2048,
+  "matched_widths": [1, 2],
+  "datasets": {
+    "yfcc": {
+      "bitmap_directory": "navix_bitmap_k100/yfcc",
+      "base_file": "yfcc-10M/base.10M.u8bin",
+      "index_file": "yfcc-10M/cagra_g64_ig128.index",
+      "dtype": "uint8",
+      "dataset_size": 10000000,
+      "dimension": 192,
+      "graph_degree": 64,
+      "intermediate_graph_degree": 128
+    },
+    "em": {
+      "bitmap_directory": "navix_bitmap_k100/arxiv-large/em",
+      "base_file": "arxiv-for-fanns-large/base.fbin",
+      "index_file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+      "dtype": "float",
+      "dataset_size": 2735264,
+      "dimension": 4096,
+      "graph_degree": 64,
+      "intermediate_graph_degree": 128
+    },
+    "emis": {
+      "bitmap_directory": "navix_bitmap_k100/arxiv-large/emis",
+      "base_file": "arxiv-for-fanns-large/base.fbin",
+      "index_file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+      "dtype": "float",
+      "dataset_size": 2735264,
+      "dimension": 4096,
+      "graph_degree": 64,
+      "intermediate_graph_degree": 128
+    },
+    "r": {
+      "bitmap_directory": "navix_bitmap_k100/arxiv-large/r",
+      "base_file": "arxiv-for-fanns-large/base.fbin",
+      "index_file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+      "dtype": "float",
+      "dataset_size": 2735264,
+      "dimension": 4096,
+      "graph_degree": 64,
+      "intermediate_graph_degree": 128
+    }
+  }
+}

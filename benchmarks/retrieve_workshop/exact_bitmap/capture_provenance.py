@@ -41,6 +41,9 @@ def main() -> None:
     parser.add_argument("--bench-bin", type=Path, required=True)
     parser.add_argument("--libcuvs", type=Path, required=True)
     args = parser.parse_args()
+    expected_k = int(os.environ.get("RETRIEVE_EXACT_K", "10"))
+    if expected_k <= 0:
+        raise ValueError("RETRIEVE_EXACT_K must be positive")
 
     destination = args.result_root / "provenance" / "run.json"
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -74,6 +77,11 @@ def main() -> None:
             raise ValueError("benchmark binary/library changed within one result root")
         if payload["host"] != platform.node() or payload["gpu"] != current_gpu:
             raise ValueError("host/GPU identity changed within one result root")
+        # Legacy Recall@10 exact-control provenance predates the explicit k field.  Preserve that
+        # interpretation while requiring every wider run to record its width.
+        if int(payload["fixed_contract"].get("k", 10)) != expected_k:
+            raise ValueError("result width k changed within one result root")
+        payload["fixed_contract"].setdefault("k", 10)
     else:
         payload = {
             "schema_version": 2,
@@ -95,6 +103,7 @@ def main() -> None:
                 "sha256": sha256(args.libcuvs),
             },
             "fixed_contract": {
+                "k": expected_k,
                 "output_set_semantics": "distinct_valid_output_ids_v1",
                 "timed_invalid_sentinel_normalization": True,
                 "native_l2_cutoff_validation": True,

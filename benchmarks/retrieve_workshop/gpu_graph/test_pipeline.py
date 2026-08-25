@@ -110,6 +110,7 @@ def generate(root: Path, data: Path, *extra: str) -> None:
                 "fixed_contract": {
                     "output_set_semantics": "distinct_valid_output_ids_v1",
                     "max_queries": 512,
+                    "k": 10,
                 },
             }
         )

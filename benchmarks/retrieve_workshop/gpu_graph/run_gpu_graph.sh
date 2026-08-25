@@ -54,11 +54,31 @@ run_group_workload() {
     name=$(basename "${config}" .json)
     local output="${destination}/${name}.json"
     if test -e "${output}" && test "${RETRIEVE_ALLOW_OVERWRITE:-0}" != 1; then
-      if test "${resume_complete}" = 1; then
+      if test "${resume_complete}" = 1 && test -s "${output}" && \
+        "${python_bin}" - "${output}" "${config}" "${repetitions}" <<'PY'
+import collections
+import json
+import pathlib
+import sys
+
+raw = json.loads(pathlib.Path(sys.argv[1]).read_text())
+config = json.loads(pathlib.Path(sys.argv[2]).read_text())
+repetitions = int(sys.argv[3])
+searches = sum(len(index["search_params"]) for index in config["index"])
+rows = [row for row in raw.get("benchmarks", []) if row.get("run_type") == "iteration"]
+counts = collections.Counter(int(row.get("repetition_index", -1)) for row in rows)
+valid = (
+    len(rows) == searches * repetitions
+    and counts == collections.Counter({repetition: searches for repetition in range(repetitions)})
+    and all(not row.get("error_occurred") and not row.get("skipped") for row in rows)
+)
+raise SystemExit(0 if valid else 1)
+PY
+      then
         echo "resume: retain complete ${output}" >&2
         continue
       else
-        echo "refusing to overwrite ${output}; set RETRIEVE_ALLOW_OVERWRITE=1 explicitly" >&2
+        echo "refusing to overwrite incomplete/unchecked ${output}; remove only this file and retry" >&2
         exit 2
       fi
     fi
@@ -86,8 +106,10 @@ run_group() {
   local group=$1
   local min_time=$2
   local repetitions=${3:-3}
+  local resume_complete=${RETRIEVE_RESUME_COMPLETE:-0}
   for workload in yfcc em emis r; do
-    run_group_workload "${group}" "${workload}" "${min_time}" 0 "${repetitions}"
+    run_group_workload \
+      "${group}" "${workload}" "${min_time}" "${resume_complete}" "${repetitions}"
   done
 }
 

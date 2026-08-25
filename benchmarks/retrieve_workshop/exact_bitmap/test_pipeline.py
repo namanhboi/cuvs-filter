@@ -159,6 +159,49 @@ def raw_record(
 
 
 class ExactPipelineTest(unittest.TestCase):
+    def test_k100_preparation_and_config_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source_manifest, base = create_preparation_source(
+                root, gt_width=100
+            )
+            prepared = root / "prepared"
+            run(
+                str(SCRIPT_DIR / "prepare_exact_workload.py"),
+                "--bitmap-manifest",
+                str(source_manifest),
+                "--base-file",
+                str(base),
+                "--source-dtype",
+                "float32",
+                "--output",
+                str(prepared),
+                "--k",
+                "100",
+            )
+            manifest = json.loads((prepared / "manifest.json").read_text())
+            self.assertEqual(manifest["k"], 100)
+            config_root = root / "configs"
+            run(
+                str(SCRIPT_DIR / "generate_configs.py"),
+                "--exact-manifest",
+                str(prepared / "manifest.json"),
+                "--workload",
+                "k100",
+                "--phase",
+                "smoke",
+                "--output",
+                str(config_root),
+                "--index-marker",
+                str(root / "marker.index"),
+                "--k",
+                "100",
+            )
+            generated = json.loads((config_root / "manifest.json").read_text())
+            config = json.loads(Path(generated["configs"][0]["config"]).read_text())
+            self.assertEqual(generated["k"], 100)
+            self.assertEqual(config["search_basic_param"]["k"], 100)
+
     def test_preparation_cache_is_content_bound_and_force_replaces_it(
         self,
     ) -> None:

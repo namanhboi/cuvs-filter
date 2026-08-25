@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <cstdint>
 #include <fstream>
 #include <limits>
@@ -352,6 +353,57 @@ void bench_search(::benchmark::State& state,
   state.counters.insert({{"total_queries", queries_processed}});
 
   if (state.skipped()) { return; }
+
+  // Benchmark-private exact-GT materialization.  This deliberately runs after the timed search
+  // region and is restricted to a single full-query batch so the output row order is unambiguous.
+  // It is used by the RETRIEVE k=100 study because BIG-ann publishes only Recall@10 ground truth
+  // for YFCC-10M.  No library API or algorithm result path depends on this option.
+  if (sp_json.contains("benchmark_output_neighbors_file")) {
+    const auto output_file = sp_json.at("benchmark_output_neighbors_file").get<std::string>();
+    if (state.threads() != 1 || state.thread_index() != 0 || n_queries != query_set_size ||
+        queries_processed < query_set_size) {
+      state.SkipWithError(
+        "benchmark_output_neighbors_file requires one thread and one full-query batch");
+      return;
+    }
+    result_buf.transfer_data(MemoryType::kHost, current_algo_props->query_memory_type);
+    const auto* neighbors_host =
+      reinterpret_cast<const index_type*>(result_buf.data(MemoryType::kHost));
+    make_sure_parent_dir_exists(output_file);
+    const auto temporary = output_file + ".tmp." + std::to_string(::getpid());
+    {
+      std::ofstream output{temporary, std::ios::binary | std::ios::trunc};
+      if (!output) {
+        state.SkipWithError("failed to open benchmark neighbor output: " + temporary);
+        return;
+      }
+      const auto rows_u32 = static_cast<std::uint32_t>(query_set_size);
+      output.write(reinterpret_cast<const char*>(&rows_u32), sizeof(rows_u32));
+      output.write(reinterpret_cast<const char*>(&k), sizeof(k));
+      for (std::size_t position = 0; position < query_set_size * k; ++position) {
+        const auto candidate = neighbors_host[position];
+        const auto serialized =
+          candidate >= 0 &&
+              static_cast<std::uint64_t>(candidate) < dataset->base_set_size() &&
+              static_cast<std::uint64_t>(candidate) <=
+                std::numeric_limits<std::uint32_t>::max()
+            ? static_cast<std::uint32_t>(candidate)
+            : std::numeric_limits<std::uint32_t>::max();
+        output.write(reinterpret_cast<const char*>(&serialized), sizeof(serialized));
+      }
+      output.close();
+      if (!output) {
+        std::remove(temporary.c_str());
+        state.SkipWithError("failed to write benchmark neighbor output: " + temporary);
+        return;
+      }
+    }
+    if (std::rename(temporary.c_str(), output_file.c_str()) != 0) {
+      std::remove(temporary.c_str());
+      state.SkipWithError("failed to publish benchmark neighbor output: " + output_file);
+      return;
+    }
+  }
 
   // Each thread calculates recall on their partition of queries.
   // evaluate recall

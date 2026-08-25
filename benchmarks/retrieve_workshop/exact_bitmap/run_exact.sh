@@ -14,6 +14,7 @@ exact_data_root=${RETRIEVE_EXACT_DATA_ROOT:-"${data_root}/retrieve_workshop/exac
 result_root=${RETRIEVE_EXACT_RESULT_ROOT:-"${repo_dir}/benchmarks/retrieve_workshop/exact_bitmap/results"}
 bench_bin=${RETRIEVE_EXACT_BENCH_BIN:-"${repo_dir}/cpp/build/bench/ann/CUVS_BRUTE_FORCE_ANN_BENCH"}
 build_libcuvs=${RETRIEVE_EXACT_LIBCUVS:-"${repo_dir}/cpp/build/libcuvs.so"}
+result_k=${RETRIEVE_EXACT_K:-10}
 stage=${1:-all}
 
 prepare_one() {
@@ -28,11 +29,12 @@ prepare_one() {
   fi
   "${python_bin}" "${repo_dir}/benchmarks/retrieve_workshop/exact_bitmap/prepare_exact_workload.py" \
     --bitmap-manifest "${source_manifest}" --base-file "${base_file}" \
-    --source-dtype "${source_dtype}" --output "${output}" "${force_args[@]}" "$@"
+    --source-dtype "${source_dtype}" --output "${output}" --k "${result_k}" \
+    "${force_args[@]}" "$@"
 }
 
 prepare_data() {
-  local yfcc_float_base="${exact_data_root}/yfcc/base.10M.fbin"
+  local yfcc_float_base=${RETRIEVE_EXACT_YFCC_FLOAT_BASE:-"${exact_data_root}/yfcc/base.10M.fbin"}
   prepare_one "${bitmap_root}/yfcc/correctness_1000/manifest.json" \
     "${data_root}/yfcc-10M/base.10M.u8bin" uint8 \
     "${exact_data_root}/yfcc/correctness_1000" --converted-base "${yfcc_float_base}"
@@ -54,6 +56,7 @@ generate_one() {
   local exact_manifest=$3
   "${python_bin}" "${repo_dir}/benchmarks/retrieve_workshop/exact_bitmap/generate_configs.py" \
     --exact-manifest "${exact_manifest}" --workload "${workload}" --phase "${phase}" \
+    --k "${result_k}" \
     --index-marker "${exact_data_root}/markers/${workload}.index" \
     --output "${result_root}/configs/${phase}/${workload}"
 }
@@ -161,7 +164,7 @@ analyze_phases() {
     arguments+=(--phase "${phase}")
   done
   "${python_bin}" "${repo_dir}/benchmarks/retrieve_workshop/exact_bitmap/analyze_exact.py" \
-    --result-root "${result_root}" "${arguments[@]}"
+    --result-root "${result_root}" --k "${result_k}" "${arguments[@]}"
 }
 
 run_smoke() {

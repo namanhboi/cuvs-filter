@@ -134,6 +134,12 @@ def main() -> None:
                 continue
             config_manifest = json.loads(config_manifest_path.read_text())
             workload = str(config_manifest["workload"])
+            # Pre-Recall@100 k=10 manifests did not record this redundant field.  Missing means
+            # ten only; every non-default-width run must state k explicitly.
+            if int(config_manifest.get("k", 10)) != args.k:
+                raise ValueError(
+                    f"config manifest does not use k={args.k}: {config_manifest_path}"
+                )
             exact_manifest = json.loads(
                 Path(config_manifest["exact_manifest"]).read_text()
             )
@@ -604,6 +610,7 @@ def main() -> None:
     result = {
         "schema_version": 3,
         "method": "cuvs_brute_force_bitmap",
+        "k": args.k,
         "timing_contract": {
             "included": [
                 "bitmap count",
@@ -732,6 +739,8 @@ def main() -> None:
                 "native_l2_cutoff_validation"
             )
             is not True
+            or int(run_payload.get("fixed_contract", {}).get("k", 10))
+            != args.k
         ):
             raise ValueError(
                 "exact result root uses legacy output/recall semantics"

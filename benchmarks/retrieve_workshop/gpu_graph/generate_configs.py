@@ -16,7 +16,7 @@ from pathlib import Path
 from dataset_profile import load_profile, profile_record, workload_spec
 
 WORKLOADS = ("yfcc", "em", "emis", "r")
-K = 10
+DEFAULT_K = 10
 MAX_QUERIES = int(load_profile()["max_queries"])
 THROUGHPUT_REPETITIONS = 3
 CORRECTNESS_REPETITIONS = 1
@@ -99,6 +99,7 @@ def search_point(
     width: int,
     max_iterations: int,
     *,
+    k: int = DEFAULT_K,
     max_queries: int | None = None,
 ) -> dict:
     if method not in METHODS:
@@ -120,6 +121,11 @@ def search_point(
         # String-valued, benchmark-private provenance tag.  cuVS-bench emits it in the label.
         "bitmap_method": method,
     }
+    # The benchmark-private NaviX adapter obtains its bitmap-seed stride from the per-search
+    # parameter object rather than search_basic_param.  Preserve historical config output at the
+    # default width, but make non-default result widths explicit for every method.
+    if k != DEFAULT_K:
+        row["k"] = k
     if method == "navix_reference":
         row.update(
             {
@@ -150,6 +156,7 @@ def config_payload(
     shard: dict,
     paths: DatasetPaths,
     searches: list[dict],
+    k: int = DEFAULT_K,
 ) -> dict:
     shard_directory = Path(shard["directory"])
     query_count = int(shard["query_count"])
@@ -171,7 +178,7 @@ def config_payload(
                 "file": str(shard_directory / "filter.bitmap"),
             },
         },
-        "search_basic_param": {"batch_size": query_count, "k": K},
+        "search_basic_param": {"batch_size": query_count, "k": k},
         "index": [
             {
                 "name": (
@@ -202,6 +209,7 @@ def write_group(
     phase: str,
     searches: list[dict],
     yfcc_graph_degree: int,
+    k: int = DEFAULT_K,
 ) -> None:
     max_query_values = {int(row["max_queries"]) for row in searches}
     if len(max_query_values) != 1:
@@ -242,6 +250,7 @@ def write_group(
                     shard=shard,
                     paths=paths,
                     searches=searches,
+                    k=k,
                 ),
                 indent=2,
             )
@@ -273,7 +282,7 @@ def write_group(
         "group": group,
         "phase": phase,
         "workload": workload,
-        "k": K,
+        "k": k,
         "max_queries": max_queries,
         "graph_degree": paths.graph_degree,
         "intermediate_graph_degree": paths.intermediate_graph_degree,
@@ -323,6 +332,22 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--data-root", type=Path, required=True)
     parser.add_argument(
+        "--k",
+        type=int,
+        default=DEFAULT_K,
+        help="result width; SINGLE_CTA requires k <= L <= 512",
+    )
+    parser.add_argument(
+        "--primary-methods-only",
+        action="store_true",
+        help="generate Base, Retain, and NaviX without matched-seed controls",
+    )
+    parser.add_argument(
+        "--cartesian-b0",
+        action="store_true",
+        help="use every L/W pair from L={64,128,256,512}, W={1,2}",
+    )
+    parser.add_argument(
         "--yfcc-graph-degree",
         type=int,
         choices=(32, 64),
@@ -346,13 +371,28 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    if not 1 <= args.k <= 512:
+        parser.error("--k must be in [1,512] for the SINGLE_CTA study")
+    candidate_b0_cells = (
+        tuple((itopk, width) for itopk in (64, 128, 256, 512) for width in (1, 2))
+        if args.cartesian_b0
+        else B0_CELLS
+    )
+    b0_cells = tuple(cell for cell in candidate_b0_cells if cell[0] >= args.k)
+    deep_cells = tuple(cell for cell in DEEP_CELLS if cell[0] >= args.k)
+    if not b0_cells:
+        parser.error("no configured B0 cell has L >= k")
+    methods = PRIMARY_METHODS if args.primary_methods_only else METHODS
+
     b0_searches = [
-        search_point(method, itopk, width, 0)
-        for method in METHODS
-        for itopk, width in B0_CELLS
+        search_point(method, itopk, width, 0, k=args.k)
+        for method in methods
+        for itopk, width in b0_cells
     ]
+    correctness_itopk = min(itopk for itopk, _ in b0_cells)
     correctness_searches = [
-        search_point(method, 64, 1, 0) for method in METHODS
+        search_point(method, correctness_itopk, 1, 0, k=args.k)
+        for method in methods
     ]
     for workload in WORKLOADS:
         write_group(
@@ -363,6 +403,7 @@ def main() -> None:
             phase="correctness",
             searches=correctness_searches,
             yfcc_graph_degree=args.yfcc_graph_degree,
+            k=args.k,
         )
         write_group(
             args.output,
@@ -372,6 +413,7 @@ def main() -> None:
             phase="throughput",
             searches=b0_searches,
             yfcc_graph_degree=args.yfcc_graph_degree,
+            k=args.k,
         )
 
     deep_pairs = parse_deep_pairs(args)
@@ -380,7 +422,7 @@ def main() -> None:
             {
                 "schema_version": 1,
                 "target_recall": 0.90,
-                "cells": [list(cell) for cell in DEEP_CELLS],
+                "cells": [list(cell) for cell in deep_cells],
                 "iterations": list(DEEP_ITERATIONS),
                 "pairs": [
                     {"workload": workload, "method": method}
@@ -395,7 +437,7 @@ def main() -> None:
         for workload in WORKLOADS:
             selected_methods = [
                 method
-                for method in METHODS
+                for method in methods
                 if (workload, method) in deep_pairs
             ]
             if not selected_methods:
@@ -410,10 +452,11 @@ def main() -> None:
                     workload=workload,
                     phase="throughput",
                     searches=[
-                        search_point(method, itopk, width, iterations)
-                        for itopk, width in DEEP_CELLS
+                        search_point(method, itopk, width, iterations, k=args.k)
+                        for itopk, width in deep_cells
                     ],
                     yfcc_graph_degree=args.yfcc_graph_degree,
+                    k=args.k,
                 )
 
 

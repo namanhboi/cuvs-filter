@@ -16,7 +16,7 @@ from gpu_memory_preflight import estimate_gpu_memory, validate_estimate
 MATRIX_HEADER = struct.Struct("<II")
 BITMAP_HEADER = struct.Struct("<8sIIQQQ")
 BITMAP_MAGIC = b"CUVSBMAP"
-K = 10
+DEFAULT_K = 10
 CONVERSION_SCHEMA_VERSION = 1
 TIMING_CONTRACT = (
     "resident bitmap; timed search includes bitmap counting, query norms, optional "
@@ -335,6 +335,7 @@ def main() -> None:
         help="shared float32 base output; required for a uint8 workload",
     )
     parser.add_argument("--chunk-rows", type=int, default=65536)
+    parser.add_argument("--k", type=int, default=DEFAULT_K)
     parser.add_argument(
         "--force",
         action="store_true",
@@ -343,6 +344,8 @@ def main() -> None:
     args = parser.parse_args()
     if args.chunk_rows <= 0:
         parser.error("--chunk-rows must be positive")
+    if args.k <= 0:
+        parser.error("--k must be positive")
     if args.source_dtype == "uint8" and args.converted_base is None:
         parser.error("--converted-base is required for uint8 workloads")
 
@@ -361,7 +364,7 @@ def main() -> None:
         "schema_version": 1,
         "source_base": file_record(args.base_file),
         "source_bitmap_manifest": file_record(args.bitmap_manifest),
-        "ground_truth_k": K,
+        "ground_truth_k": args.k,
     }
     source_shards: list[dict[str, object]] = []
     query_total = 0
@@ -389,10 +392,11 @@ def main() -> None:
             or bitmap_rows != expected_rows
             or query_dim != dim
             or bitmap_cols != base_rows
-            or gt_width != K
+            or gt_width != args.k
         ):
             raise ValueError(
-                f"inconsistent source shard {shard_number}; ground truth must have exactly k={K}"
+                f"inconsistent source shard {shard_number}; "
+                f"ground truth must have exactly k={args.k}"
             )
         source_shards.append(
             {
@@ -483,7 +487,7 @@ def main() -> None:
             base_rows=base_rows,
             dim=dim,
             query_rows=expected_rows,
-            k=K,
+            k=args.k,
             bitmap_storage_bytes=source_bitmap.stat().st_size
             - BITMAP_HEADER.size,
             passing_count=passing_count,
@@ -521,6 +525,7 @@ def main() -> None:
         "base_rows": base_rows,
         "dim": dim,
         "query_rows": query_total,
+        "k": args.k,
         "gpu_memory_preflight_contract": (
             "each shard records a modeled peak plus max(2 GiB,20%) safety; the runner "
             "requires at least required_free_device_bytes before launching the benchmark"

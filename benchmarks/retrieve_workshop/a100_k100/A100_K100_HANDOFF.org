@@ -1,0 +1,143 @@
+#+TITLE: A100 Recall@100 Benchmark Handoff
+#+DATE: 2026-08-25
+
+* Purpose
+
+This directory contains the standalone preliminary Recall@100 experiment for the RETRIEVE study.
+It does not alter the frozen Recall@10 paper runner in =../a100_paper=.  The experiment compares:
+
+- CAGRA-Base (=default_cagra=)
+- CAGRA-Retain (=default_cagra_accumulator=)
+- CAGRA-NaviX (=navix_reference=)
+- masked cuVS Brute Force KNN, used as the exact-search control
+
+The workloads are YFCC-10M and ArXiv-large EM, EMIS, and R.  All graph-search points use the
+degree-64 CAGRA graphs, SINGLE_CTA, =max_queries=2048=, =k=100=, and B0
+(=max_iterations=0=).  The sweep is the Cartesian product
+=L in {128,256,512}= and =W in {1,2}=.  Correctness uses 1,000 queries and one repetition;
+reported throughput uses all 10,000 queries and three repetitions.
+
+* Important ground-truth detail
+
+The ArXiv-large =ground_truth_*.ivecs= files contain 100 IDs per query and are parsed as standard
+count-prefixed ivecs.  The BIG-ann YFCC file contains only ten IDs per query, so it cannot directly
+measure Recall@100.
+
+Before any reported run, =prepare-yfcc-gt= executes masked cuVS Brute Force KNN over the existing
+10,000-query bitmap workload and writes top-100 IDs.  This is untimed preprocessing and is never
+reported as search throughput.  The generator then enforces all of the following:
+
+- valid IDs form a distinct in-range prefix and all pass the query bitmap;
+- invalid slots form a =UINT32_MAX= suffix;
+- every published YFCC top-10 ID occurs in the generated top-100;
+- if fewer than 100 IDs are returned, their count equals the bitmap's exact legal cardinality.
+
+The common ANN benchmark accepts the benchmark-private string
+=benchmark_output_neighbors_file= solely for this generation step.  It dumps the already computed
+neighbor matrix after timing and requires one host thread plus one full-query batch.  It changes no
+cuVS public API and is unused by ordinary graph or exact benchmark configurations.
+
+* Prerequisites
+
+Use a full, non-MIG A100 80GB with no competing compute process.  The normal cuVS environment must
+provide CUDA, NumPy, SciPy, and Matplotlib.  The data root must already contain the artifacts made by
+the Recall@10 A100 preparation/build stages:
+
+#+begin_src text
+yfcc-10M/base.10M.u8bin
+yfcc-10M/GT.public.ibin
+yfcc-10M/cagra_g64_ig128.index
+arxiv-for-fanns-large/base.fbin
+arxiv-for-fanns-large/cagra_g64_ig128.index
+arxiv-for-fanns-large/ground_truth_{em,emis,r}.ivecs
+navix_bitmap/yfcc/{correctness_1000,throughput_10000}/manifest.json
+navix_bitmap/arxiv-large/{em,emis,r}/{correctness_1000,throughput_10000}/manifest.json
+#+end_src
+
+If these are missing, first use =../a100_paper/run.sh prepare= and
+=../a100_paper/run.sh build-graphs= with the large-dataset profile.  Keep at least 20 GiB free.  The
+largest new persistent artifact is YFCC's exact uint8-to-float base conversion (about 7.7 GiB); the
+script reuses the proven Recall@10 conversion when it already exists.
+
+* Complete run
+
+From a clean checkout of branch =retrieve-a100-k100=:
+
+#+begin_src bash
+cd /home/ubuntu/cuvs-filter
+micromamba activate cuvs
+
+export CUDA_VISIBLE_DEVICES=0
+export PYTHON="$(command -v python)"
+export RETRIEVE_DATA_ROOT=/data/retrieve_data
+export RETRIEVE_ARXIV_LARGE_RAW=/data/retrieve_data/arxiv-for-fanns-large
+export RETRIEVE_RUN_TAG=$(date -u +%Y%m%dT%H%M%SZ)
+export RETRIEVE_A100_K100_RUN_ROOT=/data/retrieve_workshop_runs/a100_k100_${RETRIEVE_RUN_TAG}
+
+benchmarks/retrieve_workshop/a100_k100/run.sh all
+#+end_src
+
+The orchestrator locks and fingerprints its run root.  Repeating the same command with the same
+=RETRIEVE_A100_K100_RUN_ROOT= resumes completed stages rather than mixing evidence.  Do not point a
+second experiment at an existing run root.
+
+* Individual stages
+
+#+begin_src bash
+benchmarks/retrieve_workshop/a100_k100/run.sh preflight
+benchmarks/retrieve_workshop/a100_k100/run.sh build
+benchmarks/retrieve_workshop/a100_k100/run.sh test
+benchmarks/retrieve_workshop/a100_k100/run.sh prepare-yfcc-gt
+benchmarks/retrieve_workshop/a100_k100/run.sh prepare-views
+benchmarks/retrieve_workshop/a100_k100/run.sh graph
+benchmarks/retrieve_workshop/a100_k100/run.sh exact
+benchmarks/retrieve_workshop/a100_k100/run.sh analyze
+#+end_src
+
+The =all= ordering is mandatory on a fresh machine.  In particular, =prepare-views= requires the
+completed YFCC top-100 manifest, and both search stages require those views.
+
+* Timing and aggregation contracts
+
+- Graph throughput includes CAGRA search and NaviX's timed bitmap-seed prepass, exactly as in the
+  Recall@10 study.  Predicate/bitmap construction and file upload are preparation, not search.
+- The exact control uses the existing resident-bitmap cuVS Brute Force KNN contract.  Its timed
+  region includes bitmap counting, query norms, sparse/dense masked distance evaluation, top-k,
+  sentinel normalization, and temporary device allocation/deallocation.
+- Each throughput workload covers 10,000 queries in shards of 2,048, 2,048, 2,048, 2,048, and
+  1,808 queries.  A repetition's aggregate QPS is =10000 / sum(the five shard search times)=; shard
+  QPS values are never averaged.
+- The YFCC top-100 generation pass is excluded from all QPS figures.  It creates evaluation labels,
+  just as downloading published ground truth does; it is not an online search stage.
+
+* Outputs
+
+The run root contains:
+
+#+begin_src text
+gpu_graph/analysis/summary_points.csv
+gpu_graph/analysis/pareto_points.csv
+exact_bitmap/analysis/exact_results.json
+provenance/yfcc_gt100_stage_timing.json
+analysis/combined_points.csv
+analysis/summary.json
+analysis/plots/{yfcc,em,emis,r}_qps_recall_k100.{png,pdf}
+analysis/plots/gpu_qps_recall_k100.{png,pdf}
+#+end_src
+
+The combined CSV must contain 72 graph points (four workloads x three methods x three L values x
+two W values) and four exact points.  The analyzer rejects missing repetitions, mixed =k= or
+=max_queries= contracts, predicate violations, malformed sentinels, duplicate outputs on the new
+paths, or an incorrect exact control.
+
+* Recovery
+
+- If a benchmark process is interrupted, retain completed JSON files and rerun the same stage.  The
+  graph/exact runners validate completed files before reuse and otherwise refuse an ambiguous
+  overwrite.
+- A malformed YFCC generated-GT shard is never overwritten automatically.  Remove only the named
+  shard and its corresponding run-root JSON, then rerun =prepare-yfcc-gt=.
+- If source bitmaps, vectors, or official ground truth change, use a new data/output root.  Input
+  fingerprints intentionally prevent silently reusing top-100 labels from different data.
+- Run =run.sh analyze= at any time after both graph and exact stages complete to regenerate plots
+  without rerunning search.

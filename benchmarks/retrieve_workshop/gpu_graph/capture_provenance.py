@@ -55,6 +55,9 @@ def main() -> None:
     )
     if expected_max_queries <= 0:
         raise ValueError("provenance max_queries must be positive")
+    expected_k = int(os.environ.get("RETRIEVE_PROVENANCE_K", "10"))
+    if not 1 <= expected_k <= 512:
+        raise ValueError("provenance k must be in [1,512]")
 
     destination = args.result_root / "provenance" / "run.json"
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -90,6 +93,8 @@ def main() -> None:
             raise ValueError("host/GPU identity changed within one result root")
         if int(payload["fixed_contract"]["max_queries"]) != expected_max_queries:
             raise ValueError("max_queries changed within one result root")
+        if int(payload["fixed_contract"].get("k", -1)) != expected_k:
+            raise ValueError("result width k changed within one result root")
     else:
         payload = {
             "schema_version": 2,
@@ -112,7 +117,7 @@ def main() -> None:
             "data_root": str(args.data_root.resolve()),
             "fixed_contract": {
                 "gpu_algo": "SINGLE_CTA",
-                "k": 10,
+                "k": expected_k,
                 "max_queries": expected_max_queries,
                 "reported_throughput_repetitions": int(
                     os.environ.get("RETRIEVE_PROVENANCE_REPETITIONS", "3")

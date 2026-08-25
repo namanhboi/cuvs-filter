@@ -129,6 +129,7 @@ def main() -> None:
         "base_rows": rows,
         "dim": dim,
         "query_rows": queries,
+        "k": k,
         "shards": [
             {
                 "shard_number": 0,
