@@ -254,6 +254,27 @@ class K100PipelineTest(unittest.TestCase):
             finalize(Namespace(output=root))
             self.assertEqual(manifest_path.stat().st_mtime_ns, first_mtime)
 
+            from prepare_k100_views import (
+                read_generated_yfcc_gt,
+                validate_gt_membership,
+            )
+
+            loader_safe = read_generated_yfcc_gt(manifest_path)
+            self.assertEqual(len(set(map(int, loader_safe[1]))), 100)
+            np.testing.assert_array_equal(
+                loader_safe[1, 60:64],
+                np.asarray(
+                    [
+                        np.iinfo(np.uint32).max,
+                        np.iinfo(np.uint32).max - 1,
+                        np.iinfo(np.uint32).max - 2,
+                        np.iinfo(np.uint32).max - 3,
+                    ],
+                    dtype="<u4",
+                ),
+            )
+            validate_gt_membership(bitmap, loader_safe, 0)
+
     def test_combined_analyzer_writes_four_workload_plots(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -354,6 +375,80 @@ class K100PipelineTest(unittest.TestCase):
                         root / f"analysis/plots/{workload}_qps_recall_k100.pdf"
                     ).is_file()
                 )
+
+    def test_view_builder_replaces_legacy_repeated_padding_view(self) -> None:
+        from prepare_k100_views import (
+            VIEW_KIND,
+            VIEW_SCHEMA_VERSION,
+            create_view,
+            make_loader_safe_padding,
+        )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            cols = 130
+            source_directory = root / "source/shard_00"
+            source_directory.mkdir(parents=True)
+            (source_directory / "query.bin").write_bytes(b"fixture")
+            bitmap = source_directory / "filter.bitmap"
+            write_bitmap(
+                bitmap,
+                [np.arange(120), np.arange(10, 70)],
+                cols,
+            )
+            source_manifest = root / "source/manifest.json"
+            source_manifest.write_text(
+                json.dumps(
+                    {
+                        "query_rows": 2,
+                        "shards": [
+                            {
+                                "first_query": 0,
+                                "query_count": 2,
+                                "directory": str(source_directory),
+                                "bitmap": str(bitmap),
+                            }
+                        ],
+                    }
+                )
+                + "\n"
+            )
+            canonical = np.full((2, 100), np.iinfo(np.uint32).max, dtype="<u4")
+            canonical[0] = np.arange(100, dtype="<u4")
+            canonical[1, :60] = np.arange(10, 70, dtype="<u4")
+            loader_safe = make_loader_safe_padding(canonical, cols)
+
+            target = root / "view"
+            target.mkdir()
+            (target / "legacy-marker").write_text("stale\n")
+            (target / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 2,
+                        "k": 100,
+                        "view_kind": "symlinked_bitmap_query_with_k100_groundtruth",
+                    }
+                )
+                + "\n"
+            )
+            create_view(
+                source_manifest=source_manifest,
+                target=target,
+                ground_truth=loader_safe,
+                ground_truth_source={"fixture": True},
+            )
+            manifest = json.loads((target / "manifest.json").read_text())
+            self.assertEqual(manifest["schema_version"], VIEW_SCHEMA_VERSION)
+            self.assertEqual(manifest["view_kind"], VIEW_KIND)
+            self.assertFalse((target / "legacy-marker").exists())
+            output_gt = np.memmap(
+                target / "shard_00_00000_00002/groundtruth.ibin",
+                dtype="<u4",
+                mode="r",
+                offset=MATRIX_HEADER.size,
+                shape=(2, 100),
+            )
+            self.assertEqual(len(set(map(int, output_gt[1]))), 100)
 
 
 if __name__ == "__main__":

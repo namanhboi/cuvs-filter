@@ -201,11 +201,11 @@ PY
 }
 
 prepare_views() {
-  is_done views && return
+  is_done views_unique_padding_v1 && return
   "${python_bin}" "${script_dir}/prepare_k100_views.py" \
     --data-root "${data_root}" --arxiv-raw "${raw_arxiv}" \
     --yfcc-gt-manifest "${yfcc_gt_root}/manifest.json"
-  mark_done views
+  mark_done views_unique_padding_v1
 }
 
 run_graph() {

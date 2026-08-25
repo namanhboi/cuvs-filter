@@ -20,6 +20,9 @@ BITMAP_HEADER = struct.Struct("<8sIIQQQ")
 BITMAP_MAGIC = b"CUVSBMAP"
 INVALID_U32 = int(np.iinfo(np.uint32).max)
 INVALID_PADDING_START = INVALID_U32 - 999
+VIEW_SCHEMA_VERSION = 3
+VIEW_KIND = "symlinked_bitmap_query_with_k100_groundtruth_unique_padding_v1"
+LEGACY_VIEW_KIND = "symlinked_bitmap_query_with_k100_groundtruth"
 
 
 def matrix_info(path: Path, dtype: np.dtype) -> tuple[int, int]:
@@ -122,7 +125,10 @@ def validate_gt_membership(
         valid_count = (
             int(invalid_positions[0]) if invalid_positions.size else ids.size
         )
-        if np.any(ids[valid_count:] != INVALID_U32):
+        expected_padding = np.uint32(INVALID_U32) - np.arange(
+            ids.size - valid_count, dtype=np.uint32
+        )
+        if not np.array_equal(ids[valid_count:], expected_padding):
             raise ValueError(
                 f"invalid GT sentinel ordering: query={first_query + local}"
             )
@@ -141,6 +147,26 @@ def validate_gt_membership(
             raise ValueError(
                 f"GT predicate violation: query={first_query + local}, node={bad}"
             )
+
+
+def make_loader_safe_padding(values: np.ndarray, base_rows: int) -> np.ndarray:
+    """Replace a canonical repeated-invalid suffix with distinct invalid GT-map keys."""
+    result = np.ascontiguousarray(values, dtype="<u4").copy()
+    for query, ids in enumerate(result):
+        invalid_positions = np.flatnonzero(ids >= base_rows)
+        valid_count = (
+            int(invalid_positions[0]) if invalid_positions.size else ids.size
+        )
+        if np.any(ids[:valid_count] >= base_rows) or np.any(
+            ids[valid_count:] != INVALID_U32
+        ):
+            raise ValueError(
+                f"generated YFCC GT has a malformed invalid suffix: query={query}"
+            )
+        ids[valid_count:] = np.uint32(INVALID_U32) - np.arange(
+            ids.size - valid_count, dtype=np.uint32
+        )
+    return result
 
 
 def read_generated_yfcc_gt(path: Path) -> np.ndarray:
@@ -172,7 +198,7 @@ def read_generated_yfcc_gt(path: Path) -> np.ndarray:
         cursor += count
     if cursor != result.shape[0]:
         raise ValueError("YFCC k=100 GT does not cover all queries")
-    return result
+    return make_loader_safe_padding(result, int(manifest["base_rows"]))
 
 
 def symlink(source: Path, target: Path) -> None:
@@ -202,7 +228,9 @@ def valid_cached_view(
     try:
         manifest = json.loads(manifest_path.read_text())
         if (
-            int(manifest.get("k", -1)) != K
+            int(manifest.get("schema_version", -1)) != VIEW_SCHEMA_VERSION
+            or int(manifest.get("k", -1)) != K
+            or manifest.get("view_kind") != VIEW_KIND
             or Path(manifest.get("source_bitmap_manifest", "")).resolve()
             != source_manifest.resolve()
             or manifest.get("ground_truth_source") != ground_truth_source
@@ -243,9 +271,22 @@ def create_view(
         print(f"reuse {target / 'manifest.json'}")
         return
     if target.exists():
-        raise FileExistsError(
-            f"stale k=100 view; remove before retrying: {target}"
-        )
+        manifest_path = target / "manifest.json"
+        try:
+            stale = json.loads(manifest_path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise FileExistsError(
+                f"unrecognized stale k=100 view; refusing to replace: {target}"
+            ) from error
+        if int(stale.get("k", -1)) != K or stale.get("view_kind") not in {
+            LEGACY_VIEW_KIND,
+            VIEW_KIND,
+        }:
+            raise FileExistsError(
+                f"unrecognized stale k=100 view; refusing to replace: {target}"
+            )
+        print(f"replace incompatible generated k=100 view {target}")
+        shutil.rmtree(target)
     source = json.loads(source_manifest.read_text())
     temporary = target.with_name(f".{target.name}.partial.{os.getpid()}")
     if temporary.exists():
@@ -254,9 +295,9 @@ def create_view(
     output = dict(source)
     output.update(
         {
-            "schema_version": 2,
+            "schema_version": VIEW_SCHEMA_VERSION,
             "k": K,
-            "view_kind": "symlinked_bitmap_query_with_k100_groundtruth",
+            "view_kind": VIEW_KIND,
             "source_bitmap_manifest": str(source_manifest.resolve()),
             "ground_truth_source": ground_truth_source,
             "shards": [],

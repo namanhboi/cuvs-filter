@@ -32,6 +32,12 @@ reported as search throughput.  The generator then enforces all of the following
 - every published YFCC top-10 ID occurs in the generated top-100;
 - if fewer than 100 IDs are returned, their count equals the bitmap's exact legal cardinality.
 
+The exact-search dump uses its canonical repeated =UINT32_MAX= suffix.  When constructing the
+benchmark workload view, the preparer rewrites that suffix as distinct invalid values
+=(UINT32_MAX, UINT32_MAX-1, ...)=.  This is required because cuVS-bench first stores each GT row in
+a key map that rejects duplicate keys.  =ValidGTRecall= excludes every such out-of-range value, so
+this loader-only representation does not change the evaluated neighbor set or recall denominator.
+
 The common ANN benchmark accepts the benchmark-private string
 =benchmark_output_neighbors_file= solely for this generation step.  It dumps the already computed
 neighbor matrix after timing and requires one host thread plus one full-query batch.  It changes no
