@@ -1,0 +1,64 @@
+#+title: A100 k=10 NaviX W*D Seed-Ablation Handoff
+
+* Purpose
+
+This experiment keeps output =k=10= and compares the existing FAISS-matched policy of up to
+10 passing bitmap seeds with a CAGRA-native policy of up to =W*D= seeds.  On the degree-64 YFCC
+graph this is 64 seeds at =W=1= and 128 at =W=2=.  The timed GPU seed prepass remains inside the
+reported search time.  The experiment targets recall in =[0.800,0.802]= and uses explicit deep
+iterations through 7,569 only when B0 cannot reach the target.
+
+The workflow does not change the public cuVS API, NaviX traversal, the paper, or the default seed
+policy.  It emits evidence for a later manual decision.
+
+* Inputs
+
+- A full, non-MIG A100 80GB with no competing GPU workload.
+- The completed k=10, =max_queries=2048= result root.
+- Existing YFCC k=10 bitmap views, CAGRA degree-64 index, and dataset under
+  =/data/retrieve_data=.
+- The cuVS environment used for the paper runs.
+
+* Run
+
+#+begin_src bash
+cd /home/ubuntu/cuvs-filter
+git switch retrieve-a100-k10-wd-seeds
+git pull --ff-only origin retrieve-a100-k10-wd-seeds
+
+micromamba activate cuvs
+export CUDA_VISIBLE_DEVICES=0
+export PYTHON="$(command -v python)"
+export MPLBACKEND=Agg
+export RETRIEVE_DATA_ROOT=/data/retrieve_data
+export RETRIEVE_A100_K10_RUN_ROOT=/data/retrieve_workshop_runs/a100_maxq2048_20260824T065013Z
+export RETRIEVE_A100_K10_WD_SEED_RUN_ROOT=/data/retrieve_workshop_runs/a100_k10_wd_seed_$(date -u +%Y%m%dT%H%M%SZ)
+
+benchmarks/retrieve_workshop/a100_k10_wd_seed_ablation/run.sh all
+#+end_src
+
+If the reference selected/provenance files are stored elsewhere, set
+=RETRIEVE_K10_REFERENCE_SELECTED= and =RETRIEVE_K10_REFERENCE_PROVENANCE= explicitly.
+
+The runner is restart-safe at complete group boundaries.  It refuses a partially written group;
+remove only the named partial =raw/<group>/yfcc= directory before retrying.
+
+* Results
+
+The final directory contains:
+
+- =analysis/target_comparison.csv=: independently tuned target-recall QPS.
+- =analysis/paired_controls.csv=: both seed policies at the incumbent and winning configurations.
+- =analysis/diagnostics.csv=: actual seed counts, bitmap words inspected, and traversal work.
+- =analysis/results.json=: machine-readable conclusion without automatic promotion.
+- =paper_gpu_bundle_k10_wd_seed_ablation/=: configs, raw measurements, diagnostics, provenance,
+  plots, and tables.
+
+Compress the bundle with:
+
+#+begin_src bash
+tar -C "$RETRIEVE_A100_K10_WD_SEED_RUN_ROOT" \
+  -czf "$HOME/a100_k10_wd_seed_ablation.tar.gz" \
+  paper_gpu_bundle_k10_wd_seed_ablation
+sha256sum "$HOME/a100_k10_wd_seed_ablation.tar.gz"
+#+end_src

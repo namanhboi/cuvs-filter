@@ -352,8 +352,15 @@ CUVS_EXPORT void benchmark_search_navix_bitmap_seeded<data_t>(
   auto const& bitmap = validate_navix_bitmap<bitmap_t>(index, queries, sample_filter, query_offset);
   const auto num_queries = static_cast<std::uint32_t>(queries.extent(0));
   RAFT_EXPECTS(seed_stride > 0, "NaviX bitmap seed stride must be positive");
-  RAFT_EXPECTS(seed_stride <= static_cast<std::uint32_t>(neighbors.extent(1)),
-               "NaviX bitmap seed stride cannot exceed the result width");
+  constexpr std::size_t warp_size = 32;
+  const auto configured_itopk =
+    std::max<std::size_t>(params.itopk_size, static_cast<std::size_t>(neighbors.extent(1)));
+  const auto aligned_itopk = ((configured_itopk + warp_size - 1) / warp_size) * warp_size;
+  const auto seed_capacity = aligned_itopk + params.search_width * index.graph().extent(1);
+  RAFT_EXPECTS(seed_stride <= seed_capacity,
+               "NaviX bitmap seed stride %u exceeds SINGLE_CTA initialization capacity %zu",
+               seed_stride,
+               seed_capacity);
   const auto source_indices = index.source_indices();
   select_navix_bitmap_seeds(res,
                             bitmap,

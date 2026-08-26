@@ -770,6 +770,121 @@ TEST_P(CagraBitmapFilterTest, BitmapSeededNavixSupportsSeedCapBelowResultWidth)
   }
 }
 
+TEST_P(CagraBitmapFilterTest, BitmapSeededNavixSupportsSeedCapAboveResultWidth)
+{
+  constexpr std::uint32_t seed_cap = 64;
+  auto predicate                   = [](std::int64_t query_id, std::int64_t source_id) {
+    if (query_id == 0) { return false; }
+    return (source_id + 3 * query_id) % 4 == 0;
+  };
+  device_bitmap bitmap(res, kQueries, kRows, predicate);
+  auto filter                  = bitmap.filter();
+  auto search_params           = params();
+  search_params.algo           = cagra::search_algo::SINGLE_CTA;
+  search_params.search_width   = 2;
+  search_params.filtering_rate = 0.0f;
+  auto stream                  = raft::resource::get_cuda_stream(res);
+
+  auto run = [&]() {
+    auto neighbors = raft::make_device_matrix<std::int64_t, std::int64_t>(res, kQueries, k);
+    auto distances = raft::make_device_matrix<float, std::int64_t>(res, kQueries, k);
+    rmm::device_uvector<std::uint32_t> seeds(kQueries * seed_cap, stream);
+    rmm::device_uvector<std::uint32_t> counts(kQueries, stream);
+    rmm::device_uvector<std::uint32_t> inspected(kQueries, stream);
+    detail::benchmark_search_navix_bitmap_seeded<float>(res,
+                                                        search_params,
+                                                        *index,
+                                                        raft::make_const_mdspan(queries->view()),
+                                                        neighbors.view(),
+                                                        distances.view(),
+                                                        filter,
+                                                        0,
+                                                        seeds.data(),
+                                                        counts.data(),
+                                                        inspected.data(),
+                                                        seed_cap,
+                                                        0);
+
+    bitmap_search_result<std::int64_t> result{std::vector<std::int64_t>(neighbors.size()),
+                                              std::vector<float>(distances.size())};
+    std::vector<std::uint32_t> host_seeds(seeds.size());
+    std::vector<std::uint32_t> host_counts(counts.size());
+    raft::copy(result.neighbors.data(), neighbors.data_handle(), neighbors.size(), stream);
+    raft::copy(result.distances.data(), distances.data_handle(), distances.size(), stream);
+    raft::copy(host_seeds.data(), seeds.data(), seeds.size(), stream);
+    raft::copy(host_counts.data(), counts.data(), counts.size(), stream);
+    raft::resource::sync_stream(res);
+
+    EXPECT_EQ(host_counts.front(), 0u);
+    for (std::int64_t query_id = 1; query_id < kQueries; ++query_id) {
+      EXPECT_EQ(host_counts[static_cast<std::size_t>(query_id)], seed_cap);
+      for (std::uint32_t rank = 0; rank < seed_cap; ++rank) {
+        EXPECT_TRUE(
+          predicate(query_id, host_seeds[static_cast<std::size_t>(query_id) * seed_cap + rank]));
+      }
+    }
+    for (std::int64_t query_id = 0; query_id < kQueries; ++query_id) {
+      bool saw_sentinel       = false;
+      float previous_distance = -std::numeric_limits<float>::infinity();
+      std::vector<std::int64_t> unique;
+      for (std::int64_t rank = 0; rank < k; ++rank) {
+        const auto pos  = static_cast<std::size_t>(query_id * k + rank);
+        const auto node = result.neighbors[pos];
+        if (node == std::numeric_limits<std::int64_t>::max()) {
+          saw_sentinel = true;
+          EXPECT_EQ(result.distances[pos], std::numeric_limits<float>::max());
+          continue;
+        }
+        EXPECT_FALSE(saw_sentinel);
+        EXPECT_TRUE(predicate(query_id, node));
+        EXPECT_GE(result.distances[pos], previous_distance);
+        EXPECT_EQ(std::find(unique.begin(), unique.end(), node), unique.end());
+        unique.push_back(node);
+        previous_distance = result.distances[pos];
+      }
+    }
+    return result;
+  };
+
+  expect_same(run(), run());
+
+  // L=64, W=2, and D=32 provide 64 + 2*32 initialized candidate slots.
+  constexpr std::uint32_t excessive_seed_cap = 129;
+  auto neighbors = raft::make_device_matrix<std::int64_t, std::int64_t>(res, kQueries, k);
+  auto distances = raft::make_device_matrix<float, std::int64_t>(res, kQueries, k);
+  rmm::device_uvector<std::uint32_t> seeds(kQueries * excessive_seed_cap, stream);
+  rmm::device_uvector<std::uint32_t> counts(kQueries, stream);
+  rmm::device_uvector<std::uint32_t> inspected(kQueries, stream);
+  EXPECT_ANY_THROW(
+    detail::benchmark_search_navix_bitmap_seeded<float>(res,
+                                                        search_params,
+                                                        *index,
+                                                        raft::make_const_mdspan(queries->view()),
+                                                        neighbors.view(),
+                                                        distances.view(),
+                                                        filter,
+                                                        0,
+                                                        seeds.data(),
+                                                        counts.data(),
+                                                        inspected.data(),
+                                                        excessive_seed_cap,
+                                                        0));
+  EXPECT_ANY_THROW(
+    detail::benchmark_search_navix_bitmap_seeded<float>(res,
+                                                        search_params,
+                                                        *index,
+                                                        raft::make_const_mdspan(queries->view()),
+                                                        neighbors.view(),
+                                                        distances.view(),
+                                                        filter,
+                                                        0,
+                                                        seeds.data(),
+                                                        counts.data(),
+                                                        inspected.data(),
+                                                        0,
+                                                        0));
+}
+
 TEST_P(CagraBitmapFilterTest,
        BitmapSeededDefaultIsDeterministicForOffsetEmptyUnderfilledAndDuplicatePaths)
 {

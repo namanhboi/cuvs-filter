@@ -143,7 +143,7 @@ class cuvs_cagra : public algo<T>, public algo_gpu {
     bool require_identity_source_indices = false;
     /** Expected result width, used to allocate seed scratch before benchmark timing begins. */
     std::uint32_t navix_seed_k = 10;
-    /** Benchmark-only cap on NaviX bitmap seeds. Defaults to the result width. */
+    /** Benchmark-only cap on NaviX bitmap seeds. Independent of and defaults to result width. */
     std::uint32_t navix_seed_cap = 10;
     float refine_ratio;
     AllocatorType graph_mem   = AllocatorType::kDevice;
@@ -554,8 +554,21 @@ void cuvs_cagra<T, IdxT>::set_search_param(const search_param_base& param,
     RAFT_EXPECTS(navix_seed_k_ > 0, "bitmap seed control requires a positive result width");
     RAFT_EXPECTS(!navix_bitmap_seeds_ || navix_seed_cap_ > 0,
                  "NaviX bitmap seed cap must be positive");
-    RAFT_EXPECTS(!navix_bitmap_seeds_ || navix_seed_cap_ <= navix_seed_k_,
-                 "NaviX bitmap seed cap cannot exceed the benchmark result width");
+    if (navix_bitmap_seeds_) {
+      // SINGLE_CTA rounds L to a warp before appending its W*D candidate tail.  Bitmap seeds are
+      // initial candidates, not output slots, so their cap may exceed k but must fit that exact
+      // initialized result buffer.  Keeping this check in the benchmark adapter leaves the public
+      // cuVS API unchanged and preserves the k=100/cap=100 control at L=100,W=1.
+      constexpr std::size_t warp_size = 32;
+      const auto configured_itopk = std::max<std::size_t>(search_params_.itopk_size, navix_seed_k_);
+      const auto aligned_itopk    = ((configured_itopk + warp_size - 1) / warp_size) * warp_size;
+      const auto seed_capacity =
+        aligned_itopk + search_params_.search_width * index_->graph().extent(1);
+      RAFT_EXPECTS(navix_seed_cap_ <= seed_capacity,
+                   "NaviX bitmap seed cap %u exceeds SINGLE_CTA initialization capacity %zu",
+                   navix_seed_cap_,
+                   seed_capacity);
+    }
     auto stream            = raft::resource::get_cuda_stream(handle_);
     const auto query_rows  = static_cast<std::size_t>(bitmap_filter_adapter_->query_rows());
     const auto seed_stride = navix_bitmap_seeds_ ? navix_seed_cap_ : navix_seed_k_;
@@ -901,8 +914,6 @@ void cuvs_cagra<T, IdxT>::search_base(
         if (navix_bitmap_seeds_) {
           RAFT_EXPECTS(static_cast<std::uint32_t>(k) == navix_seed_k_,
                        "navix_seed_k must equal the benchmark result width");
-          RAFT_EXPECTS(navix_seed_cap_ <= static_cast<std::uint32_t>(k),
-                       "NaviX seed cap cannot exceed the benchmark result width");
           cuvs::neighbors::cagra::detail::benchmark_search_navix_bitmap_seeded<T>(
             handle_,
             search_params_,
