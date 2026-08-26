@@ -162,7 +162,9 @@ class WDSeedAblationPipelineTest(unittest.TestCase):
         group: str, cap: int, itopk: int, width: int, iterations: int
     ) -> float:
         if group == "paired_incumbent":
-            return 0.80005 if cap == 10 else 0.8200
+            # One top-k match out of 10K queries differs from the frozen
+            # reference, exercising the replay tolerance used on A100.
+            return 0.80006 if cap == 10 else 0.8200
         if group == "correctness":
             return 0.75
         if cap == 10:

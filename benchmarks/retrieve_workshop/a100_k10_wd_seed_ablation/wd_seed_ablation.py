@@ -33,6 +33,7 @@ WIDTHS = (1, 2)
 ANCHORS = (10, 32, 64, 128, 256, 512)
 MAX_L = 512
 MAX_DEEP_ITERATIONS = 7569
+REFERENCE_RECALL_REPLAY_TOLERANCE = 1.0 / (10_000 * K)
 REFERENCE_POINT = (129, 2, 0)
 EXPERIMENT = "retrieve_workshop_navix_k10_wd_seed_ablation"
 POLICY_K = "k_seed"
@@ -1051,7 +1052,10 @@ def analyze(root: Path, require_diagnostics: bool) -> None:
     qps_ratio = float(incumbent[POLICY_K]["qps_median"]) / float(
         reference["qps"]
     )
-    if abs(recall_delta) > 1e-9:
+    # Recall@10 over 10K queries has 100K result slots.  Permit a one-slot
+    # replay difference across rebuilt benchmark binaries while retaining a
+    # much tighter guard than the 0.002 target-recall window.
+    if abs(recall_delta) > REFERENCE_RECALL_REPLAY_TOLERANCE + 1e-12:
         raise ValueError(f"10-seed reference recall drifted by {recall_delta}")
     if not 0.85 <= qps_ratio <= 1.15:
         raise ValueError(
@@ -1187,6 +1191,7 @@ def analyze(root: Path, require_diagnostics: bool) -> None:
         "paired_controls": paired,
         "reference_replay": {
             "recall_delta": recall_delta,
+            "recall_tolerance": REFERENCE_RECALL_REPLAY_TOLERANCE,
             "qps_ratio": qps_ratio,
         },
         "diagnostics": diagnostics,
