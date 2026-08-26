@@ -5,10 +5,31 @@ script_dir=$(cd "$(dirname "$0")"; pwd)
 repo_dir=$(cd "${script_dir}/../../.."; pwd)
 python_bin=${PYTHON:-/home/ubuntu/micromamba/envs/cuvs/bin/python}
 data_root=${RETRIEVE_DATA_ROOT:-/data/retrieve_data}
-profile=${RETRIEVE_DATASET_PROFILE:-"${repo_dir}/benchmarks/retrieve_workshop/a100_paper/profiles/a100_yfcc10m_arxiv_large.json"}
-result_root=${RETRIEVE_LATENCY_RESULT_ROOT:-"${repo_dir}/benchmarks/retrieve_workshop/per_query_latency/results"}
-selected_points=${RETRIEVE_LATENCY_SELECTED_POINTS:-"${RETRIEVE_A100_RUN_ROOT:-}/matched_recall/analysis/selected_points.csv"}
-exact_data_root=${RETRIEVE_LATENCY_EXACT_DATA_ROOT:-"${data_root}/retrieve_workshop/exact_bitmap_a100"}
+latency_k=${RETRIEVE_LATENCY_K:-10}
+case "${latency_k}" in
+  10)
+    default_profile="${repo_dir}/benchmarks/retrieve_workshop/a100_paper/profiles/a100_yfcc10m_arxiv_large.json"
+    default_exact_root="${data_root}/retrieve_workshop/exact_bitmap_a100"
+    default_source_run_root=${RETRIEVE_A100_RUN_ROOT:-}
+    ;;
+  100)
+    default_profile="${repo_dir}/benchmarks/retrieve_workshop/a100_k100/profiles/a100_yfcc10m_arxiv_large_k100.json"
+    default_exact_root="${data_root}/retrieve_workshop/exact_bitmap_a100_k100"
+    default_source_run_root=${RETRIEVE_A100_K100_RUN_ROOT:-}
+    ;;
+  *)
+    echo "RETRIEVE_LATENCY_K must be 10 or 100, found ${latency_k}" >&2
+    exit 2
+    ;;
+esac
+profile=${RETRIEVE_DATASET_PROFILE:-"${default_profile}"}
+result_root=${RETRIEVE_LATENCY_RESULT_ROOT:-"${repo_dir}/benchmarks/retrieve_workshop/per_query_latency/results_k${latency_k}"}
+selected_points=${RETRIEVE_LATENCY_SELECTED_POINTS:-"${default_source_run_root}/matched_recall/analysis/selected_points.csv"}
+selected_provenance=${RETRIEVE_LATENCY_SELECTED_PROVENANCE:-}
+if test -z "${selected_provenance}"; then
+  selected_provenance="$(dirname "${selected_points}")/provenance.json"
+fi
+exact_data_root=${RETRIEVE_LATENCY_EXACT_DATA_ROOT:-"${default_exact_root}"}
 graph_bin=${RETRIEVE_BENCH_BIN:-"${repo_dir}/cpp/build/bench/ann/CUVS_CAGRA_ANN_BENCH"}
 exact_bin=${RETRIEVE_EXACT_BENCH_BIN:-"${repo_dir}/cpp/build/bench/ann/CUVS_BRUTE_FORCE_ANN_BENCH"}
 libcuvs=${RETRIEVE_LIBCUVS:-"${repo_dir}/cpp/build/libcuvs.so"}
@@ -17,6 +38,11 @@ stage=${1:-all}
 if test -z "${selected_points}" || ! test -f "${selected_points}"; then
   echo "missing selected points: ${selected_points}" >&2
   echo "set RETRIEVE_LATENCY_SELECTED_POINTS to the A100 matched-recall selected_points.csv" >&2
+  exit 2
+fi
+if ! test -f "${selected_provenance}"; then
+  echo "missing selected-point provenance: ${selected_provenance}" >&2
+  echo "set RETRIEVE_LATENCY_SELECTED_PROVENANCE to matched_recall/analysis/provenance.json" >&2
   exit 2
 fi
 for path in "${profile}" "${graph_bin}" "${exact_bin}" "${libcuvs}"; do
@@ -41,8 +67,15 @@ done_marker() { printf '%s/.done/%s\n' "${result_root}" "$1"; }
 is_done() { test -f "$(done_marker "$1")"; }
 mark_done() { date -u +%Y-%m-%dT%H:%M:%SZ >"$(done_marker "$1")"; }
 
+validate_contract() {
+  "${python_bin}" "${script_dir}/latency.py" validate-contract \
+    --root "${result_root}" --selected-points "${selected_points}" \
+    --selected-provenance "${selected_provenance}" --k "${latency_k}"
+}
+
 generate_configs() {
   if is_done configs; then
+    validate_contract
     return
   fi
   if test -e "${result_root}/manifest.json"; then
@@ -52,19 +85,29 @@ generate_configs() {
   "${python_bin}" "${script_dir}/latency.py" generate \
     --root "${result_root}" --data-root "${data_root}" \
     --exact-data-root "${exact_data_root}" --selected-points "${selected_points}" \
-    --profile "${profile}"
+    --selected-provenance "${selected_provenance}" \
+    --profile "${profile}" --k "${latency_k}"
   mark_done configs
+  validate_contract
 }
 
 capture_provenance() {
   if is_done provenance; then
+    test -f "${result_root}/provenance/run.json" || {
+      echo "latency provenance marker exists without provenance/run.json" >&2
+      exit 2
+    }
+    validate_contract
     return
   fi
   "${python_bin}" "${script_dir}/latency.py" provenance \
     --root "${result_root}" --repo "${repo_dir}" \
     --selected-points "${selected_points}" --profile "${profile}" \
-    --graph-binary "${graph_bin}" --exact-binary "${exact_bin}" --libcuvs "${libcuvs}"
+    --selected-provenance "${selected_provenance}" \
+    --graph-binary "${graph_bin}" --exact-binary "${exact_bin}" --libcuvs "${libcuvs}" \
+    --k "${latency_k}"
   mark_done provenance
+  validate_contract
 }
 
 latency_cpu=${RETRIEVE_LATENCY_CPU:-$("${python_bin}" - <<'PY'
@@ -151,6 +194,7 @@ run_trace() {
 }
 
 analyze() {
+  validate_contract
   "${python_bin}" "${script_dir}/latency.py" analyze-gate --root "${result_root}"
   "${python_bin}" "${script_dir}/latency.py" analyze-throughput-gate --root "${result_root}"
   "${python_bin}" "${script_dir}/latency.py" analyze --root "${result_root}"
@@ -158,6 +202,7 @@ analyze() {
 
 case "${stage}" in
   configs) generate_configs ;;
+  validate) validate_contract ;;
   gate) run_gate ;;
   throughput-gate) run_throughput_gate ;;
   trace) run_trace ;;
@@ -171,7 +216,7 @@ case "${stage}" in
     analyze
     ;;
   *)
-    echo "usage: $0 {configs|gate|throughput-gate|trace|analyze|all}" >&2
+    echo "usage: $0 {configs|validate|gate|throughput-gate|trace|analyze|all}" >&2
     exit 2
     ;;
 esac

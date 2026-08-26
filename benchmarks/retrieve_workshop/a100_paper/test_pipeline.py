@@ -566,6 +566,7 @@ class A100PipelineTest(unittest.TestCase):
                     {
                         "status": "PASS",
                         "measurement_contract": {
+                            "k": 10,
                             "source_max_queries": 2_048,
                             "serialized_max_queries": 1,
                             "queries_per_search_call": 1,
@@ -598,10 +599,13 @@ class A100PipelineTest(unittest.TestCase):
             (root / "per_query_latency/provenance/run.json").write_text(
                 json.dumps(
                     {
+                        "schema_version": 2,
                         "contract": {
+                            "k": 10,
                             "graph_source_max_queries": 2_048,
                             "serialized_max_queries": 1,
                             "queries_per_call": 1,
+                            "output_set_semantics": "distinct_valid_output_ids_v1",
                         }
                     }
                 )
@@ -623,6 +627,22 @@ class A100PipelineTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "serialized-latency"):
                 validate_max_queries_contract(root, profile)
             latency_summary_path.write_text(json.dumps(latency_summary) + "\n")
+            latency_provenance_path = (
+                root / "per_query_latency/provenance/run.json"
+            )
+            latency_provenance = json.loads(
+                latency_provenance_path.read_text()
+            )
+            latency_provenance["contract"]["k"] = 100
+            latency_provenance_path.write_text(
+                json.dumps(latency_provenance) + "\n"
+            )
+            with self.assertRaisesRegex(ValueError, "serialized-latency"):
+                validate_max_queries_contract(root, profile)
+            latency_provenance["contract"]["k"] = 10
+            latency_provenance_path.write_text(
+                json.dumps(latency_provenance) + "\n"
+            )
             (root / "mechanism_diagnostics/provenance/run.json").write_text(
                 json.dumps({"fixed_contract": {"max_queries": 1_024}}) + "\n"
             )
@@ -651,6 +671,9 @@ class A100PipelineTest(unittest.TestCase):
             )
             self.assertEqual(
                 manifest["execution_contract"]["serialized_latency"]["max_queries"], 1
+            )
+            self.assertEqual(
+                manifest["execution_contract"]["serialized_latency"]["k"], 10
             )
             self.assertGreater(len(manifest["files"]), 8)
             self.assertTrue(

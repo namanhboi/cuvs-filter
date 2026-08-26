@@ -58,7 +58,9 @@ def main() -> None:
     )
     missing = [str(path) for path in required_files if not path.is_file()]
     if missing:
-        raise FileNotFoundError("missing k=100 bundle inputs:\n" + "\n".join(missing))
+        raise FileNotFoundError(
+            "missing k=100 bundle inputs:\n" + "\n".join(missing)
+        )
 
     matched_provenance = json.loads(
         (required["matched_recall"] / "provenance.json").read_text()
@@ -68,7 +70,66 @@ def main() -> None:
         or int(matched_provenance.get("max_queries", -1)) != 2048
         or len(matched_provenance.get("selected_rows", [])) != 12
     ):
-        raise ValueError("matched-recall analysis did not satisfy the k=100 bundle contract")
+        raise ValueError(
+            "matched-recall analysis did not satisfy the k=100 bundle contract"
+        )
+
+    latency_root = root / "per_query_latency"
+    latency_present = any(
+        path.exists()
+        for path in (
+            root / ".done/per_query_latency",
+            latency_root / "analysis",
+            latency_root / "provenance/run.json",
+        )
+    )
+    latency_sources: list[tuple[Path, Path]] = []
+    if latency_present:
+        latency_summary_path = latency_root / "analysis/latency_summary.json"
+        latency_provenance_path = latency_root / "provenance/run.json"
+        latency_required = (
+            latency_summary_path,
+            latency_root / "analysis/latency_summary.csv",
+            latency_root / "analysis/per_query_latency_cdf.pdf",
+            latency_provenance_path,
+        )
+        missing_latency = [
+            str(path) for path in latency_required if not path.is_file()
+        ]
+        if missing_latency:
+            raise FileNotFoundError(
+                "incomplete k=100 serialized-latency result:\n"
+                + "\n".join(missing_latency)
+            )
+        latency_summary = json.loads(latency_summary_path.read_text())
+        measurement = latency_summary.get("measurement_contract", {})
+        latency_provenance = json.loads(latency_provenance_path.read_text())
+        contract = latency_provenance.get("contract", {})
+        if (
+            latency_summary.get("status") != "PASS"
+            or int(latency_summary.get("k", -1)) != 100
+            or int(measurement.get("k", -1)) != 100
+            or int(measurement.get("source_max_queries", -1)) != 2048
+            or int(measurement.get("serialized_max_queries", -1)) != 1
+            or int(measurement.get("queries_per_search_call", -1)) != 1
+            or int(measurement.get("complete_passes", -1)) != 3
+            or int(latency_summary.get("query_trace_rows", -1)) != 480_000
+            or int(latency_provenance.get("schema_version", -1)) != 2
+            or int(contract.get("k", -1)) != 100
+            or int(contract.get("graph_source_max_queries", -1)) != 2048
+            or int(contract.get("serialized_max_queries", -1)) != 1
+            or int(contract.get("queries_per_call", -1)) != 1
+        ):
+            raise ValueError(
+                "serialized k=100 latency did not satisfy its frozen contract"
+            )
+        latency_sources = [
+            (latency_root / "analysis", Path("per_query_latency/analysis")),
+            (
+                latency_root / "provenance",
+                Path("per_query_latency/provenance"),
+            ),
+        ]
 
     temporary = output.with_name(f".{output.name}.tmp.{os.getpid()}")
     if temporary.exists():
@@ -78,6 +139,8 @@ def main() -> None:
     for name, source in required.items():
         if source.is_dir():
             copied.extend(copy_files(source, temporary / name))
+    for source, relative_destination in latency_sources:
+        copied.extend(copy_files(source, temporary / relative_destination))
     profile = root / "state/dataset_profile.json"
     if profile.is_file():
         target = temporary / "dataset_profile.json"
@@ -89,6 +152,7 @@ def main() -> None:
         "generated_utc": datetime.now(timezone.utc).isoformat(),
         "k": 100,
         "max_queries": 2048,
+        "serialized_latency_included": latency_present,
         "run_root": str(root),
         "files": [
             {
@@ -105,10 +169,16 @@ def main() -> None:
     if output.exists():
         old_manifest = output / "manifest.json"
         if not old_manifest.is_file():
-            raise ValueError(f"refusing to replace unrecognized bundle directory {output}")
+            raise ValueError(
+                f"refusing to replace unrecognized bundle directory {output}"
+            )
         old = json.loads(old_manifest.read_text())
-        if old.get("experiment") != manifest["experiment"] or old.get("run_root") != str(root):
-            raise ValueError(f"refusing to replace incompatible bundle directory {output}")
+        if old.get("experiment") != manifest["experiment"] or old.get(
+            "run_root"
+        ) != str(root):
+            raise ValueError(
+                f"refusing to replace incompatible bundle directory {output}"
+            )
         shutil.rmtree(output)
     temporary.rename(output)
     print(output)

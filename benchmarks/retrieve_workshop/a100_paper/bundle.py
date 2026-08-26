@@ -70,11 +70,16 @@ def validate_max_queries_contract(root: Path, profile: dict) -> tuple[int, list[
     )
     if any(value != expected for value in observed):
         raise ValueError(f"mixed max_queries contracts in A100 run: {observed}")
-    latency_contract = json_payload(contracts[5])["contract"]
+    latency_provenance = json_payload(contracts[5])
+    latency_contract = latency_provenance["contract"]
     if (
-        int(latency_contract["graph_source_max_queries"]) != expected
+        int(latency_provenance.get("schema_version", -1)) != 2
+        or int(latency_contract.get("k", -1)) != 10
+        or int(latency_contract["graph_source_max_queries"]) != expected
         or int(latency_contract["serialized_max_queries"]) != 1
         or int(latency_contract["queries_per_call"]) != 1
+        or latency_contract.get("output_set_semantics")
+        != "distinct_valid_output_ids_v1"
     ):
         raise ValueError(f"invalid serialized-latency contract: {latency_contract}")
     resource = json_payload(root / "resource_work/analysis/gpu_resource_work.json")
@@ -94,6 +99,7 @@ def validate_max_queries_contract(root: Path, profile: dict) -> tuple[int, list[
     latency_measurement = latency_summary.get("measurement_contract", {})
     if (
         latency_summary.get("status") != "PASS"
+        or int(latency_measurement.get("k", 0)) != 10
         or int(latency_measurement.get("source_max_queries", 0)) != expected
         or int(latency_measurement.get("serialized_max_queries", 0)) != 1
         or int(latency_measurement.get("queries_per_search_call", 0)) != 1
@@ -372,6 +378,7 @@ def main() -> None:
         "created_utc": datetime.now(timezone.utc).isoformat(),
         "profile": profile_payload,
         "execution_contract": {
+            "k": 10,
             "max_queries": max_queries,
             "throughput_shards": [2048, 2048, 2048, 2048, 1808],
             "throughput": {
@@ -379,6 +386,7 @@ def main() -> None:
                 "shards": [2048, 2048, 2048, 2048, 1808],
             },
             "serialized_latency": {
+                "k": 10,
                 "max_queries": 1,
                 "queries_per_search_call": 1,
                 "complete_passes": 3,

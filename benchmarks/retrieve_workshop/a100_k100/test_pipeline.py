@@ -450,7 +450,9 @@ class K100PipelineTest(unittest.TestCase):
             )
             self.assertEqual(len(set(map(int, output_gt[1]))), 100)
 
-    def test_matched_table_and_bundle_hide_configs_but_preserve_provenance(self) -> None:
+    def test_matched_table_and_bundle_hide_configs_but_preserve_provenance(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             matched = root / "matched_recall/analysis"
@@ -475,8 +477,12 @@ class K100PipelineTest(unittest.TestCase):
                             "qps_median": 12_345,
                             "itopk": 100,
                             "search_width": 1,
-                            "max_iterations": 7 if method == "navix_reference" else 0,
-                            "resolved_iterations": 7 if method == "navix_reference" else 105,
+                            "max_iterations": 7
+                            if method == "navix_reference"
+                            else 0,
+                            "resolved_iterations": 7
+                            if method == "navix_reference"
+                            else 105,
                             "filter_violations": 0,
                             "sentinel_errors": 0,
                             "duplicate_output_query_rate_max": 0,
@@ -490,12 +496,20 @@ class K100PipelineTest(unittest.TestCase):
                             "qps": 12_345,
                         }
                     )
-            with (matched / "selected_points.csv").open("w", newline="") as output:
-                writer = csv.DictWriter(output, fieldnames=list(selected_rows[0]))
+            with (matched / "selected_points.csv").open(
+                "w", newline=""
+            ) as output:
+                writer = csv.DictWriter(
+                    output, fieldnames=list(selected_rows[0])
+                )
                 writer.writeheader()
                 writer.writerows(selected_rows)
-            with (matched / "measurements.csv").open("w", newline="") as output:
-                writer = csv.DictWriter(output, fieldnames=list(measurement_rows[0]))
+            with (matched / "measurements.csv").open(
+                "w", newline=""
+            ) as output:
+                writer = csv.DictWriter(
+                    output, fieldnames=list(measurement_rows[0])
+                )
                 writer.writeheader()
                 writer.writerows(measurement_rows)
             provenance = {
@@ -505,7 +519,9 @@ class K100PipelineTest(unittest.TestCase):
                 "target_window": 0.002,
                 "selected_rows": selected_rows,
             }
-            (matched / "provenance.json").write_text(json.dumps(provenance) + "\n")
+            (matched / "provenance.json").write_text(
+                json.dumps(provenance) + "\n"
+            )
             subprocess.run(
                 [
                     sys.executable,
@@ -522,8 +538,12 @@ class K100PipelineTest(unittest.TestCase):
             self.assertNotIn("W=", latex)
 
             (graph / "summary_points.csv").write_text("fixture\n")
-            (graph / "provenance.json").write_text(json.dumps({"k": 100}) + "\n")
-            (exact / "exact_results.json").write_text(json.dumps({"k": 100}) + "\n")
+            (graph / "provenance.json").write_text(
+                json.dumps({"k": 100}) + "\n"
+            )
+            (exact / "exact_results.json").write_text(
+                json.dumps({"k": 100}) + "\n"
+            )
             subprocess.run(
                 [
                     sys.executable,
@@ -534,11 +554,87 @@ class K100PipelineTest(unittest.TestCase):
                 check=True,
             )
             bundle = root / "paper_gpu_bundle_k100_matched"
+            initial_manifest = json.loads(
+                (bundle / "manifest.json").read_text()
+            )
+            self.assertFalse(initial_manifest["serialized_latency_included"])
+
+            latency_analysis = root / "per_query_latency/analysis"
+            latency_provenance = root / "per_query_latency/provenance"
+            latency_analysis.mkdir(parents=True)
+            latency_provenance.mkdir(parents=True)
+            (latency_analysis / "latency_summary.csv").write_text("fixture\n")
+            (latency_analysis / "per_query_latency_cdf.pdf").write_bytes(
+                b"pdf"
+            )
+            latency_summary = {
+                "k": 100,
+                "status": "PASS",
+                "query_trace_rows": 480_000,
+                "measurement_contract": {
+                    "k": 100,
+                    "source_max_queries": 2048,
+                    "serialized_max_queries": 1,
+                    "queries_per_search_call": 1,
+                    "complete_passes": 3,
+                },
+            }
+            (latency_analysis / "latency_summary.json").write_text(
+                json.dumps(latency_summary) + "\n"
+            )
+            (latency_provenance / "run.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 2,
+                        "contract": {
+                            "k": 100,
+                            "graph_source_max_queries": 2048,
+                            "serialized_max_queries": 1,
+                            "queries_per_call": 1,
+                        },
+                    }
+                )
+                + "\n"
+            )
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT_DIR / "bundle.py"),
+                    "--run-root",
+                    str(root),
+                ],
+                check=True,
+            )
             manifest = json.loads((bundle / "manifest.json").read_text())
             self.assertEqual(manifest["k"], 100)
+            self.assertTrue(manifest["serialized_latency_included"])
             self.assertTrue(
-                (bundle / "matched_recall/fixed_recall_k100_results.tex").is_file()
+                (
+                    bundle / "matched_recall/fixed_recall_k100_results.tex"
+                ).is_file()
             )
+            self.assertTrue(
+                (
+                    bundle / "per_query_latency/analysis/latency_summary.csv"
+                ).is_file()
+            )
+            latency_summary["status"] = "FAIL"
+            (latency_analysis / "latency_summary.json").write_text(
+                json.dumps(latency_summary) + "\n"
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT_DIR / "bundle.py"),
+                    "--run-root",
+                    str(root),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn("frozen contract", completed.stderr)
 
 
 if __name__ == "__main__":

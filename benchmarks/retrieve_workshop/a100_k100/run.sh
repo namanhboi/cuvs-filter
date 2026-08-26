@@ -109,6 +109,8 @@ test_gate() {
     "${python_bin}" "${repo_dir}/benchmarks/retrieve_workshop/exact_bitmap/test_pipeline.py"
   env MPLBACKEND=Agg "${python_bin}" "${script_dir}/test_pipeline.py"
   env MPLBACKEND=Agg "${python_bin}" "${script_dir}/test_matched_recall.py"
+  env -u RETRIEVE_DATASET_PROFILE MPLBACKEND=Agg \
+    "${python_bin}" "${repo_dir}/benchmarks/retrieve_workshop/per_query_latency/test_pipeline.py"
   mark_done test
 }
 
@@ -251,6 +253,36 @@ run_matched() {
   mark_done matched_recall
 }
 
+run_per_query_latency() {
+  local latency_root="${run_root}/per_query_latency"
+  local selected="${matched_root}/analysis/selected_points.csv"
+  local selected_provenance="${matched_root}/analysis/provenance.json"
+  if is_done per_query_latency; then
+    env RETRIEVE_LATENCY_K=100 RETRIEVE_LATENCY_RESULT_ROOT="${latency_root}" \
+      RETRIEVE_LATENCY_SELECTED_POINTS="${selected}" \
+      RETRIEVE_LATENCY_SELECTED_PROVENANCE="${selected_provenance}" \
+      RETRIEVE_LATENCY_EXACT_DATA_ROOT="${exact_data_root}" \
+      RETRIEVE_EXACT_BENCH_BIN="${exact_bin}" \
+      "${repo_dir}/benchmarks/retrieve_workshop/per_query_latency/run.sh" validate
+    return
+  fi
+  test -f "${selected}" && test -f "${selected_provenance}" || {
+    echo "run matched-recall before serialized k=100 latency" >&2
+    exit 2
+  }
+  test -f "${exact_data_root}/arxiv-large/em/throughput_10000/manifest.json" || {
+    echo "run exact before serialized k=100 latency" >&2
+    exit 2
+  }
+  env RETRIEVE_LATENCY_K=100 RETRIEVE_LATENCY_RESULT_ROOT="${latency_root}" \
+    RETRIEVE_LATENCY_SELECTED_POINTS="${selected}" \
+    RETRIEVE_LATENCY_SELECTED_PROVENANCE="${selected_provenance}" \
+    RETRIEVE_LATENCY_EXACT_DATA_ROOT="${exact_data_root}" \
+    RETRIEVE_EXACT_BENCH_BIN="${exact_bin}" \
+    "${repo_dir}/benchmarks/retrieve_workshop/per_query_latency/run.sh" all
+  mark_done per_query_latency
+}
+
 analyze() {
   env RETRIEVE_RESULT_ROOT="${run_root}/gpu_graph" \
     "${repo_dir}/benchmarks/retrieve_workshop/gpu_graph/run_gpu_graph.sh" analyze
@@ -270,6 +302,15 @@ analyze() {
     env RETRIEVE_MATCHED_K=100 RETRIEVE_MATCHED_ALLOW_SHALLOW_NAVIX=1 MPLBACKEND=Agg \
       "${python_bin}" "${script_dir}/matched_table.py" --result-root "${matched_root}"
   fi
+  if test -d "${run_root}/per_query_latency/configs"; then
+    env RETRIEVE_LATENCY_K=100 \
+      RETRIEVE_LATENCY_RESULT_ROOT="${run_root}/per_query_latency" \
+      RETRIEVE_LATENCY_SELECTED_POINTS="${matched_root}/analysis/selected_points.csv" \
+      RETRIEVE_LATENCY_SELECTED_PROVENANCE="${matched_root}/analysis/provenance.json" \
+      RETRIEVE_LATENCY_EXACT_DATA_ROOT="${exact_data_root}" \
+      RETRIEVE_EXACT_BENCH_BIN="${exact_bin}" \
+      "${repo_dir}/benchmarks/retrieve_workshop/per_query_latency/run.sh" analyze
+  fi
 }
 
 bundle() {
@@ -285,6 +326,7 @@ case "${stage}" in
   graph) run_graph ;;
   exact) run_exact ;;
   matched-recall) run_matched ;;
+  latency) run_per_query_latency ;;
   analyze) analyze ;;
   bundle) bundle ;;
   all)
@@ -300,7 +342,7 @@ case "${stage}" in
     bundle
     ;;
   *)
-    echo "usage: $0 {preflight|build|test|prepare-yfcc-gt|prepare-views|graph|exact|matched-recall|analyze|bundle|all}" >&2
+    echo "usage: $0 {preflight|build|test|prepare-yfcc-gt|prepare-views|graph|exact|matched-recall|latency|analyze|bundle|all}" >&2
     exit 2
     ;;
 esac

@@ -1,8 +1,8 @@
-#+title: A100 Serialized Per-Query Latency Handoff
+#+title: A100 Serialized Per-Query Latency Handoff (Recall@10 and Recall@100)
 
 * Purpose
 
-This experiment measures the latency distribution of the paper's frozen Recall@10 operating
+This experiment measures the latency distribution of frozen Recall@10 or Recall@100 operating
 points when exactly one query is submitted to each SINGLE_CTA search call.  It covers YFCC-10M and
 ArXiv-large EM, EMIS, and R for CAGRA-Base, CAGRA-Retain, CAGRA-NaviX, and masked cuVS Brute Force
 KNN.
@@ -34,7 +34,7 @@ word boundary.
 Before accepting traces, the runner performs two gates:
 
 1. A 1,000-query batched-versus-serialized gate.  Graph methods must preserve the complete output
-   ID set and Recall@10; exact search may exchange legal rank-10 ties but must preserve recall.
+   ID set and Recall@k; exact search may exchange legal rank-k ties but must preserve recall.
 2. A three-repetition rerun of the twelve frozen batched graph operating points.  Recall may drift
    by at most =1e-4= and QPS may not regress by more than 2% from the selected-point evidence.
 
@@ -56,7 +56,7 @@ env PARALLEL_LEVEL=12 ./build.sh libcuvs bench-ann -n \
 #+end_src
 
 The direct runner checks both binaries for the trace contract and fails immediately if either is
-stale.  To add latency to an existing A100 result root:
+stale.  To add Recall@10 latency to an existing A100 paper result root:
 
 #+begin_src bash
 cd /home/ubuntu/cuvs-filter
@@ -69,6 +69,19 @@ export RETRIEVE_A100_RUN_ROOT=/data/retrieve_workshop_runs/a100_maxq2048_RUN_TAG
 benchmarks/retrieve_workshop/a100_paper/run.sh latency
 #+end_src
 
+To add Recall@100 latency after the standalone k=100 =matched-recall= and =exact= stages have
+completed:
+
+#+begin_src bash
+export RETRIEVE_A100_K100_RUN_ROOT=/data/retrieve_workshop_runs/a100_k100_RUN_TAG
+benchmarks/retrieve_workshop/a100_k100/run.sh latency
+benchmarks/retrieve_workshop/a100_k100/run.sh bundle
+#+end_src
+
+The k=100 latency stage is intentionally not part of =a100_k100/run.sh all=: it adds another
+480,000 serialized calls to an already long experiment.  It is explicit and resumable, and the
+compact k=100 bundle includes it whenever the completed latency artifacts are present.
+
 The stage is resumable.  A complete raw JSON and its trace CSVs are validated before reuse.  If a
 record is incomplete, the runner refuses to guess; remove only the named raw file and its matching
 trace files, then rerun the command.
@@ -77,11 +90,31 @@ To run the latency pipeline directly:
 
 #+begin_src bash
 export RETRIEVE_LATENCY_RESULT_ROOT="$RETRIEVE_A100_RUN_ROOT/per_query_latency"
+export RETRIEVE_LATENCY_K=10
 export RETRIEVE_LATENCY_SELECTED_POINTS="$RETRIEVE_A100_RUN_ROOT/matched_recall/analysis/selected_points.csv"
+export RETRIEVE_LATENCY_SELECTED_PROVENANCE="$RETRIEVE_A100_RUN_ROOT/matched_recall/analysis/provenance.json"
 export RETRIEVE_LATENCY_EXACT_DATA_ROOT="$RETRIEVE_DATA_ROOT/retrieve_workshop/exact_bitmap_a100"
 
 benchmarks/retrieve_workshop/per_query_latency/run.sh all
 #+end_src
+
+For k=100, set =RETRIEVE_LATENCY_K=100=, use
+=$RETRIEVE_A100_K100_RUN_ROOT/matched_recall/analysis= for the selected table and provenance, use
+=$RETRIEVE_DATA_ROOT/retrieve_workshop/exact_bitmap_a100_k100= as the exact data root, and use a
+separate result root.  Never reuse one result root for both k values; contract validation rejects
+that mismatch.
+
+The runner verifies the selected table against this matched-recall analysis provenance and its
+hash-bound run provenance before generating any configuration.  The latter must certify
+=SINGLE_CTA=, the requested =k in {10,100}=, =max_queries=2048=, three 10,000-query throughput
+repetitions, and distinct-valid-output-ID semantics.  Every graph and exact-control ground-truth
+shard must have exactly the requested width.  A selected table, run provenance, prepared data view,
+trace, or existing result root from the other k therefore fails before evidence is accepted.  The
+first k=10 A100 analysis format did not repeat =k= at its top level and remains accepted only when
+its referenced run provenance explicitly certifies =k=10=.
+After latency configuration generation, treat both matched-recall files as immutable.  The A100
+=analyze= wrapper reuses an existing selected table and provenance instead of regenerating them;
+changing either file makes latency resumption and analysis fail closed.
 
 The complete experiment contains 480,000 measured one-query calls (360,000 graph and 120,000 exact),
 plus the small gates, warm-ups, and timer-floor samples.  Runtime therefore depends strongly on the
@@ -101,13 +134,17 @@ benchmarks/retrieve_workshop/per_query_latency/run.sh analyze
 
 Under =$RETRIEVE_A100_RUN_ROOT/per_query_latency/analysis=:
 
-- =latency_summary.csv= and =latency_summary.json=: paper-ready aggregate values and validation.
+- =latency_summary.csv= and =latency_summary.json=: paper-ready aggregate values, achieved recall,
+  requested target, operating-point status, and validation.  Status is =target_matched=,
+  =maximum_reachable_recall=, or =exact_control=.  Unmatched endpoints are reported at their
+  achieved recall; the pipeline does not compute or imply matched-recall latency ratios for them.
 - =per_query_latency_samples.csv=: one row per workload/method/query with all three samples and the
   per-query median.
 - =per_query_latency_cdf.png= and =per_query_latency_cdf.pdf=: four-panel latency CDF.
 - =latency_table_rows.tex=: LaTeX rows for mean/p50/p95/p99/max.
 
-The A100 paper bundle copies this analysis under =paper_gpu_bundle/per_query_latency= and records the
+The A100 k=10 paper bundle copies this analysis under =paper_gpu_bundle/per_query_latency=.  The
+k=100 compact bundle uses =paper_gpu_bundle_k100_matched/per_query_latency=.  Both record the
 separate throughput (=max_queries=2048=) and serialized-latency (=max_queries=1=) contracts.
 
 * Archive

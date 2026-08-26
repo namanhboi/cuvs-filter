@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate and analyze serialized, one-query CAGRA latency experiments.
 
-This pipeline is deliberately benchmark-private.  It freezes the twelve selected Recall@10 graph
+This pipeline is deliberately benchmark-private.  It freezes the twelve selected Recall@k graph
 configurations, issues exactly one query per public search call, and records host API-to-GPU-
 completion time without changing any production CAGRA kernel or public cuVS API.
 """
@@ -70,6 +70,18 @@ TRACE_SCHEMA = 1
 TARGETS = {"yfcc": 0.80, "em": 0.95, "emis": 0.95, "r": 0.95}
 RECALL_DRIFT_LIMIT = 1.0e-4
 QPS_REGRESSION_LIMIT = 0.02
+DEFAULT_K = 10
+SUPPORTED_K = (10, 100)
+TARGET_WINDOW = 0.002
+
+
+def validated_k(value: object) -> int:
+    k = int(value)
+    if k not in SUPPORTED_K:
+        raise ValueError(
+            f"serialized latency supports k in {SUPPORTED_K}, found {k}"
+        )
+    return k
 
 
 def truth(value: object) -> bool:
@@ -121,16 +133,71 @@ def load_selected(path: Path) -> dict[tuple[str, str], dict[str, object]]:
             raise ValueError(
                 f"duplicate selected point for {workload}/{method}"
             )
+        expected_target = TARGETS[workload]
+        required_contract = {
+            "group": "matched_recall_final",
+            "phase": "throughput",
+            "graph_degree": "64",
+            "intermediate_graph_degree": "128",
+            "repetitions": "3",
+            "shards_per_repetition": "5",
+            "queries_per_repetition": str(EXPECTED_QUERIES),
+        }
+        mismatches = {
+            field: (row.get(field), expected)
+            for field, expected in required_contract.items()
+            if str(row.get(field, "")) != expected
+        }
+        if mismatches:
+            raise ValueError(
+                f"selected point has a non-paper contract for {workload}/{method}: "
+                f"{mismatches}"
+            )
+        if "paper_included" not in row or not truth(row["paper_included"]):
+            raise ValueError(
+                f"selected point is not paper-included for {workload}/{method}"
+            )
+        if abs(float(row["target_recall"]) - expected_target) > 1.0e-12:
+            raise ValueError(
+                f"selected point has the wrong target for {workload}/{method}: "
+                f"{row['target_recall']}"
+            )
+        recall = float(row["recall_median"])
+        target_reached = truth(row.get("target_reached", False))
+        within_target_window = truth(row.get("within_target_window", False))
+        if within_target_window != (
+            expected_target <= recall <= expected_target + TARGET_WINDOW
+        ):
+            raise ValueError(
+                f"selected point has inconsistent target-window status for "
+                f"{workload}/{method}"
+            )
+        if target_reached != (recall >= expected_target):
+            raise ValueError(
+                f"selected point has inconsistent target-reached status for "
+                f"{workload}/{method}"
+            )
+        if target_reached and not within_target_window:
+            raise ValueError(
+                f"latency requires an in-window target point for {workload}/{method}"
+            )
         selected[key] = {
             "workload": workload,
             "method": method,
             "itopk": int(row["itopk"]),
             "search_width": int(row["search_width"]),
             "max_iterations": int(row["max_iterations"]),
-            "recall_median": float(row["recall_median"]),
+            "recall_median": recall,
             "qps_median": float(row["qps_median"]),
             "target_recall": float(
                 row.get("target_recall", TARGETS[workload])
+            ),
+            "target_reached": target_reached,
+            "within_target_window": within_target_window,
+            "operating_point_status": (
+                "target_matched"
+                if within_target_window
+                else "maximum_reachable_recall"
             ),
         }
     expected = {
@@ -145,6 +212,217 @@ def load_selected(path: Path) -> dict[tuple[str, str], dict[str, object]]:
             f"selected-point matrix mismatch: missing={missing}, extra={extra}"
         )
     return selected
+
+
+def resolve_recorded_path(owner: Path, value: object) -> Path:
+    path = Path(str(value))
+    if not path.is_absolute():
+        path = owner.parent / path
+    return path.resolve()
+
+
+def selected_identity(row: dict[str, object]) -> dict[str, object]:
+    return {
+        "workload": str(row["workload"]),
+        "method": str(row["method"]),
+        "itopk": int(row["itopk"]),
+        "search_width": int(row["search_width"]),
+        "max_iterations": int(row["max_iterations"]),
+        "recall_median": float(row["recall_median"]),
+        "qps_median": float(row["qps_median"]),
+        "target_recall": float(row["target_recall"]),
+        "target_reached": truth(row.get("target_reached", False)),
+        "within_target_window": truth(row.get("within_target_window", False)),
+    }
+
+
+def validate_selected_provenance(
+    selected_path: Path,
+    provenance_path: Path,
+    selected: dict[tuple[str, str], dict[str, object]],
+    k: int,
+) -> dict[str, object]:
+    k = validated_k(k)
+    selected_path = selected_path.resolve()
+    provenance_path = provenance_path.resolve()
+    if not provenance_path.is_file():
+        raise FileNotFoundError(
+            f"missing matched-recall analysis provenance: {provenance_path}"
+        )
+    analysis = json.loads(provenance_path.read_text())
+    if (
+        int(analysis.get("schema_version", -1)) != 1
+        or analysis.get("experiment") != "retrieve_workshop_matched_recall"
+    ):
+        raise ValueError(
+            f"unsupported matched-recall analysis provenance: {provenance_path}"
+        )
+    if int(analysis.get("max_queries", -1)) != 2_048:
+        raise ValueError("selected points are not from max_queries=2048")
+    analysis_k = analysis.get("k")
+    if analysis_k is not None and int(analysis_k) != k:
+        raise ValueError(
+            f"selected points are not from k={k}: analysis k={analysis_k}"
+        )
+    targets = analysis.get("targets", {})
+    if set(targets) != set(TARGETS) or any(
+        abs(float(targets[workload]) - target) > 1.0e-12
+        for workload, target in TARGETS.items()
+    ):
+        raise ValueError(
+            f"matched-recall targets disagree with latency: {targets}"
+        )
+    if (
+        abs(float(analysis.get("target_window", -1.0)) - TARGET_WINDOW)
+        > 1.0e-12
+    ):
+        raise ValueError(
+            f"matched-recall provenance does not use the {TARGET_WINDOW} target window"
+        )
+
+    selected_inputs = [
+        row
+        for row in analysis.get("analysis_inputs", [])
+        if Path(str(row.get("path", ""))).name == "selected_points.csv"
+    ]
+    if len(selected_inputs) != 1:
+        raise ValueError(
+            "matched-recall provenance must hash exactly one selected_points.csv"
+        )
+    selected_input = selected_inputs[0]
+    if (
+        resolve_recorded_path(provenance_path, selected_input["path"])
+        != selected_path
+    ):
+        raise ValueError(
+            "selected_points.csv path disagrees with matched-recall provenance"
+        )
+    selected_hash = sha256(selected_path)
+    if selected_input.get("sha256") != selected_hash:
+        raise ValueError(
+            "selected_points.csv SHA-256 disagrees with matched-recall provenance"
+        )
+
+    recorded_rows = analysis.get("selected_rows", [])
+    recorded = {
+        (str(row["workload"]), str(row["method"])): selected_identity(row)
+        for row in recorded_rows
+        if row.get("workload") in WORKLOADS
+        and row.get("method") in GRAPH_METHODS
+    }
+    current = {key: selected_identity(row) for key, row in selected.items()}
+    if len(recorded_rows) != len(current) or recorded != current:
+        raise ValueError(
+            "selected_points.csv rows disagree with matched-recall provenance"
+        )
+
+    run_record = analysis.get("run_provenance", {})
+    if not isinstance(run_record, dict) or not run_record.get("path"):
+        raise ValueError("matched-recall analysis has no run provenance")
+    run_path = resolve_recorded_path(provenance_path, run_record["path"])
+    if not run_path.is_file():
+        raise FileNotFoundError(
+            f"missing matched-recall run provenance: {run_path}"
+        )
+    run_hash = sha256(run_path)
+    if run_record.get("sha256") != run_hash:
+        raise ValueError(
+            "matched-recall run-provenance SHA-256 disagrees with analysis provenance"
+        )
+    run = json.loads(run_path.read_text())
+    contract = run.get("fixed_contract", {})
+    required = {
+        "gpu_algo": "SINGLE_CTA",
+        "k": k,
+        "max_queries": 2_048,
+        "reported_throughput_repetitions": 3,
+        "correctness_repetitions": 1,
+        "throughput_queries": EXPECTED_QUERIES,
+        "correctness_queries": GATE_QUERIES,
+        "output_set_semantics": "distinct_valid_output_ids_v1",
+    }
+    mismatches = {
+        field: (contract.get(field), expected)
+        for field, expected in required.items()
+        if contract.get(field) != expected
+    }
+    if int(run.get("schema_version", -1)) != 2 or mismatches:
+        raise ValueError(
+            f"matched-recall run provenance is not the k={k} A100 contract: {mismatches}"
+        )
+    return {
+        "analysis": {
+            "path": str(provenance_path),
+            "sha256": sha256(provenance_path),
+        },
+        "selected_points": {
+            "path": str(selected_path),
+            "sha256": selected_hash,
+        },
+        "run": {"path": str(run_path), "sha256": run_hash},
+        "contract": required,
+    }
+
+
+def ibin_shape(path: Path) -> tuple[int, int]:
+    import struct
+
+    if not path.is_file():
+        raise FileNotFoundError(path)
+    with path.open("rb") as source:
+        header = source.read(8)
+    if len(header) != 8:
+        raise ValueError(f"truncated ground-truth matrix: {path}")
+    return struct.unpack("<II", header)
+
+
+def validate_ground_truth_width(
+    manifest_path: Path,
+    manifest: dict[str, Any],
+    shards: list[dict[str, Any]],
+    *,
+    exact: bool,
+    k: int,
+) -> list[dict[str, object]]:
+    k = validated_k(k)
+    observed_k = manifest.get(
+        "k", manifest.get("preparation", {}).get("ground_truth_k")
+    )
+    if exact and observed_k is None:
+        raise ValueError(
+            f"exact source manifest does not declare k: {manifest_path}"
+        )
+    if observed_k is not None and int(observed_k) != k:
+        raise ValueError(
+            f"source manifest is not k={k}: {manifest_path} reports k={observed_k}"
+        )
+    records: list[dict[str, object]] = []
+    for shard in shards:
+        if exact:
+            ground_truth = resolve_recorded_path(
+                manifest_path, shard["groundtruth_file"]
+            )
+        else:
+            directory = resolve_recorded_path(
+                manifest_path, shard["directory"]
+            )
+            ground_truth = directory / "groundtruth.ibin"
+        rows, cols = ibin_shape(ground_truth)
+        expected_rows = int(shard["query_count"])
+        if rows != expected_rows or cols != k:
+            raise ValueError(
+                f"source ground truth is not {expected_rows}x{k}: "
+                f"{ground_truth} is {rows}x{cols}"
+            )
+        records.append(
+            {
+                "path": str(ground_truth.resolve()),
+                "rows": rows,
+                "cols": cols,
+                "sha256": sha256(ground_truth),
+            }
+        )
+    return records
 
 
 def validate_shards(
@@ -220,6 +498,7 @@ def trace_fields(
 def graph_search(
     selected: dict[str, object],
     *,
+    k: int,
     max_queries: int,
     extras: dict[str, object] | None = None,
 ) -> dict[str, object]:
@@ -228,7 +507,7 @@ def graph_search(
         int(selected["itopk"]),
         int(selected["search_width"]),
         int(selected["max_iterations"]),
-        k=10,
+        k=validated_k(k),
         max_queries=max_queries,
     )
     if extras:
@@ -268,6 +547,7 @@ def exact_config(
     searches: list[dict[str, object]],
     marker: Path,
     batch_size: int,
+    k: int,
 ) -> dict[str, object]:
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.touch(exist_ok=True)
@@ -285,7 +565,7 @@ def exact_config(
             "dtype": "float",
             "filter": {"kind": "bitmap", "file": shard["bitmap_file"]},
         },
-        "search_basic_param": {"batch_size": batch_size, "k": 10},
+        "search_basic_param": {"batch_size": batch_size, "k": validated_k(k)},
         "index": [
             {
                 "name": "cuvs-exact-bitmap",
@@ -321,15 +601,25 @@ def case_record(
         "reference_qps": None
         if reference is None
         else float(reference["qps_median"]),
+        "target_recall": 1.0
+        if reference is None
+        else float(reference["target_recall"]),
+        "operating_point_status": "exact_control"
+        if reference is None
+        else str(reference["operating_point_status"]),
     }
 
 
 def generate(args: argparse.Namespace) -> None:
+    k = validated_k(args.k)
     root = args.root.resolve()
     data_root = args.data_root.resolve()
     exact_root = args.exact_data_root.resolve()
     selected_path = args.selected_points.resolve()
     selected = load_selected(selected_path)
+    selected_provenance = validate_selected_provenance(
+        selected_path, args.selected_provenance, selected, k
+    )
     if args.profile:
         # dataset_paths() resolves the active profile through the shared environment contract.
         # Set it explicitly for direct CLI use as well as the shell runner.
@@ -341,8 +631,32 @@ def generate(args: argparse.Namespace) -> None:
         )
 
     records: list[dict[str, object]] = []
+    source_inputs: list[dict[str, object]] = []
     config_root = root / "configs"
     marker_root = root / "markers"
+
+    def register_source(
+        *,
+        engine: str,
+        workload: str,
+        phase: str,
+        path: Path,
+        payload: dict[str, Any],
+        shards: list[dict[str, Any]],
+    ) -> None:
+        ground_truth = validate_ground_truth_width(
+            path, payload, shards, exact=engine == "exact", k=k
+        )
+        source_inputs.append(
+            {
+                "engine": engine,
+                "workload": workload,
+                "phase": phase,
+                "manifest": str(path.resolve()),
+                "manifest_sha256": sha256(path),
+                "ground_truth": ground_truth,
+            }
+        )
 
     def add_record(
         *,
@@ -367,6 +681,7 @@ def generate(args: argparse.Namespace) -> None:
                 "shard_index": shard_index,
                 "first_query": first_query,
                 "query_count": query_count,
+                "k": k,
                 "config": str(config.resolve()),
                 "raw": str(raw.resolve()),
                 "cases": cases,
@@ -380,6 +695,14 @@ def generate(args: argparse.Namespace) -> None:
         graph_paths = dataset_paths(data_root, workload, "throughput", 64)
         graph_source = json.loads(graph_paths.manifest.read_text())
         graph_shards = validate_shards(graph_source, EXPECTED_QUERIES)
+        register_source(
+            engine="graph",
+            workload=workload,
+            phase="throughput",
+            path=graph_paths.manifest,
+            payload=graph_source,
+            shards=graph_shards,
+        )
         for shard_index, shard in enumerate(graph_shards):
             searches: list[dict[str, object]] = []
             cases: list[dict[str, object]] = []
@@ -399,7 +722,7 @@ def generate(args: argparse.Namespace) -> None:
                         reference_recall=float(reference["recall_median"]),
                     )
                     search = graph_search(
-                        reference, max_queries=1, extras=extras
+                        reference, k=k, max_queries=1, extras=extras
                     )
                     cases.append(
                         case_record(
@@ -424,7 +747,7 @@ def generate(args: argparse.Namespace) -> None:
                 shard=shard,
                 paths=graph_paths,
                 searches=searches,
-                k=10,
+                k=k,
             )
             payload["search_basic_param"]["batch_size"] = 1
             write_json(config, payload)
@@ -447,6 +770,14 @@ def generate(args: argparse.Namespace) -> None:
         if exact_source.get("method") != "cuvs_brute_force_bitmap":
             raise ValueError(f"stale exact manifest: {exact_path}")
         exact_shards = validate_shards(exact_source, EXPECTED_QUERIES)
+        register_source(
+            engine="exact",
+            workload=workload,
+            phase="throughput",
+            path=exact_path,
+            payload=exact_source,
+            shards=exact_shards,
+        )
         for shard_index, source_shard in enumerate(exact_shards):
             shard = dict(source_shard)
             shard["base_file"] = exact_source["base_file"]
@@ -486,6 +817,7 @@ def generate(args: argparse.Namespace) -> None:
                     searches=searches,
                     marker=marker_root / f"{workload}.index",
                     batch_size=1,
+                    k=k,
                 ),
             )
             add_record(
@@ -507,6 +839,14 @@ def generate(args: argparse.Namespace) -> None:
         gate_paths = dataset_paths(data_root, workload, "correctness", 64)
         gate_source = json.loads(gate_paths.manifest.read_text())
         gate_shards = validate_shards(gate_source, GATE_QUERIES)
+        register_source(
+            engine="graph",
+            workload=workload,
+            phase="correctness",
+            path=gate_paths.manifest,
+            payload=gate_source,
+            shards=gate_shards,
+        )
         if len(gate_shards) != 1:
             raise ValueError(
                 f"latency gate expects one 1,000-query shard for {workload}"
@@ -545,6 +885,7 @@ def generate(args: argparse.Namespace) -> None:
                     )
                 search = graph_search(
                     reference,
+                    k=k,
                     max_queries=1 if serial else 2_048,
                     extras=extras,
                 )
@@ -559,7 +900,7 @@ def generate(args: argparse.Namespace) -> None:
                 shard=gate_shard,
                 paths=gate_paths,
                 searches=searches,
-                k=10,
+                k=k,
             )
             payload["search_basic_param"]["batch_size"] = (
                 1 if serial else GATE_QUERIES
@@ -583,7 +924,17 @@ def generate(args: argparse.Namespace) -> None:
             exact_root, workload, "correctness"
         )
         gate_exact_source = json.loads(gate_exact_path.read_text())
+        if gate_exact_source.get("method") != "cuvs_brute_force_bitmap":
+            raise ValueError(f"stale exact manifest: {gate_exact_path}")
         gate_exact_shards = validate_shards(gate_exact_source, GATE_QUERIES)
+        register_source(
+            engine="exact",
+            workload=workload,
+            phase="correctness",
+            path=gate_exact_path,
+            payload=gate_exact_source,
+            shards=gate_exact_shards,
+        )
         if len(gate_exact_shards) != 1:
             raise ValueError(
                 f"exact latency gate expects one 1,000-query shard for {workload}"
@@ -628,6 +979,7 @@ def generate(args: argparse.Namespace) -> None:
                     searches=[search],
                     marker=marker_root / f"{workload}.index",
                     batch_size=1 if serial else GATE_QUERIES,
+                    k=k,
                 ),
             )
             add_record(
@@ -651,7 +1003,7 @@ def generate(args: argparse.Namespace) -> None:
             cases = []
             for method in GRAPH_METHODS:
                 reference = selected[(workload, method)]
-                search = graph_search(reference, max_queries=2_048)
+                search = graph_search(reference, k=k, max_queries=2_048)
                 cases.append(
                     case_record(len(searches), method, 0, search, reference)
                 )
@@ -670,7 +1022,7 @@ def generate(args: argparse.Namespace) -> None:
                     shard=shard,
                     paths=graph_paths,
                     searches=searches,
-                    k=10,
+                    k=k,
                 ),
             )
             add_record(
@@ -694,8 +1046,10 @@ def generate(args: argparse.Namespace) -> None:
         "profile": profile_record(profile),
         "selected_points": str(selected_path),
         "selected_points_sha256": sha256(selected_path),
+        "selected_provenance": selected_provenance,
+        "source_inputs": source_inputs,
         "contracts": {
-            "k": 10,
+            "k": k,
             "source_max_queries": 2_048,
             "serialized_max_queries": 1,
             "queries_per_search_call": 1,
@@ -841,7 +1195,8 @@ def validate_trace(
             raise ValueError(f"{trace_path}: trace repetition mismatch")
         if int(row["shard_index"]) != int(record["shard_index"]):
             raise ValueError(f"{trace_path}: trace shard mismatch")
-        if int(row["max_queries"]) != 1 or int(row["k"]) != 10:
+        expected_k = validated_k(record.get("k", DEFAULT_K))
+        if int(row["max_queries"]) != 1 or int(row["k"]) != expected_k:
             raise ValueError(f"{trace_path}: wrong serialized search contract")
         if int(row["host_latency_ns"]) <= 0:
             raise ValueError(f"{trace_path}: nonpositive host latency")
@@ -902,6 +1257,7 @@ def observation(record: dict, case: dict, row: dict) -> dict[str, object]:
         "shard_index": record["shard_index"],
         "first_query": record["first_query"],
         "query_count": record["query_count"],
+        "k": int(record.get("k", DEFAULT_K)),
         "method": case["method"],
         "repetition": case["repetition"],
         "itopk": case["itopk"],
@@ -928,6 +1284,8 @@ def observation(record: dict, case: dict, row: dict) -> dict[str, object]:
         "native_l2_cutoff_errors": float(row.get("NativeL2CutoffErrors", 0.0)),
         "reference_recall": case["reference_recall"],
         "reference_qps": case["reference_qps"],
+        "target_recall": case.get("target_recall"),
+        "operating_point_status": case.get("operating_point_status"),
     }
 
 
@@ -954,9 +1312,10 @@ def aggregate_recall(rows: list[dict[str, object]]) -> float:
     numerator = 0.0
     denominator = 0.0
     for row in rows:
+        k = validated_k(row.get("k", DEFAULT_K))
         weight = (
             int(row["query_count"])
-            * 10
+            * k
             * float(row.get("valid_gt_fraction", 1.0))
         )
         numerator += float(row["recall"]) * weight
@@ -969,6 +1328,7 @@ def aggregate_recall(rows: list[dict[str, object]]) -> float:
 def analyze_gate(args: argparse.Namespace) -> None:
     root = args.root.resolve()
     manifest = json.loads((root / "manifest.json").read_text())
+    k = validated_k(manifest["contracts"]["k"])
     observations = collect_observations(
         manifest,
         {
@@ -1017,6 +1377,11 @@ def analyze_gate(args: argparse.Namespace) -> None:
             if (batch_rows, batch_k) != (serial_rows, serial_k):
                 raise ValueError(
                     f"gate neighbor shape mismatch for {workload}/{method}"
+                )
+            if batch_k != k:
+                raise ValueError(
+                    f"gate neighbor width mismatch for {workload}/{method}: "
+                    f"{batch_k} != {k}"
                 )
             sentinel = (1 << 32) - 1
             matches = sum(
@@ -1186,6 +1551,7 @@ def analyze(args: argparse.Namespace) -> None:
 
     root = args.root.resolve()
     manifest = json.loads((root / "manifest.json").read_text())
+    k = validated_k(manifest["contracts"]["k"])
     gate = json.loads(
         (root / "gate/analysis/batch_vs_serial_gate.json").read_text()
     )
@@ -1299,6 +1665,21 @@ def analyze(args: argparse.Namespace) -> None:
                 {
                     "workload": workload,
                     "method": method,
+                    "itopk": 0
+                    if method == EXACT_METHOD
+                    else int(recall_groups[(workload, method, 0)][0]["itopk"]),
+                    "search_width": 0
+                    if method == EXACT_METHOD
+                    else int(
+                        recall_groups[(workload, method, 0)][0]["search_width"]
+                    ),
+                    "max_iterations": 0
+                    if method == EXACT_METHOD
+                    else int(
+                        recall_groups[(workload, method, 0)][0][
+                            "max_iterations"
+                        ]
+                    ),
                     "queries": EXPECTED_QUERIES,
                     "complete_passes": REPETITIONS,
                     "mean_us": mean_ns / 1_000.0,
@@ -1315,6 +1696,20 @@ def analyze(args: argparse.Namespace) -> None:
                     "serialized_recall_median": recall_median,
                     "batched_reference_recall": reference_recall,
                     "absolute_recall_delta": recall_delta,
+                    "target_recall": 1.0
+                    if method == EXACT_METHOD
+                    else float(
+                        recall_groups[(workload, method, 0)][0][
+                            "target_recall"
+                        ]
+                    ),
+                    "operating_point_status": "exact_control"
+                    if method == EXACT_METHOD
+                    else str(
+                        recall_groups[(workload, method, 0)][0][
+                            "operating_point_status"
+                        ]
+                    ),
                 }
             )
 
@@ -1382,8 +1777,14 @@ def analyze(args: argparse.Namespace) -> None:
 
     tex_lines = []
     for row in summaries:
+        status_label = {
+            "target_matched": "Target matched",
+            "maximum_reachable_recall": "Maximum reachable",
+            "exact_control": "Exact control",
+        }[str(row["operating_point_status"])]
         tex_lines.append(
             f"{WORKLOAD_LABELS[str(row['workload'])]} & {METHOD_LABELS[str(row['method'])]} & "
+            f"{float(row['serialized_recall_median']):.4f} & {status_label} & "
             f"{float(row['mean_us']):,.1f} & {float(row['p50_us']):,.1f} & "
             f"{float(row['p95_us']):,.1f} & {float(row['p99_us']):,.1f} & "
             f"{float(row['max_us']):,.1f} \\\\"
@@ -1391,6 +1792,7 @@ def analyze(args: argparse.Namespace) -> None:
     (output / "latency_table_rows.tex").write_text("\n".join(tex_lines) + "\n")
     payload = {
         "schema_version": 1,
+        "k": k,
         "status": "FAIL" if failures else "PASS",
         "measurement_contract": manifest["contracts"],
         "summary": summaries,
@@ -1406,12 +1808,149 @@ def analyze(args: argparse.Namespace) -> None:
     print(output)
 
 
+def validate_frozen_contract(
+    root: Path,
+    selected_path: Path,
+    selected_provenance_path: Path,
+    expected_k: int | None = None,
+) -> tuple[dict[str, Any], dict[str, object]]:
+    root = root.resolve()
+    manifest_path = root / "manifest.json"
+    manifest_payload = json.loads(manifest_path.read_text())
+    if (
+        manifest_payload.get("experiment")
+        != "retrieve_serialized_per_query_latency"
+    ):
+        raise ValueError(f"unsupported latency manifest: {manifest_path}")
+    contracts = manifest_payload.get("contracts", {})
+    k = validated_k(contracts.get("k", DEFAULT_K))
+    if expected_k is not None and k != validated_k(expected_k):
+        raise ValueError(
+            f"latency result root is k={k}, but k={expected_k} was requested"
+        )
+    selected_path = selected_path.resolve()
+    selected = load_selected(selected_path)
+    selected_provenance = validate_selected_provenance(
+        selected_path, selected_provenance_path, selected, k
+    )
+    expected_contract = {
+        "k": k,
+        "source_max_queries": 2_048,
+        "serialized_max_queries": 1,
+        "queries_per_search_call": 1,
+        "complete_passes": REPETITIONS,
+    }
+    contract_mismatches = {
+        field: (contracts.get(field), expected)
+        for field, expected in expected_contract.items()
+        if contracts.get(field) != expected
+    }
+    if contract_mismatches:
+        raise ValueError(
+            f"latency manifest has a stale measurement contract: {contract_mismatches}"
+        )
+    if (
+        manifest_payload.get("selected_points") != str(selected_path)
+        or manifest_payload.get("selected_points_sha256")
+        != sha256(selected_path)
+        or manifest_payload.get("selected_provenance") != selected_provenance
+    ):
+        raise ValueError(
+            "latency manifest no longer matches selected-point provenance"
+        )
+    source_inputs = manifest_payload.get("source_inputs", [])
+    expected_sources = {
+        (engine, workload, phase)
+        for engine in ("graph", "exact")
+        for workload in WORKLOADS
+        for phase in ("correctness", "throughput")
+    }
+    observed_sources = {
+        (str(row["engine"]), str(row["workload"]), str(row["phase"]))
+        for row in source_inputs
+    }
+    if (
+        len(source_inputs) != len(expected_sources)
+        or observed_sources != expected_sources
+    ):
+        raise ValueError(
+            f"latency manifest has incomplete k={k} source inputs"
+        )
+    for source in source_inputs:
+        source_manifest = Path(str(source["manifest"]))
+        if (
+            not source_manifest.is_file()
+            or sha256(source_manifest) != source["manifest_sha256"]
+        ):
+            raise ValueError(
+                f"latency source manifest changed after generation: {source_manifest}"
+            )
+        for ground_truth in source.get("ground_truth", []):
+            path = Path(str(ground_truth["path"]))
+            shape = ibin_shape(path)
+            expected = (
+                int(ground_truth["rows"]),
+                int(ground_truth["cols"]),
+            )
+            if (
+                shape != expected
+                or shape[1] != k
+                or sha256(path) != ground_truth["sha256"]
+            ):
+                raise ValueError(
+                    f"latency ground truth changed after generation: {path}"
+                )
+    captured = root / "provenance" / "run.json"
+    if captured.is_file():
+        payload = json.loads(captured.read_text())
+        contract = payload.get("contract", {})
+        if (
+            int(payload.get("schema_version", -1)) != 2
+            or int(contract.get("k", -1)) != k
+            or int(contract.get("graph_source_max_queries", -1)) != 2_048
+            or int(contract.get("serialized_max_queries", -1)) != 1
+            or int(contract.get("queries_per_call", -1)) != 1
+            or contract.get("output_set_semantics")
+            != "distinct_valid_output_ids_v1"
+            or payload.get("selected_provenance") != selected_provenance
+        ):
+            raise ValueError(
+                f"captured latency provenance has a stale k={k} contract"
+            )
+        for name, record in payload.get("files", {}).items():
+            path = Path(str(record["path"]))
+            if (
+                not path.is_file()
+                or path.stat().st_size != int(record["bytes"])
+                or sha256(path) != record["sha256"]
+            ):
+                raise ValueError(
+                    f"captured latency provenance input changed: {name}={path}"
+                )
+    return manifest_payload, selected_provenance
+
+
+def validate_contract(args: argparse.Namespace) -> None:
+    validate_frozen_contract(
+        args.root, args.selected_points, args.selected_provenance, args.k
+    )
+    print(args.root.resolve() / "manifest.json")
+
+
 def provenance(args: argparse.Namespace) -> None:
     root = args.root.resolve()
     manifest = root / "manifest.json"
+    manifest_payload, selected_provenance = validate_frozen_contract(
+        root, args.selected_points, args.selected_provenance, args.k
+    )
+    k = validated_k(manifest_payload["contracts"]["k"])
     paths = {
         "manifest": manifest,
         "selected_points": args.selected_points.resolve(),
+        "selected_analysis_provenance": args.selected_provenance.resolve(),
+        "selected_run_provenance": Path(
+            str(selected_provenance["run"]["path"])
+        ),
         "dataset_profile": args.profile.resolve(),
         "cagra_benchmark": args.graph_binary.resolve(),
         "exact_benchmark": args.exact_binary.resolve(),
@@ -1439,7 +1978,7 @@ def provenance(args: argparse.Namespace) -> None:
     write_json(
         root / "provenance" / "run.json",
         {
-            "schema_version": 1,
+            "schema_version": 2,
             "created_utc": datetime.now(timezone.utc).isoformat(),
             "git_commit": commit,
             "git_dirty": dirty,
@@ -1452,11 +1991,14 @@ def provenance(args: argparse.Namespace) -> None:
                 for name, path in paths.items()
             },
             "contract": {
+                "k": k,
                 "graph_source_max_queries": 2_048,
                 "serialized_max_queries": 1,
                 "queries_per_call": 1,
+                "output_set_semantics": "distinct_valid_output_ids_v1",
                 "latency": "host API entry through synchronized GPU completion",
             },
+            "selected_provenance": selected_provenance,
         },
     )
     print(root / "provenance" / "run.json")
@@ -1491,8 +2033,21 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("--data-root", type=Path, required=True)
     command.add_argument("--exact-data-root", type=Path, required=True)
     command.add_argument("--selected-points", type=Path, required=True)
+    command.add_argument("--selected-provenance", type=Path, required=True)
     command.add_argument("--profile", type=Path)
+    command.add_argument(
+        "--k", type=int, choices=SUPPORTED_K, default=DEFAULT_K
+    )
     command.set_defaults(func=generate)
+
+    command = subparsers.add_parser("validate-contract")
+    command.add_argument("--root", type=Path, required=True)
+    command.add_argument("--selected-points", type=Path, required=True)
+    command.add_argument("--selected-provenance", type=Path, required=True)
+    command.add_argument(
+        "--k", type=int, choices=SUPPORTED_K, default=DEFAULT_K
+    )
+    command.set_defaults(func=validate_contract)
 
     command = subparsers.add_parser("list-records")
     command.add_argument("--manifest", type=Path, required=True)
@@ -1517,10 +2072,14 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("--root", type=Path, required=True)
     command.add_argument("--repo", type=Path, required=True)
     command.add_argument("--selected-points", type=Path, required=True)
+    command.add_argument("--selected-provenance", type=Path, required=True)
     command.add_argument("--profile", type=Path, required=True)
     command.add_argument("--graph-binary", type=Path, required=True)
     command.add_argument("--exact-binary", type=Path, required=True)
     command.add_argument("--libcuvs", type=Path, required=True)
+    command.add_argument(
+        "--k", type=int, choices=SUPPORTED_K, default=DEFAULT_K
+    )
     command.set_defaults(func=provenance)
     return result
 

@@ -288,7 +288,15 @@ run_exact() {
 }
 
 run_per_query_latency() {
-  is_done per_query_latency && return
+  if is_done per_query_latency; then
+    env RETRIEVE_LATENCY_K=10 RETRIEVE_LATENCY_RESULT_ROOT="${run_root}/per_query_latency" \
+      RETRIEVE_LATENCY_SELECTED_POINTS="${run_root}/matched_recall/analysis/selected_points.csv" \
+      RETRIEVE_LATENCY_SELECTED_PROVENANCE="${run_root}/matched_recall/analysis/provenance.json" \
+      RETRIEVE_LATENCY_EXACT_DATA_ROOT="${data_root}/retrieve_workshop/exact_bitmap_a100" \
+      RETRIEVE_EXACT_BENCH_BIN="${exact_bench_bin}" \
+      "${repo_dir}/benchmarks/retrieve_workshop/per_query_latency/run.sh" validate
+    return
+  fi
   test -f "${run_root}/matched_recall/analysis/selected_points.csv" || {
     echo "run matched-navix-refine before serialized latency" >&2
     exit 2
@@ -297,8 +305,9 @@ run_per_query_latency() {
     echo "run exact before serialized latency" >&2
     exit 2
   }
-  env RETRIEVE_LATENCY_RESULT_ROOT="${run_root}/per_query_latency" \
+  env RETRIEVE_LATENCY_K=10 RETRIEVE_LATENCY_RESULT_ROOT="${run_root}/per_query_latency" \
     RETRIEVE_LATENCY_SELECTED_POINTS="${run_root}/matched_recall/analysis/selected_points.csv" \
+    RETRIEVE_LATENCY_SELECTED_PROVENANCE="${run_root}/matched_recall/analysis/provenance.json" \
     RETRIEVE_LATENCY_EXACT_DATA_ROOT="${data_root}/retrieve_workshop/exact_bitmap_a100" \
     RETRIEVE_EXACT_BENCH_BIN="${exact_bench_bin}" \
     "${repo_dir}/benchmarks/retrieve_workshop/per_query_latency/run.sh" all
@@ -350,16 +359,20 @@ run_dataset_stats() {
 analyze_all() {
   env RETRIEVE_RESULT_ROOT="${run_root}/gpu_graph" \
     "${repo_dir}/benchmarks/retrieve_workshop/gpu_graph/run_gpu_graph.sh" analyze
-  env RETRIEVE_RESULT_ROOT="${run_root}/matched_recall" \
-    "${repo_dir}/benchmarks/retrieve_workshop/matched_recall/run_matched_recall.sh" analyze
+  if ! test -f "${run_root}/matched_recall/analysis/selected_points.csv" || \
+     ! test -f "${run_root}/matched_recall/analysis/provenance.json"; then
+    env RETRIEVE_RESULT_ROOT="${run_root}/matched_recall" \
+      "${repo_dir}/benchmarks/retrieve_workshop/matched_recall/run_matched_recall.sh" analyze
+  fi
   env RETRIEVE_EXACT_RESULT_ROOT="${run_root}/exact_bitmap" \
     RETRIEVE_EXACT_DATA_ROOT="${data_root}/retrieve_workshop/exact_bitmap_a100" \
     RETRIEVE_ARXIV_BITMAP_NAMESPACE=arxiv-large RETRIEVE_ARXIV_DATASET_DIR=arxiv-for-fanns-large \
     "${repo_dir}/benchmarks/retrieve_workshop/exact_bitmap/run_exact.sh" analyze
   env RETRIEVE_RESOURCE_WORK_ROOT="${run_root}/resource_work" \
     "${repo_dir}/benchmarks/retrieve_workshop/resource_work/run.sh" analyze
-  env RETRIEVE_LATENCY_RESULT_ROOT="${run_root}/per_query_latency" \
+  env RETRIEVE_LATENCY_K=10 RETRIEVE_LATENCY_RESULT_ROOT="${run_root}/per_query_latency" \
     RETRIEVE_LATENCY_SELECTED_POINTS="${run_root}/matched_recall/analysis/selected_points.csv" \
+    RETRIEVE_LATENCY_SELECTED_PROVENANCE="${run_root}/matched_recall/analysis/provenance.json" \
     RETRIEVE_LATENCY_EXACT_DATA_ROOT="${data_root}/retrieve_workshop/exact_bitmap_a100" \
     RETRIEVE_EXACT_BENCH_BIN="${exact_bench_bin}" \
     "${repo_dir}/benchmarks/retrieve_workshop/per_query_latency/run.sh" analyze

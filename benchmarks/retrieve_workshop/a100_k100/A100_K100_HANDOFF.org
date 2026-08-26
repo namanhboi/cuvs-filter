@@ -101,12 +101,15 @@ benchmarks/retrieve_workshop/a100_k100/run.sh prepare-views
 benchmarks/retrieve_workshop/a100_k100/run.sh graph
 benchmarks/retrieve_workshop/a100_k100/run.sh exact
 benchmarks/retrieve_workshop/a100_k100/run.sh matched-recall
+benchmarks/retrieve_workshop/a100_k100/run.sh latency
 benchmarks/retrieve_workshop/a100_k100/run.sh analyze
 benchmarks/retrieve_workshop/a100_k100/run.sh bundle
 #+end_src
 
 The =all= ordering is mandatory on a fresh machine.  In particular, =prepare-views= requires the
-completed YFCC top-100 manifest, and both search stages require those views.
+completed YFCC top-100 manifest, and both search stages require those views.  The serialized
+=latency= stage is deliberately separate from =all= because it executes 480,000 measured
+one-query calls.  Run it after =matched-recall= and =exact=, then rerun =bundle= to include it.
 
 * Timing and aggregation contracts
 
@@ -144,6 +147,9 @@ matched_recall/analysis/selected_points.csv
 matched_recall/analysis/matched_recall_k100_table.{csv,json}
 matched_recall/analysis/fixed_recall_k100_results.tex
 matched_recall/analysis/gpu_matched_recall_k100.{png,pdf}
+per_query_latency/analysis/latency_summary.{csv,json}
+per_query_latency/analysis/per_query_latency_samples.csv
+per_query_latency/analysis/per_query_latency_cdf.{png,pdf}
 paper_gpu_bundle_k100_matched/manifest.json
 #+end_src
 
@@ -164,6 +170,12 @@ python scripts/stage_k100_matched.py \
 
 The manuscript includes the Recall@100 table conditionally, so it continues to compile before this
 staging step.
+
+The latency summary labels every graph point as either =target_matched= or
+=maximum_reachable_recall= and labels masked cuVS Brute Force KNN as =exact_control=.  At k=100,
+YFCC Base/Retain, EMIS Base/Retain, and R Base are maximum-recall endpoints rather than matched
+target points.  Their absolute latency distributions are included, but no matched-recall speedup
+ratio is claimed for those cells.
 
 To transfer only the compact evidence, run:
 
