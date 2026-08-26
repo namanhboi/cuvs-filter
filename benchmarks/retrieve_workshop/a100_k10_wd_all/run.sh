@@ -88,7 +88,8 @@ test_gate() {
     --gtest_filter='*BitmapSeededNavixSupportsSeedCapAboveResultWidth*:*BitmapSeededNavixSupportsSeedCapBelowResultWidth*' \
     --gtest_color=no
   env MPLBACKEND=Agg "${python_bin}" "${script_dir}/test_pipeline.py"
-  env RETRIEVE_MATCHED_METHODS=default_cagra,default_cagra_accumulator,navix_reference \
+  env -u RETRIEVE_DATASET_PROFILE \
+    RETRIEVE_MATCHED_METHODS=default_cagra,default_cagra_accumulator,navix_reference \
     RETRIEVE_MATCHED_NAVIX_SEED_POLICY=k RETRIEVE_MATCHED_ALLOW_SHALLOW_NAVIX=0 \
     "${python_bin}" "${repo_dir}/benchmarks/retrieve_workshop/matched_recall/test_matched_recall.py"
 }
