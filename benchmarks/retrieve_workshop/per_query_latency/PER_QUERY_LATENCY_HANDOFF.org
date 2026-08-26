@@ -1,0 +1,120 @@
+#+title: A100 Serialized Per-Query Latency Handoff
+
+* Purpose
+
+This experiment measures the latency distribution of the paper's frozen Recall@10 operating
+points when exactly one query is submitted to each SINGLE_CTA search call.  It covers YFCC-10M and
+ArXiv-large EM, EMIS, and R for CAGRA-Base, CAGRA-Retain, CAGRA-NaviX, and masked cuVS Brute Force
+KNN.
+
+The ordinary paper throughput contract remains unchanged: 10,000 queries, shards of 2,048 (last
+shard 1,808), and =max_queries=2048=.  The serialized experiment uses =n_queries=1= and
+=max_queries=1=.  It does not change a production cuVS API or a CAGRA kernel.
+
+* Measurement contract
+
+- One query per public search call, one host thread, and SINGLE_CTA for graph methods.
+- Three complete passes over the same 10,000 queries per workload and method.
+- Each pass starts at a different point in every shard; it still visits every query exactly once.
+- 32 untimed warm-up calls and 128 empty CUDA-event timing-floor samples per configuration.
+- A sample begins immediately before the start event/search call and ends after the stop event has
+  synchronized, so it measures host API entry through GPU completion.
+- No timer-floor subtraction is performed.  The floor is reported separately.
+- Each query contributes the median of its three samples.  The table reports mean, population
+  standard deviation, nearest-rank p50/p95/p99, maximum, and serialized QPS (=1/mean latency=).
+- Predicate evaluation, bitmap creation, bitmap upload, graph construction, and dataset loading are
+  outside the measured call, matching the paper's resident-filter search contract.
+
+The masked exact method keeps the resident query bitmap and takes a zero-copy one-row view for each
+call.  Both paper datasets have bitmap row widths divisible by 32, so every row begins on a packed
+word boundary.
+
+* Correctness and regression gates
+
+Before accepting traces, the runner performs two gates:
+
+1. A 1,000-query batched-versus-serialized gate.  Graph methods must preserve the complete output
+   ID set and Recall@10; exact search may exchange legal rank-10 ties but must preserve recall.
+2. A three-repetition rerun of the twelve frozen batched graph operating points.  Recall may drift
+   by at most =1e-4= and QPS may not regress by more than 2% from the selected-point evidence.
+
+All normal filter-validity, sentinel, duplicate-output, and native squared-L2 exactness checks also
+remain active.
+
+* Run on the A100 machine
+
+Use the serialized-latency branch/commit with the same A100 profile, data root, graph indices,
+exact-control materialization, and matched-recall selected points as the paper run.  Rebuild both
+benchmark executables after switching commits; an existing top-level =.done/build= marker does not
+prove that the executable contains the new trace path.
+
+#+begin_src bash
+cd /home/ubuntu/cuvs-filter
+env PARALLEL_LEVEL=12 ./build.sh libcuvs bench-ann -n \
+  --limit-bench-ann="CUVS_CAGRA_ANN_BENCH;CUVS_BRUTE_FORCE_ANN_BENCH" \
+  --gpu-arch=80-real
+#+end_src
+
+The direct runner checks both binaries for the trace contract and fails immediately if either is
+stale.  To add latency to an existing A100 result root:
+
+#+begin_src bash
+cd /home/ubuntu/cuvs-filter
+
+export CUDA_VISIBLE_DEVICES=0
+export PYTHON="$(command -v python)"
+export RETRIEVE_DATA_ROOT=/data/retrieve_data
+export RETRIEVE_A100_RUN_ROOT=/data/retrieve_workshop_runs/a100_maxq2048_RUN_TAG
+
+benchmarks/retrieve_workshop/a100_paper/run.sh latency
+#+end_src
+
+The stage is resumable.  A complete raw JSON and its trace CSVs are validated before reuse.  If a
+record is incomplete, the runner refuses to guess; remove only the named raw file and its matching
+trace files, then rerun the command.
+
+To run the latency pipeline directly:
+
+#+begin_src bash
+export RETRIEVE_LATENCY_RESULT_ROOT="$RETRIEVE_A100_RUN_ROOT/per_query_latency"
+export RETRIEVE_LATENCY_SELECTED_POINTS="$RETRIEVE_A100_RUN_ROOT/matched_recall/analysis/selected_points.csv"
+export RETRIEVE_LATENCY_EXACT_DATA_ROOT="$RETRIEVE_DATA_ROOT/retrieve_workshop/exact_bitmap_a100"
+
+benchmarks/retrieve_workshop/per_query_latency/run.sh all
+#+end_src
+
+The complete experiment contains 480,000 measured one-query calls (360,000 graph and 120,000 exact),
+plus the small gates, warm-ups, and timer-floor samples.  Runtime therefore depends strongly on the
+frozen deep-search configurations; do not overlap it with another GPU job.
+
+* Stages
+
+#+begin_src bash
+benchmarks/retrieve_workshop/per_query_latency/run.sh configs
+benchmarks/retrieve_workshop/per_query_latency/run.sh gate
+benchmarks/retrieve_workshop/per_query_latency/run.sh throughput-gate
+benchmarks/retrieve_workshop/per_query_latency/run.sh trace
+benchmarks/retrieve_workshop/per_query_latency/run.sh analyze
+#+end_src
+
+* Outputs
+
+Under =$RETRIEVE_A100_RUN_ROOT/per_query_latency/analysis=:
+
+- =latency_summary.csv= and =latency_summary.json=: paper-ready aggregate values and validation.
+- =per_query_latency_samples.csv=: one row per workload/method/query with all three samples and the
+  per-query median.
+- =per_query_latency_cdf.png= and =per_query_latency_cdf.pdf=: four-panel latency CDF.
+- =latency_table_rows.tex=: LaTeX rows for mean/p50/p95/p99/max.
+
+The A100 paper bundle copies this analysis under =paper_gpu_bundle/per_query_latency= and records the
+separate throughput (=max_queries=2048=) and serialized-latency (=max_queries=1=) contracts.
+
+* Archive
+
+#+begin_src bash
+tar -C "$RETRIEVE_A100_RUN_ROOT" \
+  -czf "$HOME/a100_per_query_latency_results.tar.gz" \
+  per_query_latency
+sha256sum "$HOME/a100_per_query_latency_results.tar.gz"
+#+end_src

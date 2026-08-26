@@ -134,6 +134,12 @@ class cuvs_gpu : public algo<T>, public algo_gpu {
                                 float* distances,
                                 std::size_t query_offset) const final;
 
+  void search_one_query_for_latency(const T* query,
+                                    int k,
+                                    algo_base::index_type* neighbors,
+                                    float* distances,
+                                    std::size_t query_offset) const final;
+
   // to enable dataset access from GPU memory
   [[nodiscard]] auto get_preference() const -> algo_property override
   {
@@ -282,6 +288,32 @@ void cuvs_gpu<T>::search_with_query_offset(const T* queries,
   RAFT_EXPECTS(!bitmap_filter_adapter_ || query_offset == 0,
                "A brute-force query bitmap must begin at query row zero");
   search(queries, batch_size, k, neighbors, distances);
+}
+
+template <typename T>
+void cuvs_gpu<T>::search_one_query_for_latency(const T* query,
+                                               int k,
+                                               algo_base::index_type* neighbors,
+                                               float* distances,
+                                               std::size_t query_offset) const
+{
+  if (!bitmap_filter_adapter_) {
+    search_with_query_offset(query, 1, k, neighbors, distances, query_offset);
+    return;
+  }
+  RAFT_EXPECTS(query_offset < bitmap_filter_adapter_->query_rows(),
+               "Serialized exact query offset exceeds the resident bitmap");
+  auto query_view = raft::make_device_matrix_view<const T, int64_t>(query, 1, this->dim_);
+  auto neighbors_view =
+    raft::make_device_matrix_view<algo_base::index_type, int64_t>(neighbors, 1, k);
+  auto distances_view = raft::make_device_matrix_view<float, int64_t>(distances, 1, k);
+  auto row_filter =
+    bitmap_filter_adapter_->filter_rows(static_cast<std::uint32_t>(query_offset), std::uint32_t{1});
+
+  cuvs::neighbors::brute_force::search(
+    handle_, *index_, query_view, neighbors_view, distances_view, row_filter);
+  detail::normalize_bitmap_brute_force_results(
+    handle_, row_filter, neighbors, distances, 1, static_cast<std::int64_t>(index_->size()), k);
 }
 
 template <typename T>

@@ -16,8 +16,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
-#include <cstdio>
 #include <cstdint>
+#include <cstdio>
 #include <fstream>
 #include <limits>
 #include <memory>
@@ -36,6 +36,92 @@ static inline std::unique_ptr<algo_base> current_algo{nullptr};
 static inline std::unique_ptr<algo_property> current_algo_props{nullptr};
 
 using kv_series = std::vector<std::tuple<std::string, std::vector<nlohmann::json>>>;
+
+namespace detail {
+
+inline constexpr const char* kLatencyTraceFile = "benchmark_latency_trace_file";
+
+struct latency_trace_record {
+  std::string kind;
+  std::int64_t query_local_id;
+  std::int64_t query_global_id;
+  std::uint64_t call_order;
+  std::uint64_t host_latency_ns;
+};
+
+inline auto csv_escape(std::string value) -> std::string
+{
+  if (value.find_first_of(",\"\n\r") == std::string::npos) { return value; }
+  std::string escaped;
+  escaped.reserve(value.size() + 2);
+  escaped.push_back('"');
+  for (char character : value) {
+    if (character == '"') { escaped.push_back('"'); }
+    escaped.push_back(character);
+  }
+  escaped.push_back('"');
+  return escaped;
+}
+
+inline void write_latency_trace(const std::string& path,
+                                const nlohmann::json& params,
+                                std::uint32_t k,
+                                const std::vector<latency_trace_record>& records)
+{
+  make_sure_parent_dir_exists(path);
+  const auto temporary = path + ".tmp." + std::to_string(::getpid());
+  std::ofstream output{temporary, std::ios::trunc};
+  if (!output) { throw std::runtime_error("failed to open latency trace: " + temporary); }
+  output << "schema_version,record_kind,workload,method,repetition,shard_index,"
+            "query_local_id,query_global_id,call_order,host_latency_ns,itopk,search_width,"
+            "max_iterations,max_queries,k\n";
+  const auto workload     = csv_escape(params.at("benchmark_latency_workload").get<std::string>());
+  const auto method       = csv_escape(params.at("benchmark_latency_method").get<std::string>());
+  const auto repetition   = params.at("benchmark_latency_repetition").get<std::uint32_t>();
+  const auto shard        = params.at("benchmark_latency_shard_index").get<std::uint32_t>();
+  const auto itopk        = params.value("itopk", 0);
+  const auto search_width = params.value("search_width", 0);
+  const auto max_iterations = params.value("max_iterations", 0);
+  const auto max_queries    = params.value("max_queries", 0);
+  for (const auto& record : records) {
+    output << "1," << record.kind << ',' << workload << ',' << method << ',' << repetition << ','
+           << shard << ',' << record.query_local_id << ',' << record.query_global_id << ','
+           << record.call_order << ',' << record.host_latency_ns << ',' << itopk << ','
+           << search_width << ',' << max_iterations << ',' << max_queries << ',' << k << '\n';
+  }
+  output.close();
+  if (!output) {
+    std::remove(temporary.c_str());
+    throw std::runtime_error("failed to write latency trace: " + temporary);
+  }
+  if (std::rename(temporary.c_str(), path.c_str()) != 0) {
+    std::remove(temporary.c_str());
+    throw std::runtime_error("failed to publish latency trace: " + path);
+  }
+}
+
+inline void erase_latency_trace_labels(nlohmann::json& params)
+{
+  static constexpr const char* keys[] = {
+    "benchmark_latency_trace_file",
+    "benchmark_latency_workload",
+    "benchmark_latency_method",
+    "benchmark_latency_repetition",
+    "benchmark_latency_shard_index",
+    "benchmark_latency_global_query_offset",
+    "benchmark_latency_start_query",
+    "benchmark_latency_warmup_queries",
+    "benchmark_latency_timer_floor_samples",
+    "benchmark_latency_reference_recall",
+    "benchmark_latency_target_recall",
+    "benchmark_latency_source_max_queries",
+  };
+  for (const auto* key : keys) {
+    params.erase(key);
+  }
+}
+
+}  // namespace detail
 
 inline auto apply_overrides(const std::vector<nlohmann::json>& configs,
                             const kv_series& overrides,
@@ -191,8 +277,19 @@ void bench_search(::benchmark::State& state,
 
   const auto& sp_json                  = index.search_params[search_param_ix];
   const bool validate_native_l2_cutoff = sp_json.value("native_l2_cutoff_validation", false);
+  const bool latency_trace             = sp_json.contains(detail::kLatencyTraceFile) &&
+                             !sp_json.at(detail::kLatencyTraceFile).get<std::string>().empty();
 
-  if (state.thread_index() == 0) { dump_parameters(state, sp_json); }
+  if (state.thread_index() == 0) {
+    if (latency_trace) {
+      auto visible_params = sp_json;
+      detail::erase_latency_trace_labels(visible_params);
+      visible_params["serialized_latency_trace"] = true;
+      dump_parameters(state, std::move(visible_params));
+    } else {
+      dump_parameters(state, sp_json);
+    }
+  }
 
   // NB: `k` and `n_queries` are guaranteed to be populated in conf.cpp
   const std::uint32_t k = sp_json["k"];
@@ -208,10 +305,25 @@ void bench_search(::benchmark::State& state,
     state.SkipWithError(msg.str());
     return;
   }
+  if (latency_trace && (state.threads() != 1 || n_queries != 1 || no_lap_sync ||
+                        sp_json.value("max_queries", 0) != 1)) {
+    state.SkipWithError(
+      "Serialized latency tracing requires one thread, n_queries=1, max_queries=1, and lap sync");
+    return;
+  }
+  const auto latency_start_query =
+    latency_trace ? sp_json.value<std::size_t>("benchmark_latency_start_query", 0) : 0;
+  if (latency_trace && latency_start_query >= query_set_size) {
+    state.SkipWithError("Serialized latency start query exceeds the benchmark shard");
+    return;
+  }
 
   // Each thread start from a different offset, so that the queries that they process do not
   // overlap.
-  std::ptrdiff_t batch_offset   = (state.thread_index() * n_queries) % query_set_size;
+  const std::ptrdiff_t initial_batch_offset =
+    latency_trace ? static_cast<std::ptrdiff_t>(latency_start_query)
+                  : (state.thread_index() * n_queries) % query_set_size;
+  std::ptrdiff_t batch_offset   = initial_batch_offset;
   std::ptrdiff_t queries_stride = state.threads() * n_queries;
   // Output is saved into a contiguous buffer (separate buffers for each thread).
   std::ptrdiff_t out_offset = 0;
@@ -309,41 +421,139 @@ void bench_search(::benchmark::State& state,
       state.SkipWithError("Algo::copy: " + std::string(e.what()));
       return;
     }
-    // Initialize with algo, so that the timer.lap() object can sync with algo::get_sync_stream()
-    cuda_timer gpu_timer{a};
-    auto start = std::chrono::high_resolution_clock::now();
-    {
-      /* See the note above: GPU timing */
-      [[maybe_unused]] auto gpu_all = gpu_timer.lap(no_lap_sync);
+    if (latency_trace) {
+      // This deliberately lives in a separate benchmark-only path. The ordinary QPS loop below
+      // retains its exact control flow and therefore pays no per-call tracing branch or clock-read
+      // overhead. Each measured call is surrounded by the same CUDA-event synchronization used by
+      // the existing latency mode, so host_latency_ns spans API entry through GPU completion.
+      std::vector<detail::latency_trace_record> trace_records;
+      const auto timer_floor_samples =
+        sp_json.value<std::uint32_t>("benchmark_latency_timer_floor_samples", 128);
+      const auto warmup_queries =
+        sp_json.value<std::uint32_t>("benchmark_latency_warmup_queries", 32);
+      trace_records.reserve(query_set_size + timer_floor_samples);
+
+      cuda_timer floor_timer{a};
+      if (!floor_timer.active()) {
+        state.SkipWithError("Serialized latency tracing requires a GPU synchronization stream");
+        return;
+      }
+      for (std::uint32_t sample = 0; sample < timer_floor_samples; ++sample) {
+        auto gpu_lap          = floor_timer.lap(true);
+        const auto host_start = std::chrono::steady_clock::now();
+        gpu_lap.reset();
+        const auto host_end = std::chrono::steady_clock::now();
+        const auto elapsed =
+          std::chrono::duration_cast<std::chrono::nanoseconds>(host_end - host_start).count();
+        trace_records.push_back(
+          {"timer_floor", -1, -1, sample, static_cast<std::uint64_t>(elapsed)});
+      }
+
+      // Warm up the selected configuration and one-query bitmap path without entering Google
+      // Benchmark's measured iteration range or the emitted query distribution.
+      cuda_timer warmup_timer{a};
+      for (std::uint32_t warmup = 0; warmup < warmup_queries; ++warmup) {
+        const auto query_id = (latency_start_query + warmup) % query_set_size;
+        try {
+          [[maybe_unused]] auto gpu_lap = warmup_timer.lap(true);
+          a->search_one_query_for_latency(
+            query_set + query_id * dataset->dim(), k, neighbors_ptr, distances_ptr, query_id);
+        } catch (const std::exception& error) {
+          state.SkipWithError("Serialized latency warmup: " + std::string(error.what()));
+          return;
+        }
+      }
+
+      cuda_timer gpu_timer{a};
+      std::uint64_t measured_host_ns = 0;
+      const auto global_query_offset =
+        sp_json.value<std::uint64_t>("benchmark_latency_global_query_offset", 0);
       for (auto _ : state) {
         [[maybe_unused]] auto ntx_lap = nvtx.lap();
-        [[maybe_unused]] auto gpu_lap = gpu_timer.lap(!no_lap_sync);
+        const auto query_id           = static_cast<std::size_t>(batch_offset);
+        auto gpu_lap                  = gpu_timer.lap(true);
+        const auto host_start         = std::chrono::steady_clock::now();
         try {
-          a->search_with_query_offset(query_set + batch_offset * dataset->dim(),
-                                      n_queries,
-                                      k,
-                                      neighbors_ptr + out_offset * k,
-                                      distances_ptr + out_offset * k,
-                                      static_cast<std::size_t>(batch_offset));
-        } catch (const std::exception& e) {
-          state.SkipWithError("Benchmark loop: " + std::string(e.what()));
+          a->search_one_query_for_latency(query_set + query_id * dataset->dim(),
+                                          k,
+                                          neighbors_ptr + out_offset * k,
+                                          distances_ptr + out_offset * k,
+                                          query_id);
+          gpu_lap.reset();
+        } catch (const std::exception& error) {
+          state.SkipWithError("Serialized latency loop: " + std::string(error.what()));
           break;
         }
+        const auto host_end = std::chrono::steady_clock::now();
+        const auto elapsed =
+          std::chrono::duration_cast<std::chrono::nanoseconds>(host_end - host_start).count();
+        const auto elapsed_ns = static_cast<std::uint64_t>(elapsed);
+        measured_host_ns += elapsed_ns;
+        trace_records.push_back({"query",
+                                 static_cast<std::int64_t>(query_id),
+                                 static_cast<std::int64_t>(global_query_offset + query_id),
+                                 queries_processed,
+                                 elapsed_ns});
 
-        // advance to the next batch
-        batch_offset = (batch_offset + queries_stride) % query_set_size;
-        out_offset   = (out_offset + n_queries) % query_set_size;
-
-        queries_processed += n_queries;
+        batch_offset = (batch_offset + 1) % query_set_size;
+        out_offset   = (out_offset + 1) % query_set_size;
+        ++queries_processed;
       }
-    }
-    auto end      = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
-    if (state.thread_index() == 0) { state.counters.insert({{"end_to_end", duration}}); }
-    state.counters.insert({"Latency", {duration, benchmark::Counter::kAvgIterations}});
 
-    if (gpu_timer.active()) {
-      state.counters.insert({"GPU", {gpu_timer.total_time(), benchmark::Counter::kAvgIterations}});
+      const auto duration = static_cast<double>(measured_host_ns) / 1.0e9;
+      if (state.thread_index() == 0) { state.counters.insert({{"end_to_end", duration}}); }
+      state.counters.insert({"Latency", {duration, benchmark::Counter::kAvgIterations}});
+      if (gpu_timer.active()) {
+        state.counters.insert(
+          {"GPU", {gpu_timer.total_time(), benchmark::Counter::kAvgIterations}});
+      }
+      if (!state.skipped()) {
+        try {
+          detail::write_latency_trace(
+            sp_json.at(detail::kLatencyTraceFile).get<std::string>(), sp_json, k, trace_records);
+        } catch (const std::exception& error) {
+          state.SkipWithError("Serialized latency trace: " + std::string(error.what()));
+        }
+      }
+    } else {
+      // Initialize with algo, so that the timer.lap() object can sync with algo::get_sync_stream()
+      cuda_timer gpu_timer{a};
+      auto start = std::chrono::high_resolution_clock::now();
+      {
+        /* See the note above: GPU timing */
+        [[maybe_unused]] auto gpu_all = gpu_timer.lap(no_lap_sync);
+        for (auto _ : state) {
+          [[maybe_unused]] auto ntx_lap = nvtx.lap();
+          [[maybe_unused]] auto gpu_lap = gpu_timer.lap(!no_lap_sync);
+          try {
+            a->search_with_query_offset(query_set + batch_offset * dataset->dim(),
+                                        n_queries,
+                                        k,
+                                        neighbors_ptr + out_offset * k,
+                                        distances_ptr + out_offset * k,
+                                        static_cast<std::size_t>(batch_offset));
+          } catch (const std::exception& e) {
+            state.SkipWithError("Benchmark loop: " + std::string(e.what()));
+            break;
+          }
+
+          // advance to the next batch
+          batch_offset = (batch_offset + queries_stride) % query_set_size;
+          out_offset   = (out_offset + n_queries) % query_set_size;
+
+          queries_processed += n_queries;
+        }
+      }
+      auto end = std::chrono::high_resolution_clock::now();
+      auto duration =
+        std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
+      if (state.thread_index() == 0) { state.counters.insert({{"end_to_end", duration}}); }
+      state.counters.insert({"Latency", {duration, benchmark::Counter::kAvgIterations}});
+
+      if (gpu_timer.active()) {
+        state.counters.insert(
+          {"GPU", {gpu_timer.total_time(), benchmark::Counter::kAvgIterations}});
+      }
     }
   }
 
@@ -360,10 +570,13 @@ void bench_search(::benchmark::State& state,
   // for YFCC-10M.  No library API or algorithm result path depends on this option.
   if (sp_json.contains("benchmark_output_neighbors_file")) {
     const auto output_file = sp_json.at("benchmark_output_neighbors_file").get<std::string>();
-    if (state.threads() != 1 || state.thread_index() != 0 || n_queries != query_set_size ||
+    const bool complete_serial_trace =
+      latency_trace && initial_batch_offset == 0 && queries_processed == query_set_size;
+    if (state.threads() != 1 || state.thread_index() != 0 ||
+        (!complete_serial_trace && n_queries != query_set_size) ||
         queries_processed < query_set_size) {
       state.SkipWithError(
-        "benchmark_output_neighbors_file requires one thread and one full-query batch");
+        "benchmark_output_neighbors_file requires one thread and one complete query-set pass");
       return;
     }
     result_buf.transfer_data(MemoryType::kHost, current_algo_props->query_memory_type);
@@ -383,10 +596,8 @@ void bench_search(::benchmark::State& state,
       for (std::size_t position = 0; position < query_set_size * k; ++position) {
         const auto candidate = neighbors_host[position];
         const auto serialized =
-          candidate >= 0 &&
-              static_cast<std::uint64_t>(candidate) < dataset->base_set_size() &&
-              static_cast<std::uint64_t>(candidate) <=
-                std::numeric_limits<std::uint32_t>::max()
+          candidate >= 0 && static_cast<std::uint64_t>(candidate) < dataset->base_set_size() &&
+              static_cast<std::uint64_t>(candidate) <= std::numeric_limits<std::uint32_t>::max()
             ? static_cast<std::uint32_t>(candidate)
             : std::numeric_limits<std::uint32_t>::max();
         output.write(reinterpret_cast<const char*>(&serialized), sizeof(serialized));
@@ -497,7 +708,7 @@ void bench_search(::benchmark::State& state,
 
     // We go through the groundtruth with same stride as the benchmark loop.
     size_t out_offset   = 0;
-    size_t batch_offset = (state.thread_index() * n_queries) % query_set_size;
+    size_t batch_offset = static_cast<std::size_t>(initial_batch_offset);
     // Avoid CPU oversubscription when parallelizing recall calculation loop
     int num_recall_calculation_worker_threads =
       std::thread::hardware_concurrency() / benchmark_n_threads - 1;  // -1 for the main thread
@@ -832,6 +1043,15 @@ void register_search(std::shared_ptr<const dataset<T>> dataset,
                    */
                   ->MeasureProcessCPUTime()
                   ->UseRealTime();
+
+      const bool latency_trace =
+        index.search_params[i].contains(detail::kLatencyTraceFile) &&
+        !index.search_params[i].at(detail::kLatencyTraceFile).get<std::string>().empty();
+      if (latency_trace) {
+        // Exactly one serialized API call per query. This avoids Google Benchmark dynamically
+        // choosing a cumulative runtime and gives every query exactly one sample per trace pass.
+        b->Iterations(dataset->query_set_size());
+      }
 
       if (metric_objective == Mode::kThroughput) { b->ThreadRange(threads[0], threads[1]); }
     }

@@ -465,6 +465,7 @@ class A100PipelineTest(unittest.TestCase):
                 root / "resource_work/analysis",
                 root / "mechanism_diagnostics/analysis",
                 root / "maxq_gate/analysis",
+                root / "per_query_latency/analysis",
                 root / "dataset_stats",
                 root / "provenance",
                 root / "gpu_graph/provenance",
@@ -472,6 +473,7 @@ class A100PipelineTest(unittest.TestCase):
                 root / "resource_work/provenance",
                 root / "mechanism_diagnostics/provenance",
                 root / "maxq_gate/provenance",
+                root / "per_query_latency/provenance",
             ):
                 directory.mkdir(parents=True)
 
@@ -555,6 +557,27 @@ class A100PipelineTest(unittest.TestCase):
                 )
                 + "\n"
             )
+            (root / "per_query_latency/analysis/latency_summary.csv").write_text(
+                "workload,method,mean_us,p50_us,p95_us,p99_us\n"
+                "yfcc,default_cagra,100,90,150,200\n"
+            )
+            (root / "per_query_latency/analysis/latency_summary.json").write_text(
+                json.dumps(
+                    {
+                        "status": "PASS",
+                        "measurement_contract": {
+                            "source_max_queries": 2_048,
+                            "serialized_max_queries": 1,
+                            "queries_per_search_call": 1,
+                            "complete_passes": 3,
+                        },
+                    }
+                )
+                + "\n"
+            )
+            (root / "per_query_latency/analysis/per_query_latency_cdf.pdf").write_bytes(
+                b"fixture"
+            )
             for path in (
                 root / "dataset_stats/workload_selectivity_summary.json",
                 root / "provenance/a100_preflight.json",
@@ -572,12 +595,34 @@ class A100PipelineTest(unittest.TestCase):
             (root / "resource_work/provenance/run.json").write_text(
                 json.dumps({"contract": {"max_queries": 2_048}}) + "\n"
             )
+            (root / "per_query_latency/provenance/run.json").write_text(
+                json.dumps(
+                    {
+                        "contract": {
+                            "graph_source_max_queries": 2_048,
+                            "serialized_max_queries": 1,
+                            "queries_per_call": 1,
+                        }
+                    }
+                )
+                + "\n"
+            )
             profile = json.loads(
                 (SCRIPT_DIR / "profiles/a100_yfcc10m_arxiv_large.json").read_text()
             )
             observed, contracts = validate_max_queries_contract(root, profile)
             self.assertEqual(observed, 2_048)
-            self.assertEqual(len(contracts), 5)
+            self.assertEqual(len(contracts), 6)
+            latency_summary_path = (
+                root / "per_query_latency/analysis/latency_summary.json"
+            )
+            latency_summary = json.loads(latency_summary_path.read_text())
+            latency_summary_path.write_text(
+                json.dumps({**latency_summary, "status": "FAIL"}) + "\n"
+            )
+            with self.assertRaisesRegex(ValueError, "serialized-latency"):
+                validate_max_queries_contract(root, profile)
+            latency_summary_path.write_text(json.dumps(latency_summary) + "\n")
             (root / "mechanism_diagnostics/provenance/run.json").write_text(
                 json.dumps({"fixed_contract": {"max_queries": 1_024}}) + "\n"
             )
@@ -604,9 +649,18 @@ class A100PipelineTest(unittest.TestCase):
             self.assertEqual(
                 manifest["execution_contract"]["max_queries"], 2_048
             )
+            self.assertEqual(
+                manifest["execution_contract"]["serialized_latency"]["max_queries"], 1
+            )
             self.assertGreater(len(manifest["files"]), 8)
             self.assertTrue(
                 (root / "paper_gpu_bundle/gpu_qps_recall_a100.pdf").is_file()
+            )
+            self.assertTrue(
+                (
+                    root
+                    / "paper_gpu_bundle/per_query_latency/per_query_latency_cdf.pdf"
+                ).is_file()
             )
             original_manifest_hash = (
                 root / "paper_gpu_bundle/manifest.json"

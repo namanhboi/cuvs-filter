@@ -11,6 +11,7 @@ run_root=${RETRIEVE_A100_RUN_ROOT:-/home/ubuntu/retrieve_workshop_runs/a100_gpu_
 raw_arxiv=${RETRIEVE_ARXIV_LARGE_RAW:-"${data_root}/arxiv-for-fanns-large"}
 yfcc_source=${RETRIEVE_YFCC_SOURCE:-}
 bench_bin=${RETRIEVE_BENCH_BIN:-"${repo_dir}/cpp/build/bench/ann/CUVS_CAGRA_ANN_BENCH"}
+exact_bench_bin=${RETRIEVE_EXACT_BENCH_BIN:-"${repo_dir}/cpp/build/bench/ann/CUVS_BRUTE_FORCE_ANN_BENCH"}
 libcuvs=${RETRIEVE_LIBCUVS:-"${repo_dir}/cpp/build/libcuvs.so"}
 stage=${1:-all}
 minimum_free_gib=${RETRIEVE_MINIMUM_FREE_GIB:-350}
@@ -89,7 +90,7 @@ build_binaries() {
       --limit-tests=NEIGHBORS_ANN_CAGRA_FILTER_BITMAP_TEST \
       --limit-bench-ann="CUVS_CAGRA_ANN_BENCH;CUVS_BRUTE_FORCE_ANN_BENCH" \
       --gpu-arch=80-real)
-  test -x "${bench_bin}" && test -f "${libcuvs}"
+  test -x "${bench_bin}" && test -x "${exact_bench_bin}" && test -f "${libcuvs}"
   mark_done build
 }
 
@@ -106,6 +107,8 @@ test_gate() {
     "${python_bin}" "${repo_dir}/benchmarks/retrieve_workshop/matched_recall/test_matched_recall.py"
   env -u RETRIEVE_DATASET_PROFILE MPLBACKEND=Agg \
     "${python_bin}" "${repo_dir}/benchmarks/retrieve_workshop/exact_bitmap/test_pipeline.py"
+  env -u RETRIEVE_DATASET_PROFILE MPLBACKEND=Agg \
+    "${python_bin}" "${repo_dir}/benchmarks/retrieve_workshop/per_query_latency/test_pipeline.py"
   MPLBACKEND=Agg "${python_bin}" "${script_dir}/test_pipeline.py"
   mark_done test
 }
@@ -284,6 +287,24 @@ run_exact() {
   mark_done exact
 }
 
+run_per_query_latency() {
+  is_done per_query_latency && return
+  test -f "${run_root}/matched_recall/analysis/selected_points.csv" || {
+    echo "run matched-navix-refine before serialized latency" >&2
+    exit 2
+  }
+  test -f "${data_root}/retrieve_workshop/exact_bitmap_a100/arxiv-large/em/throughput_10000/manifest.json" || {
+    echo "run exact before serialized latency" >&2
+    exit 2
+  }
+  env RETRIEVE_LATENCY_RESULT_ROOT="${run_root}/per_query_latency" \
+    RETRIEVE_LATENCY_SELECTED_POINTS="${run_root}/matched_recall/analysis/selected_points.csv" \
+    RETRIEVE_LATENCY_EXACT_DATA_ROOT="${data_root}/retrieve_workshop/exact_bitmap_a100" \
+    RETRIEVE_EXACT_BENCH_BIN="${exact_bench_bin}" \
+    "${repo_dir}/benchmarks/retrieve_workshop/per_query_latency/run.sh" all
+  mark_done per_query_latency
+}
+
 run_resource() {
   is_done resource && return
   env RETRIEVE_RESOURCE_WORK_ROOT="${run_root}/resource_work" \
@@ -337,6 +358,11 @@ analyze_all() {
     "${repo_dir}/benchmarks/retrieve_workshop/exact_bitmap/run_exact.sh" analyze
   env RETRIEVE_RESOURCE_WORK_ROOT="${run_root}/resource_work" \
     "${repo_dir}/benchmarks/retrieve_workshop/resource_work/run.sh" analyze
+  env RETRIEVE_LATENCY_RESULT_ROOT="${run_root}/per_query_latency" \
+    RETRIEVE_LATENCY_SELECTED_POINTS="${run_root}/matched_recall/analysis/selected_points.csv" \
+    RETRIEVE_LATENCY_EXACT_DATA_ROOT="${data_root}/retrieve_workshop/exact_bitmap_a100" \
+    RETRIEVE_EXACT_BENCH_BIN="${exact_bench_bin}" \
+    "${repo_dir}/benchmarks/retrieve_workshop/per_query_latency/run.sh" analyze
 }
 
 bundle() {
@@ -369,6 +395,7 @@ case "${stage}" in
   matched-recall) run_matched ;;
   matched-navix-refine) run_matched_navix_refinement ;;
   exact) run_exact ;;
+  latency) run_per_query_latency ;;
   resource-work) run_resource ;;
   diagnostics) run_mechanism_diagnostics ;;
   dataset-stats) run_dataset_stats ;;
@@ -387,6 +414,7 @@ case "${stage}" in
     run_matched
     run_matched_navix_refinement
     run_exact
+    run_per_query_latency
     run_resource
     run_mechanism_diagnostics
     run_dataset_stats
@@ -394,7 +422,7 @@ case "${stage}" in
     bundle
     ;;
   *)
-    echo "usage: $0 {preflight|download-arxiv|build|test|prepare|build-graphs|maxq-gate|correctness|b0|matched-recall|matched-navix-refine|exact|resource-work|diagnostics|dataset-stats|analyze|bundle|bundle-navix-refined|all}" >&2
+    echo "usage: $0 {preflight|download-arxiv|build|test|prepare|build-graphs|maxq-gate|correctness|b0|matched-recall|matched-navix-refine|exact|latency|resource-work|diagnostics|dataset-stats|analyze|bundle|bundle-navix-refined|all}" >&2
     exit 2
     ;;
 esac

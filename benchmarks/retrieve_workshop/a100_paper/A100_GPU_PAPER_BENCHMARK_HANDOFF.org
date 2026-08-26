@@ -158,10 +158,12 @@ The stages execute serially and never overlap graph construction, exact scan, or
 10. =matched-navix-refine=: exhaustive below-=L32= B0 calibration for EM/R NaviX, followed by
     fresh three-run finalists strictly inside =[0.950,0.952]=;
 11. =exact=: resident-bitmap cuVS exhaustive scan, one correctness and three throughput repetitions;
-12. =resource-work=: =L=64,W=1,B0= untimed schema-9 counters and production kernel resources;
-13. =diagnostics=: YFCC =L=512,W=2,B0= retention and NaviX B0/deep schema-9 mechanism captures;
-14. =dataset-stats=: exact popcounts over all 10,000 bitmap rows;
-15. =analyze= and =bundle=: strict correctness checks, figures, tables, hashes, and claim mapping.
+12. =latency=: three serialized one-query passes for the frozen graph points and masked exact
+    control, including batch-equivalence and ordinary-QPS regression gates;
+13. =resource-work=: =L=64,W=1,B0= untimed schema-9 counters and production kernel resources;
+14. =diagnostics=: YFCC =L=512,W=2,B0= retention and NaviX B0/deep schema-9 mechanism captures;
+15. =dataset-stats=: exact popcounts over all 10,000 bitmap rows;
+16. =analyze= and =bundle=: strict correctness checks, figures, tables, hashes, and claim mapping.
 
 The total duration depends heavily on Brev storage and graph build.  Budget several hours to a day,
 not minutes.  The calibration stage is intentionally data-dependent.  Twelve vCPUs primarily slow
@@ -184,6 +186,7 @@ benchmarks/retrieve_workshop/a100_paper/run.sh b0
 benchmarks/retrieve_workshop/a100_paper/run.sh matched-recall
 benchmarks/retrieve_workshop/a100_paper/run.sh matched-navix-refine
 benchmarks/retrieve_workshop/a100_paper/run.sh exact
+benchmarks/retrieve_workshop/a100_paper/run.sh latency
 benchmarks/retrieve_workshop/a100_paper/run.sh resource-work
 benchmarks/retrieve_workshop/a100_paper/run.sh diagnostics
 benchmarks/retrieve_workshop/a100_paper/run.sh dataset-stats
@@ -264,6 +267,12 @@ scheduling; per-CTA frontier and candidate state remain determined by =L=, =W=, 
 the selected kernel.  The =maxq-gate= records both correctness and QPS sensitivity at 512, 1,024,
 and 2,048 before production data are collected.
 
+The separate latency experiment submits exactly one query per synchronized SINGLE_CTA search call
+with =max_queries=1=.  It reports the distribution of per-query medians over three complete passes;
+this serialized contract is not mixed with the 10,000-query throughput measurements.  Full timing,
+gate, and resumption details are in
+=benchmarks/retrieve_workshop/per_query_latency/PER_QUERY_LATENCY_HANDOFF.org=.
+
 The exact point times bitmap counting, query norms, sparse/dense masked distance work, top-k,
 sentinel normalization, and temporary device allocation/deallocation.  Predicate evaluation,
 bitmap creation/upload, and YFCC u8-to-f32 conversion are outside timed search.  A shared input hash
@@ -305,8 +314,9 @@ Do not use a result if any of these checks fails:
   distance-eligible candidates for accumulator admission, and the summary reports that extra work;
 - a diagnostic manifest reports =timing_valid=true= (diagnostics are never throughput evidence);
 - GPU UUID, binary/library hash, data root, profile hash, or Git commit changes within a run;
-- any generated config, raw label, resource/diagnostic analysis, or provenance record reports a
-  =max_queries= value other than 2,048;
+- any throughput config, raw label, resource/diagnostic analysis, or provenance record reports a
+  =max_queries= value other than 2,048, or any serialized-latency record reports a value other
+  than 1;
 - the final workload uses a different shard set across methods.
 
 The benchmark deliberately tolerates Base duplicate outputs only as a measured correctness field;
@@ -337,6 +347,8 @@ Important files are:
 - =mechanism_diagnostics/mechanism_summary.json=;
 - =maxq_gate/max_queries_gate_{points.csv,summary.json}=;
 - =dataset_stats/workload_selectivity_summary.json=;
+- =per_query_latency/latency_summary.{csv,json}=, =per_query_latency_cdf.{pdf,png}=, and
+  =latency_table_rows.tex=;
 - =claim_to_source.json=: which file supports each GPU claim;
 - =manifest.json=: byte size and SHA-256 of every bundled input/output.
 
@@ -363,6 +375,7 @@ MPLBACKEND=Agg ${PYTHON} benchmarks/retrieve_workshop/a100_paper/test_pipeline.p
 MPLBACKEND=Agg ${PYTHON} benchmarks/retrieve_workshop/gpu_graph/test_pipeline.py
 MPLBACKEND=Agg ${PYTHON} benchmarks/retrieve_workshop/matched_recall/test_matched_recall.py
 MPLBACKEND=Agg ${PYTHON} benchmarks/retrieve_workshop/exact_bitmap/test_pipeline.py
+MPLBACKEND=Agg ${PYTHON} benchmarks/retrieve_workshop/per_query_latency/test_pipeline.py
 bash -n benchmarks/retrieve_workshop/a100_paper/run.sh
 git diff --check
 #+end_src

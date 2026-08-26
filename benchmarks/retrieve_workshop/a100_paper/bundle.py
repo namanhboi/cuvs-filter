@@ -59,6 +59,7 @@ def validate_max_queries_contract(root: Path, profile: dict) -> tuple[int, list[
         root / "resource_work/provenance/run.json",
         root / "mechanism_diagnostics/provenance/run.json",
         root / "maxq_gate/provenance/run.json",
+        root / "per_query_latency/provenance/run.json",
     ]
     observed = (
         int(json_payload(contracts[0])["fixed_contract"]["max_queries"]),
@@ -69,12 +70,20 @@ def validate_max_queries_contract(root: Path, profile: dict) -> tuple[int, list[
     )
     if any(value != expected for value in observed):
         raise ValueError(f"mixed max_queries contracts in A100 run: {observed}")
+    latency_contract = json_payload(contracts[5])["contract"]
+    if (
+        int(latency_contract["graph_source_max_queries"]) != expected
+        or int(latency_contract["serialized_max_queries"]) != 1
+        or int(latency_contract["queries_per_call"]) != 1
+    ):
+        raise ValueError(f"invalid serialized-latency contract: {latency_contract}")
     resource = json_payload(root / "resource_work/analysis/gpu_resource_work.json")
     mechanism = json_payload(
         root / "mechanism_diagnostics/analysis/mechanism_summary.json"
     )
     gpu_analysis = json_payload(root / "gpu_graph/analysis/provenance.json")
     matched_analysis = json_payload(root / "matched_recall/analysis/provenance.json")
+    latency_summary = json_payload(root / "per_query_latency/analysis/latency_summary.json")
     if (
         int(resource["configuration"]["max_queries"]) != expected
         or int(mechanism["max_queries"]) != expected
@@ -82,6 +91,15 @@ def validate_max_queries_contract(root: Path, profile: dict) -> tuple[int, list[
         or int(matched_analysis["max_queries"]) != expected
     ):
         raise ValueError("analyzed evidence uses the wrong max_queries")
+    latency_measurement = latency_summary.get("measurement_contract", {})
+    if (
+        latency_summary.get("status") != "PASS"
+        or int(latency_measurement.get("source_max_queries", 0)) != expected
+        or int(latency_measurement.get("serialized_max_queries", 0)) != 1
+        or int(latency_measurement.get("queries_per_search_call", 0)) != 1
+        or int(latency_measurement.get("complete_passes", 0)) != 3
+    ):
+        raise ValueError("serialized-latency analysis did not pass its frozen contract")
     return expected, contracts
 
 
@@ -276,6 +294,7 @@ def main() -> None:
         "dataset_stats": root / "dataset_stats",
         "maxq_gate": root / "maxq_gate" / "analysis",
         "preflight": root / "provenance",
+        "per_query_latency": root / "per_query_latency" / "analysis",
     }
     required = (
         inputs["b0"] / "summary_points.csv",
@@ -286,6 +305,9 @@ def main() -> None:
         inputs["dataset_stats"] / "workload_selectivity_summary.json",
         inputs["maxq_gate"] / "max_queries_gate_summary.json",
         inputs["preflight"] / "a100_preflight.json",
+        inputs["per_query_latency"] / "latency_summary.csv",
+        inputs["per_query_latency"] / "latency_summary.json",
+        inputs["per_query_latency"] / "per_query_latency_cdf.pdf",
     )
     missing = [str(path) for path in required if not path.is_file()]
     if missing:
@@ -339,6 +361,7 @@ def main() -> None:
         "workload_cardinality_and_selectivity": "dataset_stats/workload_selectivity_summary.json",
         "max_queries_2048_memory_and_scheduling_gate": "maxq_gate/max_queries_gate_summary.json",
         "hardware_and_run_identity": "preflight/a100_preflight.json",
+        "serialized_single_query_latency": "per_query_latency/latency_summary.csv",
     }
     (output / "claim_to_source.json").write_text(
         json.dumps(claims, indent=2) + "\n"
@@ -351,6 +374,16 @@ def main() -> None:
         "execution_contract": {
             "max_queries": max_queries,
             "throughput_shards": [2048, 2048, 2048, 2048, 1808],
+            "throughput": {
+                "max_queries": max_queries,
+                "shards": [2048, 2048, 2048, 2048, 1808],
+            },
+            "serialized_latency": {
+                "max_queries": 1,
+                "queries_per_search_call": 1,
+                "complete_passes": 3,
+                "latency": "host API entry through synchronized GPU completion",
+            },
         },
         "run_root": str(root),
         "files": [

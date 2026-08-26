@@ -158,6 +158,22 @@ class algo : public algo_base {
     search(queries, batch_size, k, neighbors, distances);
   }
 
+  /**
+   * Benchmark-only serialized-latency entry point.
+   *
+   * The ordinary benchmark path never calls this hook. Algorithms whose normal query-dependent
+   * filter representation cannot be sliced to one row (currently the resident-bitmap brute-force
+   * control) may override it without adding a branch to their production throughput path.
+   */
+  virtual void search_one_query_for_latency(const T* query,
+                                            int k,
+                                            algo_base::index_type* neighbors,
+                                            float* distances,
+                                            std::size_t query_offset) const
+  {
+    search_with_query_offset(query, 1, k, neighbors, distances, query_offset);
+  }
+
   virtual void save(const std::string& file) const = 0;
   virtual void load(const std::string& file)       = 0;
 

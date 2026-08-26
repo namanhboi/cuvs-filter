@@ -88,6 +88,27 @@ class bitmap_filter_adapter {
     return cuvs::neighbors::filtering::bitmap_filter<std::uint32_t, std::int64_t>(view);
   }
 
+  /**
+   * Return a zero-copy row slice for benchmark-only serialized exact search.
+   *
+   * RAFT bitmap views do not carry a bit offset, so the first selected bit must begin at a word
+   * boundary. The RETRIEVE YFCC-10M and ArXiv-large bitmap widths both satisfy this contract.
+   */
+  [[nodiscard]] auto filter_rows(std::uint32_t query_offset, std::uint32_t query_count) const
+    -> cuvs::neighbors::filtering::bitmap_filter<std::uint32_t, std::int64_t>
+  {
+    RAFT_EXPECTS(query_count > 0, "A bitmap row slice must contain at least one query");
+    RAFT_EXPECTS(static_cast<std::uint64_t>(query_offset) + query_count <= rows_,
+                 "A bitmap row slice exceeds the resident query bitmap");
+    const auto first_bit = static_cast<std::uint64_t>(query_offset) * cols_;
+    RAFT_EXPECTS(first_bit % 32 == 0,
+                 "Serialized exact bitmap slicing requires a 32-bit-aligned row boundary");
+    auto* first_word = const_cast<std::uint32_t*>(device_words_.data()) + first_bit / 32;
+    auto view        = cuvs::core::bitmap_view<std::uint32_t, std::int64_t>(
+      first_word, static_cast<std::int64_t>(query_count), static_cast<std::int64_t>(cols_));
+    return cuvs::neighbors::filtering::bitmap_filter<std::uint32_t, std::int64_t>(view);
+  }
+
  private:
   static constexpr std::array<char, 8> magic_ = {'C', 'U', 'V', 'S', 'B', 'M', 'A', 'P'};
   static constexpr std::size_t header_bytes_  = 40;
