@@ -935,10 +935,32 @@ def main() -> None:
     raw_files = sorted({Path(row.source_file) for row in raw_points})
     config_files: set[Path] = set()
     source_manifests: set[Path] = set()
+    navix_seed_policies: set[str] = set()
     for manifest_path in used_manifests:
         manifest = json.loads(manifest_path.read_text())
+        policy = str(manifest.get("navix_seed_policy", "k"))
+        if policy not in {"k", "wd"}:
+            raise ValueError(
+                f"invalid NaviX seed policy {policy!r} in {manifest_path}"
+            )
+        navix_seed_policies.add(policy)
+        if policy == "wd":
+            degree = int(manifest["graph_degree"])
+            for point in manifest["search_points"]:
+                if point.get("method") != "navix_reference":
+                    continue
+                expected_cap = int(point["search_width"]) * degree
+                if int(point.get("navix_seed_cap", -1)) != expected_cap:
+                    raise ValueError(
+                        f"invalid W*D seed cap in {manifest_path}: {point}"
+                    )
         config_files.update(Path(row["config"]) for row in manifest["configs"])
         source_manifests.add(Path(manifest["source_bitmap_manifest"]))
+    if len(navix_seed_policies) != 1:
+        raise ValueError(
+            f"result root mixes NaviX seed policies: {sorted(navix_seed_policies)}"
+        )
+    navix_seed_policy = next(iter(navix_seed_policies))
     run_provenance = args.result_root / "provenance" / "run.json"
     if not run_provenance.is_file():
         raise FileNotFoundError(
@@ -1022,6 +1044,12 @@ def main() -> None:
         "result_root": str(args.result_root.resolve()),
         "max_queries": expected_max_queries,
         "k": expected_k,
+        "navix_seed_policy": navix_seed_policy,
+        "navix_seed_cap_contract": (
+            "result k"
+            if navix_seed_policy == "k"
+            else "search_width * graph_degree"
+        ),
         "target_recall": args.target_recall,
         "groups": sorted(available_groups),
         "timing_contract": (

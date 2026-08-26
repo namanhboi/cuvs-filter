@@ -1,0 +1,100 @@
+#+title: A100 k=10 all-workload W x D seed rerun
+
+* Purpose
+
+This workflow reruns only NaviX on YFCC-10M and ArXiv-large EM, EMIS, and R
+with the seed cap set to =search_width * graph_degree=. It reconstructs the
+NaviX QPS--recall frontier, calibrates and repeats the best measured point in
+the closed target window, and records paired k-seed/WxD controls at both the
+old and new selected coordinates. Base, Retain, and exact-search results are
+not rerun.
+
+The fixed contract is =k=10=, =max_queries=2048=, five serial throughput
+shards (2048, 2048, 2048, 2048, 1808), three reported repetitions, target
+recall 0.800 for YFCC and 0.950 for each ArXiv workload, and an upper target
+window of +0.002.
+
+* Run on the A100 host
+
+Use the completed =max_queries=2048= k=10 run as the reference. Keep the
+entire command on one line where shown; a newline inside a quoted path changes
+the path.
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter
+git fetch origin retrieve-a100-k10-wd-seeds
+git switch retrieve-a100-k10-wd-seeds
+git pull --ff-only origin retrieve-a100-k10-wd-seeds
+
+micromamba activate cuvs
+export CUDA_VISIBLE_DEVICES=0
+export PYTHON="$(command -v python)"
+export MPLBACKEND=Agg
+export RETRIEVE_DATA_ROOT=/data/retrieve_data
+export RETRIEVE_A100_K10_RUN_ROOT=/data/retrieve_workshop_runs/a100_maxq2048_20260824T065013Z
+export RETRIEVE_A100_K10_WD_ALL_RUN_ROOT=/data/retrieve_workshop_runs/a100_k10_wd_all_$(date -u +%Y%m%dT%H%M%SZ)
+
+benchmarks/retrieve_workshop/a100_k10_wd_all/run.sh all
+#+end_src
+
+=all= creates the standalone evidence bundle but deliberately does not modify
+or replace the reviewed paper bundle. The result root is printed at the end.
+
+* Validation and merge
+
+Review these files first:
+
+- =analysis/target_results.csv=: selected NaviX QPS and recall.
+- =analysis/paired_controls.csv=: k-seed versus WxD at the incumbent and new
+  selected coordinates.
+- =analysis/diagnostics.csv=: paired per-query mechanism counters.
+- =analysis/navix_resource_work.csv=: supplementary NaviX-only dynamic work and
+  compiled resource data for the W*D run.
+- =analysis/results.json=: must contain ="status": "PASS"=.
+
+To create a composite paper bundle that preserves Base, Retain, exact scan,
+dataset statistics, and max-query evidence from the reviewed run while
+replacing only NaviX rows:
+
+#+begin_src sh
+export RETRIEVE_A100_REFERENCE_BUNDLE="$HOME/a100_maxq2048_navix_refined_paper_gpu_bundle.tar.gz"
+export RETRIEVE_A100_WD_MERGED_ROOT="$RETRIEVE_A100_K10_WD_ALL_RUN_ROOT/merged_paper_gpu_bundle/paper_gpu_bundle"
+benchmarks/retrieve_workshop/a100_k10_wd_all/run.sh merge
+#+end_src
+
+The merge validates both hash manifests, preserves the displaced k-seed NaviX
+evidence under =seed_ablation/=, regenerates the headline plot/table inputs,
+and writes a new immutable manifest. The reviewed representative resource
+table remains byte-for-byte unchanged; the W*D resource-only observations are
+kept separately because a NaviX-only rerun cannot form a new matched
+Base/Retain resource comparison.
+
+* Compress the outputs
+
+#+begin_src sh
+tar -C "$RETRIEVE_A100_K10_WD_ALL_RUN_ROOT" \
+  -czf "$HOME/a100_k10_wd_all_paper_gpu_bundle.tar.gz" \
+  paper_gpu_bundle_k10_wd_all
+
+tar -C "$RETRIEVE_A100_K10_WD_ALL_RUN_ROOT/merged_paper_gpu_bundle" \
+  -czf "$HOME/a100_k10_wd_all_merged_paper_gpu_bundle.tar.gz" \
+  paper_gpu_bundle
+
+sha256sum "$HOME/a100_k10_wd_all_paper_gpu_bundle.tar.gz" \
+  "$HOME/a100_k10_wd_all_merged_paper_gpu_bundle.tar.gz"
+#+end_src
+
+* Restart behavior
+
+Completed benchmark files are validated and reused. A partially written raw
+group is never silently mixed with a new run: the script names the exact raw
+directory to remove before retrying. Individual stages are available as
+=preflight=, =build=, =test=, =frontier=, =matched=, =controls=,
+=diagnostics=, =analyze=, =bundle=, and =merge=. Always reuse the same result
+root when resuming.
+
+The matched-recall stage is intentionally NaviX-only. It imports the measured
+WxD B0 frontier, exhausts integer-L refinement, uses explicit continuation
+only when no B0 point reaches the target, and repeats finalists three times.
+Analysis fails rather than publishing a target-reaching point outside the
+closed target window.

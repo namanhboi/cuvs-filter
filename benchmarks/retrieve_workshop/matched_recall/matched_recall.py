@@ -39,7 +39,27 @@ from generate_configs import (
 )
 
 WORKLOADS = ("yfcc", "em", "emis", "r")
-METHODS = ("default_cagra", "default_cagra_accumulator", "navix_reference")
+ALL_METHODS = ("default_cagra", "default_cagra_accumulator", "navix_reference")
+_requested_methods = tuple(
+    value.strip()
+    for value in os.environ.get("RETRIEVE_MATCHED_METHODS", ",".join(ALL_METHODS)).split(",")
+    if value.strip()
+)
+if not _requested_methods or len(set(_requested_methods)) != len(_requested_methods):
+    raise ValueError("RETRIEVE_MATCHED_METHODS must contain distinct method names")
+if any(value not in ALL_METHODS for value in _requested_methods):
+    raise ValueError(
+        f"RETRIEVE_MATCHED_METHODS must be a subset of {ALL_METHODS}, got {_requested_methods}"
+    )
+METHODS = _requested_methods
+NAVIX_SEED_POLICY = os.environ.get("RETRIEVE_MATCHED_NAVIX_SEED_POLICY", "k").strip().lower()
+if NAVIX_SEED_POLICY not in {"k", "wd"}:
+    raise ValueError("RETRIEVE_MATCHED_NAVIX_SEED_POLICY must be 'k' or 'wd'")
+if NAVIX_SEED_POLICY == "wd" and METHODS != ("navix_reference",):
+    raise ValueError(
+        "W*D matched-recall tuning is intentionally NaviX-only; set "
+        "RETRIEVE_MATCHED_METHODS=navix_reference"
+    )
 PROFILE = load_profile()
 WIDTHS = tuple(int(value) for value in PROFILE["matched_widths"])
 TUNING_WIDTHS = tuple(value for value in WIDTHS if value in (1, 2))
@@ -54,6 +74,8 @@ ANCHOR_L = (
     if RESULT_K == 10
     else tuple(sorted({RESULT_K, *(value for value in (32, 64, 128, 256, 512) if value >= RESULT_K)}))
 )
+if NAVIX_SEED_POLICY == "wd" or ALLOW_SHALLOW_NAVIX:
+    ANCHOR_L = tuple(sorted({MIN_L, *ANCHOR_L}))
 L_QUANTUM = 32
 MAX_ITERATIONS = 7569
 HASHMAP_MAX_FILL_RATE = 0.5
@@ -189,7 +211,13 @@ def import_baseline(
     set_semantics = contract.get("output_set_semantics") == "distinct_valid_output_ids_v1" or (
         "distinct output ID" in str(provenance.get("recall_contract", ""))
     )
-    if observed_k != RESULT_K or observed_max_queries != MAX_QUERIES or not set_semantics:
+    observed_seed_policy = str(provenance.get("navix_seed_policy", "k"))
+    if (
+        observed_k != RESULT_K
+        or observed_max_queries != MAX_QUERIES
+        or not set_semantics
+        or observed_seed_policy != NAVIX_SEED_POLICY
+    ):
         raise ValueError("baseline provenance does not match the active k/max_queries contract")
 
     normalized: list[dict[str, object]] = []
@@ -267,6 +295,8 @@ def import_baseline(
         "schema_version": 1,
         "k": RESULT_K,
         "max_queries": MAX_QUERIES,
+        "methods": list(METHODS),
+        "navix_seed_policy": NAVIX_SEED_POLICY,
         "source_summary": str(summary_path.resolve()),
         "source_summary_sha256": sha256(summary_path),
         "source_provenance": str(provenance_path.resolve()),
@@ -330,6 +360,13 @@ def validate_raw_output(
 
 def target(workload: str) -> float:
     return TARGETS[workload]
+
+
+def navix_seed_cap(workload: str, width: int) -> int:
+    """Return the frozen passing-seed cap for the active NaviX policy."""
+    if NAVIX_SEED_POLICY == "k":
+        return RESULT_K
+    return width * int(workload_spec(workload, PROFILE)["graph_degree"])
 
 
 def internal_itopk(itopk: int) -> int:
@@ -461,6 +498,13 @@ def write_group(
         "group": group,
         "stage": stage,
         "repetitions": repetitions,
+        "methods": list(METHODS),
+        "navix_seed_policy": NAVIX_SEED_POLICY,
+        "navix_seed_cap_contract": (
+            "result k"
+            if NAVIX_SEED_POLICY == "k"
+            else "search_width * graph_degree"
+        ),
         "targets": TARGETS,
         "dataset_profile": profile_record(PROFILE),
         "points": normalized,
@@ -484,6 +528,11 @@ def write_group(
             )
             for row in local
         ]
+        for normalized_point, search in zip(local, searches, strict=True):
+            if str(normalized_point["method"]) == "navix_reference":
+                search["navix_seed_cap"] = navix_seed_cap(
+                    workload, int(normalized_point["search_width"])
+                )
         workload_root = group_root / workload
         workload_root.mkdir(parents=True, exist_ok=False)
         configs: list[dict] = []
@@ -537,7 +586,23 @@ def write_group(
             "expected_queries": EXPECTED_QUERIES,
             "expected_shards": len(configs),
             "source_bitmap_manifest": str(paths.manifest.resolve()),
-            "search_points": [point_identity(row) for row in searches],
+            "navix_seed_policy": NAVIX_SEED_POLICY,
+            "navix_seed_cap_contract": (
+                "result k"
+                if NAVIX_SEED_POLICY == "k"
+                else "search_width * graph_degree"
+            ),
+            "search_points": [
+                {
+                    **point_identity(row),
+                    **(
+                        {"navix_seed_cap": int(row["navix_seed_cap"])}
+                        if row["bitmap_method"] == "navix_reference"
+                        else {}
+                    ),
+                }
+                for row in searches
+            ],
             "configs": configs,
         }
         (workload_root / "manifest.json").write_text(
@@ -1615,6 +1680,15 @@ def provenance(result_root: Path, summaries: list[dict], selected: list[dict]) -
     }
     if manifest_k != {RESULT_K}:
         raise ValueError(f"matched-recall manifests mix k values: {sorted(manifest_k)}")
+    manifest_seed_policies = {
+        str(json.loads(path.read_text()).get("navix_seed_policy", "k"))
+        for path in manifests
+    }
+    if manifest_seed_policies != {NAVIX_SEED_POLICY}:
+        raise ValueError(
+            "matched-recall manifests mix NaviX seed policies: "
+            f"{sorted(manifest_seed_policies)}"
+        )
     raw_files = sorted((result_root / "raw").glob("*/*/shard_*.json"))
     state_files = sorted((result_root / "state").glob("*.json"))
     analysis_files = [
@@ -1632,7 +1706,7 @@ def provenance(result_root: Path, summaries: list[dict], selected: list[dict]) -
         "target_window": TARGET_WINDOW,
         "selection_contract": (
             "Use B0 whenever it intersects the target window. If minimum-L NaviX B0 "
-            "overshoots and shallow tuning is enabled, preserve all k bitmap seeds and tune an "
+            "overshoots and shallow tuning is enabled, preserve the configured bitmap seeds and tune an "
             "explicit traversal cap below B0. Otherwise allow explicit continuation only when "
             "no B0 configuration reaches the target, through 7569 iterations where the L/W/depth "
             "combination fits SINGLE_CTA's 20-bit normal visited hash at 0.5 fill. Final selection "
@@ -1642,6 +1716,13 @@ def provenance(result_root: Path, summaries: list[dict], selected: list[dict]) -
         "timing_contract": (
             "Complete cuVS-bench search call; YFCC executes five bitmap shards serially and "
             "QPS=10000/sum(shard seconds) within each repetition."
+        ),
+        "methods": list(METHODS),
+        "navix_seed_policy": NAVIX_SEED_POLICY,
+        "navix_seed_cap_contract": (
+            "result k"
+            if NAVIX_SEED_POLICY == "k"
+            else "search_width * graph_degree"
         ),
         "run_provenance": {"path": str(run_path.resolve()), "sha256": sha256(run_path)},
         "analysis_script": {
