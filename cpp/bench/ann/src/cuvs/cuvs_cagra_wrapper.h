@@ -135,7 +135,7 @@ class cuvs_cagra : public algo<T>, public algo_gpu {
     std::uint32_t favor_udf_sample_offset{};
     /** Benchmark-only NaviX traversal policy. Empty preserves the normal cuVS path. */
     std::optional<std::uint32_t> navix_policy;
-    /** Replace NaviX's in-kernel seed discovery with the first k passing bitmap nodes. */
+    /** Replace NaviX's in-kernel seed discovery with passing bitmap nodes. */
     bool navix_bitmap_seeds = false;
     /** Give default CAGRA the same first-k passing bitmap seeds as the NaviX control. */
     bool cagra_bitmap_seeds = false;
@@ -143,6 +143,8 @@ class cuvs_cagra : public algo<T>, public algo_gpu {
     bool require_identity_source_indices = false;
     /** Expected result width, used to allocate seed scratch before benchmark timing begins. */
     std::uint32_t navix_seed_k = 10;
+    /** Benchmark-only cap on NaviX bitmap seeds. Defaults to the result width. */
+    std::uint32_t navix_seed_cap = 10;
     float refine_ratio;
     AllocatorType graph_mem   = AllocatorType::kDevice;
     AllocatorType dataset_mem = AllocatorType::kDevice;
@@ -290,6 +292,7 @@ class cuvs_cagra : public algo<T>, public algo_gpu {
   bool navix_bitmap_seeds_{};
   bool cagra_bitmap_seeds_{};
   std::uint32_t navix_seed_k_{10};
+  std::uint32_t navix_seed_cap_{10};
   std::shared_ptr<rmm::device_uvector<std::uint32_t>> navix_seed_ids_;
   std::shared_ptr<rmm::device_uvector<std::uint32_t>> navix_seed_counts_;
   std::shared_ptr<rmm::device_uvector<std::uint32_t>> navix_seed_inspected_units_;
@@ -475,6 +478,7 @@ void cuvs_cagra<T, IdxT>::set_search_param(const search_param_base& param,
   navix_bitmap_seeds_      = sp.navix_bitmap_seeds;
   cagra_bitmap_seeds_      = sp.cagra_bitmap_seeds;
   navix_seed_k_            = sp.navix_seed_k;
+  navix_seed_cap_          = sp.navix_seed_cap;
   filter_empty_            = false;
   favor_udf_sampled_rates_.reset();
   favor_udf_sampled_passing_counts_.reset();
@@ -548,10 +552,15 @@ void cuvs_cagra<T, IdxT>::set_search_param(const search_param_base& param,
     RAFT_EXPECTS(bitmap_filter_adapter_ != nullptr,
                  "bitmap seed control requires a query-dependent bitmap filter");
     RAFT_EXPECTS(navix_seed_k_ > 0, "bitmap seed control requires a positive result width");
-    auto stream           = raft::resource::get_cuda_stream(handle_);
-    const auto query_rows = static_cast<std::size_t>(bitmap_filter_adapter_->query_rows());
+    RAFT_EXPECTS(!navix_bitmap_seeds_ || navix_seed_cap_ > 0,
+                 "NaviX bitmap seed cap must be positive");
+    RAFT_EXPECTS(!navix_bitmap_seeds_ || navix_seed_cap_ <= navix_seed_k_,
+                 "NaviX bitmap seed cap cannot exceed the benchmark result width");
+    auto stream            = raft::resource::get_cuda_stream(handle_);
+    const auto query_rows  = static_cast<std::size_t>(bitmap_filter_adapter_->query_rows());
+    const auto seed_stride = navix_bitmap_seeds_ ? navix_seed_cap_ : navix_seed_k_;
     navix_seed_ids_ =
-      std::make_shared<rmm::device_uvector<std::uint32_t>>(query_rows * navix_seed_k_, stream);
+      std::make_shared<rmm::device_uvector<std::uint32_t>>(query_rows * seed_stride, stream);
     navix_seed_counts_ = std::make_shared<rmm::device_uvector<std::uint32_t>>(query_rows, stream);
     navix_seed_inspected_units_ =
       std::make_shared<rmm::device_uvector<std::uint32_t>>(query_rows, stream);
@@ -854,10 +863,11 @@ std::unique_ptr<algo<T>> cuvs_cagra<T, IdxT>::copy()
       std::make_shared<cuvs::neighbors::filtering::bitmap_filter<std::uint32_t, std::int64_t>>(
         bitmap_filter_adapter_->filter());
     if (navix_bitmap_seeds_ || cagra_bitmap_seeds_) {
-      auto stream           = raft::resource::get_cuda_stream(result->handle_);
-      const auto query_rows = static_cast<std::size_t>(bitmap_filter_adapter_->query_rows());
+      auto stream            = raft::resource::get_cuda_stream(result->handle_);
+      const auto query_rows  = static_cast<std::size_t>(bitmap_filter_adapter_->query_rows());
+      const auto seed_stride = navix_bitmap_seeds_ ? navix_seed_cap_ : navix_seed_k_;
       result->navix_seed_ids_ =
-        std::make_shared<rmm::device_uvector<std::uint32_t>>(query_rows * navix_seed_k_, stream);
+        std::make_shared<rmm::device_uvector<std::uint32_t>>(query_rows * seed_stride, stream);
       result->navix_seed_counts_ =
         std::make_shared<rmm::device_uvector<std::uint32_t>>(query_rows, stream);
       result->navix_seed_inspected_units_ =
@@ -891,6 +901,8 @@ void cuvs_cagra<T, IdxT>::search_base(
         if (navix_bitmap_seeds_) {
           RAFT_EXPECTS(static_cast<std::uint32_t>(k) == navix_seed_k_,
                        "navix_seed_k must equal the benchmark result width");
+          RAFT_EXPECTS(navix_seed_cap_ <= static_cast<std::uint32_t>(k),
+                       "NaviX seed cap cannot exceed the benchmark result width");
           cuvs::neighbors::cagra::detail::benchmark_search_navix_bitmap_seeded<T>(
             handle_,
             search_params_,
@@ -903,6 +915,7 @@ void cuvs_cagra<T, IdxT>::search_base(
             navix_seed_ids_->data(),
             navix_seed_counts_->data(),
             navix_seed_inspected_units_->data(),
+            navix_seed_cap_,
             *navix_policy_);
         } else {
           cuvs::neighbors::cagra::detail::benchmark_search_navix_bitmap<T>(handle_,
@@ -927,21 +940,20 @@ void cuvs_cagra<T, IdxT>::search_base(
       }
     };
     if (favor_diagnostic_session_) {
-      favor_diagnostic_session_->capture(handle_,
-                                         static_cast<std::uint32_t>(batch_size),
-                                         static_cast<std::uint32_t>(k),
-                                         static_cast<std::uint32_t>(index_->graph().extent(1)),
-                                         static_cast<std::uint32_t>(search_params_.search_width),
-                                         static_cast<std::int64_t>(index_->size()),
-                                         static_cast<std::uint32_t>(search_params_.itopk_size),
-                                         search_params_.max_iterations,
-                                         -1.0f,
-                                         true,
-                                         navix_bitmap_seeds_
-                                           ? navix_seed_inspected_units_->data()
-                                           : nullptr,
-                                         neighbors,
-                                         run_navix);
+      favor_diagnostic_session_->capture(
+        handle_,
+        static_cast<std::uint32_t>(batch_size),
+        static_cast<std::uint32_t>(k),
+        static_cast<std::uint32_t>(index_->graph().extent(1)),
+        static_cast<std::uint32_t>(search_params_.search_width),
+        static_cast<std::int64_t>(index_->size()),
+        static_cast<std::uint32_t>(search_params_.itopk_size),
+        search_params_.max_iterations,
+        -1.0f,
+        true,
+        navix_bitmap_seeds_ ? navix_seed_inspected_units_->data() : nullptr,
+        neighbors,
+        run_navix);
     } else {
       run_navix();
     }

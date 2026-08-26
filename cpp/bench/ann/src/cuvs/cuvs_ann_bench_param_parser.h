@@ -565,7 +565,14 @@ void parse_search_param(const nlohmann::json& conf,
   if (conf.contains("require_identity_source_indices")) {
     param.require_identity_source_indices = conf.at("require_identity_source_indices");
   }
-  param.navix_seed_k = conf.value("k", 10u);
+  param.navix_seed_k   = conf.value("k", 10u);
+  param.navix_seed_cap = conf.value("navix_seed_cap", param.navix_seed_k);
+  if (conf.contains("navix_seed_cap") && !param.navix_bitmap_seeds) {
+    THROW("navix_seed_cap requires navix_bitmap_seeds");
+  }
+  if (param.navix_seed_cap == 0 || param.navix_seed_cap > param.navix_seed_k) {
+    THROW("navix_seed_cap must satisfy 1 <= cap <= k");
+  }
   if (conf.contains("favor_delta_d_file")) {
     param.favor_delta_d_file = conf.at("favor_delta_d_file").get<std::string>();
   }

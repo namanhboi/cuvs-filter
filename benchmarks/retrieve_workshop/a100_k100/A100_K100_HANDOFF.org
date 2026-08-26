@@ -101,6 +101,7 @@ benchmarks/retrieve_workshop/a100_k100/run.sh prepare-views
 benchmarks/retrieve_workshop/a100_k100/run.sh graph
 benchmarks/retrieve_workshop/a100_k100/run.sh exact
 benchmarks/retrieve_workshop/a100_k100/run.sh matched-recall
+benchmarks/retrieve_workshop/a100_k100/run.sh seed-ablation
 benchmarks/retrieve_workshop/a100_k100/run.sh latency
 benchmarks/retrieve_workshop/a100_k100/run.sh analyze
 benchmarks/retrieve_workshop/a100_k100/run.sh bundle
@@ -110,6 +111,9 @@ The =all= ordering is mandatory on a fresh machine.  In particular, =prepare-vie
 completed YFCC top-100 manifest, and both search stages require those views.  The serialized
 =latency= stage is deliberately separate from =all= because it executes 480,000 measured
 one-query calls.  Run it after =matched-recall= and =exact=, then rerun =bundle= to include it.
+The =seed-ablation= stage is also separate from =all=: it compares 10 versus 100 NaviX bitmap seeds
+at =k=100= after =matched-recall= has frozen the 100-seed reference point.  Its complete contract
+and recovery commands are in =../a100_seed_ablation/A100_SEED_ABLATION_HANDOFF.org=.
 
 * Timing and aggregation contracts
 

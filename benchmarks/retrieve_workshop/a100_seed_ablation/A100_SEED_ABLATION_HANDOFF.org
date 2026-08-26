@@ -1,0 +1,108 @@
+#+TITLE: A100 YFCC NaviX Seed-Count Ablation Handoff
+#+DATE: 2026-08-26
+
+* Purpose
+
+This experiment isolates why Recall@100 NaviX is stronger on YFCC-10M than Recall@10 NaviX.  Both
+arms execute the same degree-64 SINGLE_CTA NaviX traversal, return =k=100= results, use
+=max_queries=2048=, and include the bitmap prepass in search time.  The only changed variable is
+the maximum number of passing bitmap seeds supplied to each query: 10 versus 100.
+
+The seed cap is benchmark-only.  It does not modify cuVS's public API or NaviX's device traversal.
+The host benchmark adapter allocates a =queries x seed_cap= seed matrix, the existing GPU prepass
+fills up to that cap, and the existing SINGLE_CTA kernel consumes the reported stride.
+
+* Search policy
+
+The runner first measures the 10-seed B0 anchors =L in {128,256,512}= and =W in {1,2}=.  It then
+binary-searches arbitrary integer L separately for each W until it resolves the target window
+=[0.800,0.802]= or adjacent L values bracket it.  It adds the immediate neighbors of an in-window
+point so the selection is not based on a lone sample.
+
+Iteration depth is increased only if neither W reaches 0.800 at =L=512= with automatic B0
+termination.  In that case only =L=512,W=2= is deepened, using bounded doubling followed by an
+integer binary search, never exceeding 7,569 iterations.  The fastest measured point in the target
+window is selected.  If the target is unreachable, the maximum-recall point and its QPS are kept.
+
+The frozen 100-seed finalist (=L=100,W=1,I=56=) is rerun under the new binary.  Its recall must
+exactly match the completed Recall@100 reference, and its QPS must remain within 15 percent.  A
+1,000-query diagnostic capture for each arm reports actual seed count and bitmap words inspected.
+
+* Prerequisites
+
+Use the same full, non-MIG A100 80GB and data root as the completed Recall@100 run.  The reference
+root must contain:
+
+#+begin_src text
+matched_recall/analysis/selected_points.csv
+matched_recall/analysis/provenance.json
+gpu_graph/analysis/summary_points.csv
+#+end_src
+
+The data root must contain the prepared =navix_bitmap_k100/yfcc= correctness and throughput views,
+the YFCC base vectors, and =cagra_g64_ig128.index=.
+
+* Complete command
+
+#+begin_src bash
+cd /home/ubuntu/cuvs-filter
+micromamba activate cuvs
+
+git switch retrieve-a100-k100-matched
+git pull --ff-only origin retrieve-a100-k100-matched
+
+export CUDA_VISIBLE_DEVICES=0
+export PYTHON="$(command -v python)"
+export MPLBACKEND=Agg
+export RETRIEVE_DATA_ROOT=/data/retrieve_data
+export RETRIEVE_A100_K100_RUN_ROOT=/data/retrieve_workshop_runs/a100_k100_20260825T232747Z
+export RETRIEVE_A100_SEED_RUN_ROOT="${RETRIEVE_A100_K100_RUN_ROOT}/seed_ablation"
+
+benchmarks/retrieve_workshop/a100_seed_ablation/run.sh all
+#+end_src
+
+The =all= stage rebuilds only libcuvs, the filtered-CAGRA test, and CAGRA ANN benchmark; runs the
+new =seed_cap < k= GPU test; performs the adaptive sweep; captures diagnostics; validates all
+sentinel, predicate, and duplicate counters; and creates the compact bundle.
+
+To reuse an already rebuilt binary, run the individual stages:
+
+#+begin_src bash
+benchmarks/retrieve_workshop/a100_seed_ablation/run.sh preflight
+benchmarks/retrieve_workshop/a100_seed_ablation/run.sh test
+benchmarks/retrieve_workshop/a100_seed_ablation/run.sh run
+benchmarks/retrieve_workshop/a100_seed_ablation/run.sh bundle
+#+end_src
+
+* Outputs
+
+#+begin_src text
+seed_ablation/analysis/measurements.csv
+seed_ablation/analysis/selected_points.csv
+seed_ablation/analysis/seed_ablation_results.json
+seed_ablation/analysis/seed_prepass_diagnostics.csv
+seed_ablation/analysis/yfcc_seed_ablation.{pdf,png}
+seed_ablation/analysis/yfcc_seed_ablation_results.tex
+seed_ablation/analysis/provenance.json
+seed_ablation/paper_gpu_bundle_seed_ablation/
+#+end_src
+
+Reported throughput covers all 10,000 queries in five sequential host calls and three repetitions;
+QPS is =10000 / sum(shard seconds)= for each repetition, followed by the median across repetitions.
+Diagnostics are explicitly marked timing-invalid and are not used for QPS.
+
+To transfer the compact evidence:
+
+#+begin_src bash
+tar -C "${RETRIEVE_A100_SEED_RUN_ROOT}" -czf \
+  "$HOME/a100_yfcc_navix_seed_ablation.tar.gz" \
+  paper_gpu_bundle_seed_ablation
+sha256sum "$HOME/a100_yfcc_navix_seed_ablation.tar.gz"
+#+end_src
+
+* Recovery
+
+The result root is immutable.  Completed groups are validated and reused.  If a group is
+interrupted, the runner identifies its exact =raw/GROUP/yfcc= directory and refuses to mix a
+partial group with a rerun; remove only that named directory, then rerun =run.sh run=.  Do not
+delete or replace the completed Recall@100 reference root.

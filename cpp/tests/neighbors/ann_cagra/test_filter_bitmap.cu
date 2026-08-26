@@ -569,6 +569,7 @@ TEST_P(CagraBitmapFilterTest, SourceIndexRemappingUsesExternalIds)
                                                       navix_seeds.data(),
                                                       navix_counts.data(),
                                                       navix_inspected.data(),
+                                                      static_cast<std::uint32_t>(k),
                                                       0);
   std::vector<std::int64_t> host_navix(navix_neighbors.size());
   std::vector<std::uint32_t> host_seeds(navix_seeds.size());
@@ -691,9 +692,10 @@ TEST_P(CagraBitmapFilterTest, NavixSeedPrepassIsStableAndHonorsQueryOffset)
   EXPECT_EQ(host_seeds[2 * seed_k], 3u);
 }
 
-TEST_P(CagraBitmapFilterTest, BitmapSeededNavixReturnsOnlyPassingNodesAndEmptySentinels)
+TEST_P(CagraBitmapFilterTest, BitmapSeededNavixSupportsSeedCapBelowResultWidth)
 {
-  auto predicate = [](std::int64_t query_id, std::int64_t source_id) {
+  constexpr std::uint32_t seed_cap = 3;
+  auto predicate                   = [](std::int64_t query_id, std::int64_t source_id) {
     if (query_id == 0) { return false; }
     if (query_id == 1) {
       return source_id == 5 || source_id == 105 || source_id == 205 || source_id == 305;
@@ -705,7 +707,7 @@ TEST_P(CagraBitmapFilterTest, BitmapSeededNavixReturnsOnlyPassingNodesAndEmptySe
   auto stream    = raft::resource::get_cuda_stream(res);
   auto neighbors = raft::make_device_matrix<std::int64_t, std::int64_t>(res, kQueries, k);
   auto distances = raft::make_device_matrix<float, std::int64_t>(res, kQueries, k);
-  rmm::device_uvector<std::uint32_t> seeds(kQueries * k, stream);
+  rmm::device_uvector<std::uint32_t> seeds(kQueries * seed_cap, stream);
   rmm::device_uvector<std::uint32_t> counts(kQueries, stream);
   rmm::device_uvector<std::uint32_t> inspected(kQueries, stream);
   auto search_params           = params();
@@ -723,13 +725,29 @@ TEST_P(CagraBitmapFilterTest, BitmapSeededNavixReturnsOnlyPassingNodesAndEmptySe
                                                       seeds.data(),
                                                       counts.data(),
                                                       inspected.data(),
+                                                      seed_cap,
                                                       0);
 
   std::vector<std::int64_t> host_neighbors(neighbors.size());
   std::vector<float> host_distances(distances.size());
+  std::vector<std::uint32_t> host_seeds(seeds.size());
+  std::vector<std::uint32_t> host_counts(counts.size());
   raft::copy(host_neighbors.data(), neighbors.data_handle(), neighbors.size(), stream);
   raft::copy(host_distances.data(), distances.data_handle(), distances.size(), stream);
+  raft::copy(host_seeds.data(), seeds.data(), seeds.size(), stream);
+  raft::copy(host_counts.data(), counts.data(), counts.size(), stream);
   raft::resource::sync_stream(res);
+  EXPECT_EQ(host_counts, (std::vector<std::uint32_t>{0, 3, 3, 3, 3, 3, 3}));
+  EXPECT_EQ(
+    std::vector<std::uint32_t>(host_seeds.begin() + seed_cap, host_seeds.begin() + 2 * seed_cap),
+    (std::vector<std::uint32_t>{5, 105, 205}));
+  for (std::int64_t query_id = 0; query_id < kQueries; ++query_id) {
+    ASSERT_LE(host_counts[static_cast<std::size_t>(query_id)], seed_cap);
+    for (std::uint32_t rank = 0; rank < host_counts[static_cast<std::size_t>(query_id)]; ++rank) {
+      EXPECT_TRUE(
+        predicate(query_id, host_seeds[static_cast<std::size_t>(query_id) * seed_cap + rank]));
+    }
+  }
   for (std::int64_t query_id = 0; query_id < kQueries; ++query_id) {
     bool saw_sentinel = false;
     for (std::int64_t rank = 0; rank < k; ++rank) {
@@ -1108,11 +1126,11 @@ TEST_P(CagraBitmapFilterDegree64Test, LegacyNavixBitmapMatchesEquivalentUdfExact
 TEST_P(CagraBitmapFilterDegree64Test, K100SparseDefaultOutputHasValidPrefix)
 {
   constexpr std::int64_t result_k = 100;
-  auto predicate = [](std::int64_t query_id, std::int64_t source_id) {
+  auto predicate                  = [](std::int64_t query_id, std::int64_t source_id) {
     return (source_id + 3 * query_id) % 4 == 0;
   };
   device_bitmap bitmap(res, kQueries, kRows, predicate);
-  auto filter = bitmap.filter();
+  auto filter               = bitmap.filter();
   bool observed_underfilled = false;
   bool observed_full        = false;
 

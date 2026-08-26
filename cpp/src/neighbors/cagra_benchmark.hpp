@@ -132,6 +132,7 @@ CUVS_EXPORT void benchmark_search_navix_bitmap_seeded(
   std::uint32_t* seed_ids,
   std::uint32_t* seed_counts,
   std::uint32_t* inspected_units,
+  std::uint32_t seed_stride,
   std::uint32_t navix_policy);
 
 }  // namespace cuvs::neighbors::cagra::detail

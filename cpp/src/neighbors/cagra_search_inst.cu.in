@@ -17,7 +17,7 @@ namespace {
 using data_t = @data_type@;
 // clang-format on
 
-}
+}  // namespace
 
 namespace cuvs::neighbors::cagra {
 
@@ -345,12 +345,15 @@ CUVS_EXPORT void benchmark_search_navix_bitmap_seeded<data_t>(
   std::uint32_t* seed_ids,
   std::uint32_t* seed_counts,
   std::uint32_t* inspected_units,
+  std::uint32_t seed_stride,
   std::uint32_t navix_policy)
 {
   using bitmap_t     = cuvs::neighbors::filtering::bitmap_filter<std::uint32_t, std::int64_t>;
   auto const& bitmap = validate_navix_bitmap<bitmap_t>(index, queries, sample_filter, query_offset);
-  const auto num_queries    = static_cast<std::uint32_t>(queries.extent(0));
-  const auto seed_stride    = static_cast<std::uint32_t>(neighbors.extent(1));
+  const auto num_queries = static_cast<std::uint32_t>(queries.extent(0));
+  RAFT_EXPECTS(seed_stride > 0, "NaviX bitmap seed stride must be positive");
+  RAFT_EXPECTS(seed_stride <= static_cast<std::uint32_t>(neighbors.extent(1)),
+               "NaviX bitmap seed stride cannot exceed the result width");
   const auto source_indices = index.source_indices();
   select_navix_bitmap_seeds(res,
                             bitmap,

@@ -283,6 +283,12 @@ run_per_query_latency() {
   mark_done per_query_latency
 }
 
+run_seed_ablation() {
+  env RETRIEVE_A100_K100_RUN_ROOT="${run_root}" \
+    RETRIEVE_A100_SEED_RUN_ROOT="${RETRIEVE_A100_SEED_RUN_ROOT:-${run_root}/seed_ablation}" \
+    "${repo_dir}/benchmarks/retrieve_workshop/a100_seed_ablation/run.sh" all
+}
+
 analyze() {
   env RETRIEVE_RESULT_ROOT="${run_root}/gpu_graph" \
     "${repo_dir}/benchmarks/retrieve_workshop/gpu_graph/run_gpu_graph.sh" analyze
@@ -326,6 +332,7 @@ case "${stage}" in
   graph) run_graph ;;
   exact) run_exact ;;
   matched-recall) run_matched ;;
+  seed-ablation) run_seed_ablation ;;
   latency) run_per_query_latency ;;
   analyze) analyze ;;
   bundle) bundle ;;
@@ -342,7 +349,7 @@ case "${stage}" in
     bundle
     ;;
   *)
-    echo "usage: $0 {preflight|build|test|prepare-yfcc-gt|prepare-views|graph|exact|matched-recall|latency|analyze|bundle|all}" >&2
+    echo "usage: $0 {preflight|build|test|prepare-yfcc-gt|prepare-views|graph|exact|matched-recall|seed-ablation|latency|analyze|bundle|all}" >&2
     exit 2
     ;;
 esac

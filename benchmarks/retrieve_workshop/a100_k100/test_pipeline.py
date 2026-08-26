@@ -466,14 +466,18 @@ class K100PipelineTest(unittest.TestCase):
             for workload in WORKLOADS:
                 target = 0.80 if workload == "yfcc" else 0.95
                 for method in METHODS:
+                    unreached = (
+                        workload == "yfcc" and method == "default_cagra"
+                    )
+                    recall = 0.7 if unreached else target + 0.001
                     selected_rows.append(
                         {
                             "workload": workload,
                             "method": method,
-                            "recall_median": target + 0.001,
-                            "recall_min": target + 0.0005,
-                            "within_target_window": True,
-                            "target_reached": True,
+                            "recall_median": recall,
+                            "recall_min": recall,
+                            "within_target_window": not unreached,
+                            "target_reached": not unreached,
                             "qps_median": 12_345,
                             "itopk": 100,
                             "search_width": 1,
@@ -492,7 +496,7 @@ class K100PipelineTest(unittest.TestCase):
                         {
                             "workload": workload,
                             "method": method,
-                            "recall": target + 0.001,
+                            "recall": recall,
                             "qps": 12_345,
                         }
                     )
@@ -534,6 +538,8 @@ class K100PipelineTest(unittest.TestCase):
             )
             latex = (matched / "fixed_recall_k100_results.tex").read_text()
             self.assertIn(r"\FixedRecallKOneHundredRows", latex)
+            self.assertIn("12.3K (max 0.7000)", latex)
+            self.assertNotIn("-- [max 0.7000]", latex)
             self.assertNotIn("L=", latex)
             self.assertNotIn("W=", latex)
 
