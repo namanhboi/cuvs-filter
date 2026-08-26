@@ -253,21 +253,26 @@ void search_main(raft::resources const& res,
     const auto k         = distances.extent(1);
     auto query_norms_ptr = query_norms.data_handle();
 
+    auto cosine_postprocess =
+      raft::compose_op(raft::add_const_op<DistanceT>{DistanceT(1)}, raft::div_checkzero_op{});
     raft::linalg::matrix_vector_op<raft::Apply::ALONG_COLUMNS>(
       res,
       raft::make_const_mdspan(distances),
       raft::make_const_mdspan(query_norms.view()),
       distances,
-      raft::compose_op(raft::add_const_op<DistanceT>{DistanceT(1)}, raft::div_checkzero_op{}));
+      cuvs::neighbors::ivf::detail::preserve_upper_bound_op<DistanceT,
+                                                            DistanceT,
+                                                            decltype(cosine_postprocess)>{
+        cosine_postprocess});
   } else {
-    cuvs::neighbors::ivf::detail::postprocess_distances(res,
-                                                        dist_out,
-                                                        dist_in,
-                                                        index.metric(),
-                                                        distances.extent(0),
-                                                        distances.extent(1),
-                                                        kScale,
-                                                        true);
+    cuvs::neighbors::ivf::detail::postprocess_distances<true>(res,
+                                                              dist_out,
+                                                              dist_in,
+                                                              index.metric(),
+                                                              distances.extent(0),
+                                                              distances.extent(1),
+                                                              kScale,
+                                                              true);
   }
 }
 /** @} */  // end group cagra

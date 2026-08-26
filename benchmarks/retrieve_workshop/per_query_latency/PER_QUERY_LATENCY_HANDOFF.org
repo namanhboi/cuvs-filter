@@ -38,8 +38,13 @@ Before accepting traces, the runner performs two gates:
 2. A three-repetition rerun of the twelve frozen batched graph operating points.  Recall may drift
    by at most =1e-4= and QPS may not regress by more than 2% from the selected-point evidence.
 
-All normal filter-validity, sentinel, duplicate-output, and native squared-L2 exactness checks also
-remain active.
+All normal filter-validity, duplicate-output, and native squared-L2 exactness checks also remain
+active.  Every underfilled output must form a canonical pair: the invalid ID sentinel and a
+=FLT_MAX= distance in the same slot.
+
+This paired-distance check is stricter than the throughput paper pipeline's set-based recall gate.
+The latter ignores distances in invalid slots because they cannot affect Recall@k; serialized
+latency requires byte-stable output semantics and therefore validates the pair explicitly.
 
 * Run on the A100 machine
 

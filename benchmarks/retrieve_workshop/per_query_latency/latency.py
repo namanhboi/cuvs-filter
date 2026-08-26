@@ -1131,10 +1131,7 @@ def validate_correctness(
         and float(row.get("DuplicateOutputQueries", 0.0)) != 0.0
     ):
         raise ValueError(f"{raw_path}: {method} emitted duplicate valid IDs")
-    if (
-        method in ("navix_reference", EXACT_METHOD)
-        and float(row.get("InvalidSentinelDistanceErrors", 0.0)) != 0.0
-    ):
+    if float(row.get("InvalidSentinelDistanceErrors", 0.0)) != 0.0:
         raise ValueError(
             f"{raw_path}: {method} has noncanonical invalid-slot distances"
         )

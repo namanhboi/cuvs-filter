@@ -605,6 +605,15 @@ class LatencyPipelineTest(unittest.TestCase):
             LATENCY.validate_correctness(
                 "default_cagra_accumulator", row, Path("retain.json")
             )
+        row["DuplicateOutputQueries"] = 0
+        row["InvalidSentinelDistanceErrors"] = 0.1
+        for method in (
+            "default_cagra",
+            "default_cagra_accumulator",
+            "navix_reference",
+        ):
+            with self.assertRaisesRegex(ValueError, "noncanonical"):
+                LATENCY.validate_correctness(method, row, Path(f"{method}.json"))
 
 
 if __name__ == "__main__":

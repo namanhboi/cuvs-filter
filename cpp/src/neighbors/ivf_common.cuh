@@ -172,7 +172,24 @@ void postprocess_neighbors(IdxT* neighbors_out,                // [n_queries, to
  * Post-process the scores depending on the metric type;
  * translate the element type if necessary.
  */
-template <typename ScoreInT, typename ScoreOutT = float>
+template <typename ScoreInT, typename ScoreOutT, typename OpT>
+struct preserve_upper_bound_op {
+  OpT op;
+
+  template <typename... Args>
+  constexpr RAFT_INLINE_FUNCTION auto operator()(ScoreInT value, Args... args) const -> ScoreOutT
+  {
+    // Filtered searches can legitimately return fewer than top-k results. The search kernels use
+    // upper_bound as the paired distance for an invalid output ID; numerical metric
+    // postprocessing (for example, restoring the scale of uint8 squared-L2 distances) must not
+    // transform that sentinel into infinity or another finite value.
+    return value == std::numeric_limits<ScoreInT>::max()
+             ? std::numeric_limits<ScoreOutT>::max()
+             : static_cast<ScoreOutT>(op(value, args...));
+  }
+};
+
+template <bool PreserveUpperBound = false, typename ScoreInT, typename ScoreOutT = float>
 void postprocess_distances(const raft::resources& res,
                            ScoreOutT* out,      // [n_queries, topk]
                            const ScoreInT* in,  // [n_queries, topk]
@@ -187,64 +204,57 @@ void postprocess_distances(const raft::resources& res,
   size_t len                = size_t(n_queries) * size_t(topk);
   auto out_view             = raft::make_device_vector_view<ScoreOutT, size_t>(out, len);
   auto in_view              = raft::make_device_vector_view<const ScoreInT, size_t>(in, len);
+  auto map_distances        = [&](auto op) {
+    if constexpr (PreserveUpperBound) {
+      using op_type = decltype(op);
+      raft::linalg::map(res,
+                        out_view,
+                        preserve_upper_bound_op<ScoreInT, ScoreOutT, op_type>{op},
+                        raft::make_const_mdspan(in_view));
+    } else {
+      raft::linalg::map(res, out_view, op, raft::make_const_mdspan(in_view));
+    }
+  };
   switch (metric) {
     case distance::DistanceType::L2Unexpanded:
     case distance::DistanceType::L2Expanded: {
       if (scaling_factor != 1.0) {
-        raft::linalg::map(
-          res,
-          out_view,
+        map_distances(
           raft::compose_op(raft::mul_const_op<ScoreOutT>{scaling_factor * scaling_factor},
-                           raft::cast_op<ScoreOutT>{}),
-          raft::make_const_mdspan(in_view));
+                           raft::cast_op<ScoreOutT>{}));
       } else if (needs_cast || needs_copy) {
-        raft::linalg::map(
-          res, out_view, raft::cast_op<ScoreOutT>{}, raft::make_const_mdspan(in_view));
+        map_distances(raft::cast_op<ScoreOutT>{});
       }
     } break;
     case distance::DistanceType::L2SqrtUnexpanded:
     case distance::DistanceType::L2SqrtExpanded: {
       if (scaling_factor != 1.0) {
-        raft::linalg::map(res,
-                          out_view,
-                          raft::compose_op{raft::mul_const_op<ScoreOutT>{scaling_factor},
-                                           raft::sqrt_op{},
-                                           raft::cast_op<ScoreOutT>{}},
-                          raft::make_const_mdspan(in_view));
+        map_distances(raft::compose_op{raft::mul_const_op<ScoreOutT>{scaling_factor},
+                                       raft::sqrt_op{},
+                                       raft::cast_op<ScoreOutT>{}});
       } else if (needs_cast) {
-        raft::linalg::map(res,
-                          out_view,
-                          raft::compose_op{raft::sqrt_op{}, raft::cast_op<ScoreOutT>{}},
-                          raft::make_const_mdspan(in_view));
+        map_distances(raft::compose_op{raft::sqrt_op{}, raft::cast_op<ScoreOutT>{}});
       } else {
-        raft::linalg::map(res, out_view, raft::sqrt_op{}, raft::make_const_mdspan(in_view));
+        map_distances(raft::sqrt_op{});
       }
     } break;
     case distance::DistanceType::CosineExpanded:
     case distance::DistanceType::InnerProduct: {
       float factor = (account_for_max_close ? -1.0 : 1.0) * scaling_factor * scaling_factor;
       if (factor != 1.0) {
-        raft::linalg::map(
-          res,
-          out_view,
-          raft::compose_op(raft::mul_const_op<ScoreOutT>{factor}, raft::cast_op<ScoreOutT>{}),
-          raft::make_const_mdspan(in_view));
+        map_distances(raft::compose_op(raft::mul_const_op<ScoreOutT>{factor},
+                                       raft::cast_op<ScoreOutT>{}));
       } else if (needs_cast || needs_copy) {
-        raft::linalg::map(
-          res, out_view, raft::cast_op<ScoreOutT>{}, raft::make_const_mdspan(in_view));
+        map_distances(raft::cast_op<ScoreOutT>{});
       }
     } break;
     case distance::DistanceType::BitwiseHamming: break;
     case distance::DistanceType::L1: {
       if (scaling_factor != 1.0) {
-        raft::linalg::map(res,
-                          out_view,
-                          raft::compose_op(raft::mul_const_op<ScoreOutT>{scaling_factor},
-                                           raft::cast_op<ScoreOutT>{}),
-                          raft::make_const_mdspan(in_view));
+        map_distances(raft::compose_op(raft::mul_const_op<ScoreOutT>{scaling_factor},
+                                       raft::cast_op<ScoreOutT>{}));
       } else if (needs_cast || needs_copy) {
-        raft::linalg::map(
-          res, out_view, raft::cast_op<ScoreOutT>{}, raft::make_const_mdspan(in_view));
+        map_distances(raft::cast_op<ScoreOutT>{});
       }
     } break;
     default: RAFT_FAIL("Unexpected metric.");

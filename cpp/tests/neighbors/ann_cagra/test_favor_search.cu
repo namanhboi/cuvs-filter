@@ -760,6 +760,14 @@ void expect_underfilled_source_results(const typed_search_result<IndexT>& result
   EXPECT_TRUE(saw_invalid);
 }
 
+TEST_F(CagraFavorUint8SearchTest, UnderfilledOutputsPreserveDistanceSentinelsAfterRescaling)
+{
+  // uint8 CAGRA restores the original squared-L2 scale after graph search. The scale transform
+  // must leave invalid-slot distances at FLT_MAX rather than overflowing them to infinity.
+  auto filter = make_filter(kRows - 3);
+  expect_underfilled_source_results(run(params(), filter, 1));
+}
+
 TEST_F(CagraFavorSearchTest, UnderfilledOutputsUseTypedSentinelsWithSourceMapping)
 {
   std::vector<std::uint32_t> source_indices_host(kRows);

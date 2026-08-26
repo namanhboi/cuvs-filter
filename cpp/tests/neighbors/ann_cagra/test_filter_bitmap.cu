@@ -1139,6 +1139,7 @@ TEST_P(CagraBitmapFilterDegree64Test, K100SparseDefaultOutputHasValidPrefix)
             const auto distance = result.distances[position];
             if (node == std::numeric_limits<std::uint32_t>::max()) {
               saw_sentinel = true;
+              EXPECT_EQ(distance, std::numeric_limits<float>::max());
               continue;
             }
             EXPECT_FALSE(saw_sentinel);
