@@ -11,8 +11,10 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import itertools
 import json
 import math
+import os
 import statistics
 import sys
 from datetime import datetime, timezone
@@ -41,9 +43,17 @@ METHODS = ("default_cagra", "default_cagra_accumulator", "navix_reference")
 PROFILE = load_profile()
 WIDTHS = tuple(int(value) for value in PROFILE["matched_widths"])
 TUNING_WIDTHS = tuple(value for value in WIDTHS if value in (1, 2))
-ANCHOR_L = (32, 64, 128, 256, 512)
-MIN_L = 10
+RESULT_K = int(os.environ.get("RETRIEVE_MATCHED_K", "10"))
+if not 1 <= RESULT_K <= 512:
+    raise ValueError("RETRIEVE_MATCHED_K must be in [1,512]")
+ALLOW_SHALLOW_NAVIX = os.environ.get("RETRIEVE_MATCHED_ALLOW_SHALLOW_NAVIX", "0") == "1"
+MIN_L = RESULT_K
 MAX_L = 512
+ANCHOR_L = (
+    (32, 64, 128, 256, 512)
+    if RESULT_K == 10
+    else tuple(sorted({RESULT_K, *(value for value in (32, 64, 128, 256, 512) if value >= RESULT_K)}))
+)
 L_QUANTUM = 32
 MAX_ITERATIONS = 7569
 HASHMAP_MAX_FILL_RATE = 0.5
@@ -52,6 +62,9 @@ MAX_NORMAL_HASH_ENTRIES = (1 << MAX_NORMAL_HASH_BITLEN) * HASHMAP_MAX_FILL_RATE
 TARGETS = {"yfcc": 0.80, "em": 0.95, "emis": 0.95, "r": 0.95}
 TARGET_WINDOW = 0.002
 EXPECTED_QUERIES = 10_000
+FINALIST_COUNT = 4 if RESULT_K == 100 else 3
+IMPORTED_BASELINE = "imported_b0_measurements.csv"
+IMPORTED_BASELINE_PROVENANCE = "imported_b0_provenance.json"
 
 # Only these cells need tighter B0 calibration for the paper.  The other four cells already have
 # valid, intentionally deep endpoints and are rerun unchanged in the final 12-cell measurement.
@@ -157,6 +170,120 @@ def read_csv(path: Path) -> list[dict[str, str]]:
         return []
     with path.open(newline="", encoding="utf-8") as source:
         return list(csv.DictReader(source))
+
+
+def truth(value: object) -> bool:
+    return str(value).strip().lower() in {"1", "true", "yes"}
+
+
+def import_baseline(
+    result_root: Path, summary_path: Path, provenance_path: Path
+) -> dict[str, object]:
+    """Freeze a completed B0 sweep as one-repetition calibration observations."""
+    provenance = json.loads(provenance_path.read_text())
+    contract = provenance.get("fixed_contract", {})
+    observed_k = int(contract.get("k", provenance.get("k", -1)))
+    observed_max_queries = int(
+        contract.get("max_queries", provenance.get("max_queries", -1))
+    )
+    set_semantics = contract.get("output_set_semantics") == "distinct_valid_output_ids_v1" or (
+        "distinct output ID" in str(provenance.get("recall_contract", ""))
+    )
+    if observed_k != RESULT_K or observed_max_queries != MAX_QUERIES or not set_semantics:
+        raise ValueError("baseline provenance does not match the active k/max_queries contract")
+
+    normalized: list[dict[str, object]] = []
+    for source in read_csv(summary_path):
+        if (
+            source.get("group") != "b0"
+            or source.get("phase") != "throughput"
+            or source.get("method") not in METHODS
+            or int(source.get("max_iterations", -1)) != 0
+            or not truth(source.get("paper_included", False))
+        ):
+            continue
+        workload = str(source["workload"])
+        method = str(source["method"])
+        itopk = int(source["itopk"])
+        width = int(source["search_width"])
+        if workload not in WORKLOADS or itopk < MIN_L or width not in WIDTHS:
+            continue
+        normalized.append(
+            {
+                "group": "imported_b0",
+                "stage": "calibration",
+                "workload": workload,
+                "graph_degree": int(source["graph_degree"]),
+                "intermediate_graph_degree": int(source["intermediate_graph_degree"]),
+                "method": method,
+                "itopk": itopk,
+                "search_width": width,
+                "max_iterations": 0,
+                "resolved_iterations": resolved_iterations(workload, itopk, width, 0),
+                "repetition_index": 0,
+                "shards": int(source["shards_per_repetition"]),
+                "queries": int(source["queries_per_repetition"]),
+                "recall": float(source["recall_median"]),
+                "valid_gt_fraction": float(source["valid_gt_fraction_min"]),
+                "qps": float(source["qps_median"]),
+                "seconds": float(source["seconds_median"]),
+                "filter_violations": float(source["filter_violations"]),
+                "sentinel_errors": float(source["sentinel_errors"]),
+                "duplicate_output_query_rate": float(
+                    source["duplicate_output_query_rate_max"]
+                ),
+                "underfilled_queries": float(source["underfilled_queries_max"]),
+                "missing_result_slots": float(source["missing_result_slots_max"]),
+            }
+        )
+
+    expected = len(WORKLOADS) * len(METHODS) * len(WIDTHS) * (len(ANCHOR_L) - 1)
+    # The k=100 source sweep contains 128/256/512; L=k is deliberately measured by this tuner.
+    if RESULT_K == 100 and len(normalized) != expected:
+        raise ValueError(
+            f"k=100 baseline contains {len(normalized)} usable points; expected {expected}"
+        )
+    if len({key(row) for row in normalized}) != len(normalized):
+        raise ValueError("baseline contains duplicate search points")
+    if any(
+        int(row["queries"]) != EXPECTED_QUERIES
+        or int(row["graph_degree"]) != 64
+        or int(row["intermediate_graph_degree"]) != 128
+        or float(row["filter_violations"]) != 0
+        or float(row["sentinel_errors"]) != 0
+        or (
+            row["method"] != "default_cagra"
+            and float(row["duplicate_output_query_rate"]) != 0
+        )
+        for row in normalized
+    ):
+        raise ValueError("baseline B0 measurements violate the frozen correctness contract")
+
+    state = result_root / "state"
+    state.mkdir(parents=True, exist_ok=True)
+    destination = state / IMPORTED_BASELINE
+    metadata_path = state / IMPORTED_BASELINE_PROVENANCE
+    metadata = {
+        "schema_version": 1,
+        "k": RESULT_K,
+        "max_queries": MAX_QUERIES,
+        "source_summary": str(summary_path.resolve()),
+        "source_summary_sha256": sha256(summary_path),
+        "source_provenance": str(provenance_path.resolve()),
+        "source_provenance_sha256": sha256(provenance_path),
+        "points": len(normalized),
+        "use": "calibration anchors only; every selected final point is rerun",
+    }
+    if destination.exists() or metadata_path.exists():
+        if not destination.is_file() or not metadata_path.is_file():
+            raise ValueError("partial imported baseline state")
+        old = json.loads(metadata_path.read_text())
+        if old != metadata:
+            raise ValueError("baseline source changed inside an immutable result root")
+        return metadata
+    write_csv(destination, MEASUREMENT_FIELDS, normalized)
+    metadata_path.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+    return metadata
 
 
 def validate_raw_output(
@@ -274,8 +401,19 @@ def normalize_point(row: dict) -> dict[str, object]:
         raise ValueError(f"W must be one of {WIDTHS}: {row}")
     if not 0 <= maximum <= MAX_ITERATIONS:
         raise ValueError(f"max_iterations outside [0,{MAX_ITERATIONS}]: {row}")
-    if maximum and maximum <= resolved_iterations(workload, itopk, width, 0):
-        raise ValueError(f"explicit depth must exceed B0: {row}")
+    if maximum:
+        b0 = resolved_iterations(workload, itopk, width, 0)
+        if maximum == b0:
+            raise ValueError(f"explicit iteration cap duplicates B0: {row}")
+        if maximum < b0 and not (
+            ALLOW_SHALLOW_NAVIX
+            and method == "navix_reference"
+            and itopk == MIN_L
+        ):
+            raise ValueError(
+                "an explicit cap below B0 is reserved for minimum-L NaviX "
+                f"target matching: {row}"
+            )
     if not hash_feasible(workload, method, itopk, width, maximum):
         raise ValueError(
             "configuration exceeds SINGLE_CTA's 20-bit normal-hash capacity "
@@ -342,6 +480,7 @@ def write_group(
                 int(row["itopk"]),
                 int(row["search_width"]),
                 int(row["max_iterations"]),
+                k=RESULT_K,
             )
             for row in local
         ]
@@ -364,6 +503,7 @@ def write_group(
                         shard=shard,
                         paths=paths,
                         searches=searches,
+                        k=RESULT_K,
                     ),
                     indent=2,
                 )
@@ -389,7 +529,7 @@ def write_group(
             "workload": workload,
             "target_recall": target(workload),
             "target_window": TARGET_WINDOW,
-            "k": 10,
+            "k": RESULT_K,
             "max_queries": MAX_QUERIES,
             "graph_degree": paths.graph_degree,
             "intermediate_graph_degree": paths.intermediate_graph_degree,
@@ -470,8 +610,67 @@ def measurements(result_root: Path) -> list[dict[str, object]]:
     return rows
 
 
+def imported_baseline_measurements(result_root: Path) -> list[dict[str, object]]:
+    path = result_root / "state" / IMPORTED_BASELINE
+    rows: list[dict[str, object]] = []
+    for source in read_csv(path):
+        row: dict[str, object] = {}
+        for field in MEASUREMENT_FIELDS:
+            value: object = source[field]
+            if field in {
+                "graph_degree",
+                "intermediate_graph_degree",
+                "itopk",
+                "search_width",
+                "max_iterations",
+                "resolved_iterations",
+                "repetition_index",
+                "shards",
+                "queries",
+            }:
+                value = int(value)
+            elif field not in {"group", "stage", "workload", "method"}:
+                value = float(value)
+            row[field] = value
+        rows.append(row)
+    return rows
+
+
 def calibration_rows(result_root: Path) -> list[dict[str, object]]:
-    return [row for row in measurements(result_root) if row["stage"] == "calibration"]
+    imported = imported_baseline_measurements(result_root)
+    measured = [row for row in measurements(result_root) if row["stage"] == "calibration"]
+    combined = {key(row): row for row in imported}
+    # A directly measured calibration point always supersedes an imported anchor.
+    combined.update({key(row): row for row in measured})
+    return sorted(
+        combined.values(),
+        key=lambda row: (
+            str(row["workload"]),
+            str(row["method"]),
+            int(row["itopk"]),
+            int(row["search_width"]),
+            int(row["max_iterations"]),
+        ),
+    )
+
+
+def analysis_measurements(result_root: Path) -> list[dict[str, object]]:
+    measured = measurements(result_root)
+    rows = [row for row in measured if row["stage"] != "calibration"]
+    rows.extend(calibration_rows(result_root))
+    return sorted(
+        rows,
+        key=lambda row: (
+            str(row["stage"]),
+            str(row["group"]),
+            str(row["workload"]),
+            str(row["method"]),
+            int(row["itopk"]),
+            int(row["search_width"]),
+            int(row["max_iterations"]),
+            int(row["repetition_index"]),
+        ),
+    )
 
 
 def measured_keys(rows: list[dict[str, object]]) -> set[tuple[str, str, int, int, int]]:
@@ -891,7 +1090,7 @@ def next_points(result_root: Path) -> tuple[str, list[dict[str, object]]]:
                         ),
                         key=lambda row: int(row["itopk"]),
                     )
-                    for left, right in zip(local, local[1:]):
+                    for left, right in itertools.pairwise(local):
                         left_pass = float(left["recall"]) >= goal
                         right_pass = float(right["recall"]) >= goal
                         gap = int(right["itopk"]) - int(left["itopk"])
@@ -928,7 +1127,168 @@ def next_points(result_root: Path) -> tuple[str, list[dict[str, object]]]:
             for workload, method, itopk, width, maximum in sorted(proposals)
         ]
 
-    # Stage 2: explicit continuation is legal only when no B0 configuration reaches the target.
+    # Once bisection finds a strict B0 match, exhaust the small integer-L neighborhood around it.
+    # This supplies multiple measured finalists without pretending that requested L is continuous.
+    if RESULT_K == 100:
+        for workload in WORKLOADS:
+            goal = target(workload)
+            for method in METHODS:
+                for width in TUNING_WIDTHS:
+                    local = [
+                        row
+                        for row in rows
+                        if row["workload"] == workload
+                        and row["method"] == method
+                        and int(row["search_width"]) == width
+                        and int(row["max_iterations"]) == 0
+                    ]
+                    matches = [
+                        row
+                        for row in local
+                        if goal <= float(row["recall"]) <= goal + TARGET_WINDOW
+                    ]
+                    existing_fingerprints = {
+                        execution_fingerprint(workload, int(row["itopk"]), width)
+                        for row in local
+                    }
+                    if matches:
+                        center = int(
+                            min(
+                                matches,
+                                key=lambda row: (
+                                    abs(float(row["recall"]) - goal),
+                                    int(row["itopk"]),
+                                ),
+                            )["itopk"]
+                        )
+                        for requested_l in range(
+                            max(MIN_L, center - 4), min(MAX_L, center + 4) + 1
+                        ):
+                            candidate = (workload, method, requested_l, width, 0)
+                            fingerprint = execution_fingerprint(
+                                workload, requested_l, width
+                            )
+                            if (
+                                candidate not in observed
+                                and fingerprint not in existing_fingerprints
+                            ):
+                                proposals.add(candidate)
+                                existing_fingerprints.add(fingerprint)
+        if proposals:
+            return "b0_target_neighborhood", [
+                {
+                    "workload": workload,
+                    "method": method,
+                    "itopk": itopk,
+                    "search_width": width,
+                    "max_iterations": maximum,
+                }
+                for workload, method, itopk, width, maximum in sorted(proposals)
+            ]
+
+    # Stage 2: k may make the minimum legal frontier large enough that NaviX overshoots the
+    # target at B0. Keep all k predicate-aware seeds, fix L at its legal minimum, and tune only
+    # the ordinary traversal budget below B0. max_iterations=1 is the smallest representable
+    # explicit cap; max_iterations=0 means automatic B0 rather than zero traversal.
+    if ALLOW_SHALLOW_NAVIX:
+        for workload in WORKLOADS:
+            goal = target(workload)
+            for width in TUNING_WIDTHS:
+                anchors = [
+                    row
+                    for row in rows
+                    if row["workload"] == workload
+                    and row["method"] == "navix_reference"
+                    and int(row["itopk"]) == MIN_L
+                    and int(row["search_width"]) == width
+                    and int(row["max_iterations"]) == 0
+                ]
+                if len(anchors) != 1:
+                    raise ValueError(
+                        f"missing unique minimum-L NaviX B0 anchor for {workload}/W{width}"
+                    )
+                anchor = anchors[0]
+                if float(anchor["recall"]) <= goal + TARGET_WINDOW:
+                    continue
+                b0_iterations = resolved_iterations(workload, MIN_L, width, 0)
+                series = sorted(
+                    (
+                        row
+                        for row in rows
+                        if row["workload"] == workload
+                        and row["method"] == "navix_reference"
+                        and int(row["itopk"]) == MIN_L
+                        and int(row["search_width"]) == width
+                        and 0 < int(row["max_iterations"]) < b0_iterations
+                    ),
+                    key=lambda row: int(row["max_iterations"]),
+                )
+                matches = [
+                    row
+                    for row in series
+                    if goal <= float(row["recall"]) <= goal + TARGET_WINDOW
+                ]
+                if matches:
+                    center = int(
+                        min(
+                            matches,
+                            key=lambda row: (
+                                abs(float(row["recall"]) - goal),
+                                int(row["max_iterations"]),
+                            ),
+                        )["max_iterations"]
+                    )
+                    for maximum in range(
+                        max(1, center - 2), min(b0_iterations - 1, center + 2) + 1
+                    ):
+                        candidate = (
+                            workload,
+                            "navix_reference",
+                            MIN_L,
+                            width,
+                            maximum,
+                        )
+                        if candidate not in observed:
+                            proposals.add(candidate)
+                    continue
+                if not series:
+                    maximum = 1
+                else:
+                    passing = [row for row in series if float(row["recall"]) >= goal]
+                    failing = [row for row in series if float(row["recall"]) < goal]
+                    upper = (
+                        min(int(row["max_iterations"]) for row in passing)
+                        if passing
+                        else b0_iterations
+                    )
+                    if failing:
+                        lower = max(int(row["max_iterations"]) for row in failing)
+                    else:
+                        smallest = min(int(row["max_iterations"]) for row in series)
+                        if smallest == 1:
+                            # Even one graph iteration overshoots. The fixed k-seed contract has
+                            # no lower traversal budget, so this W has no strict match.
+                            continue
+                        lower = 0
+                    if upper - lower <= 1:
+                        continue
+                    maximum = max(1, (lower + upper) // 2)
+                candidate = (workload, "navix_reference", MIN_L, width, maximum)
+                if candidate not in observed:
+                    proposals.add(candidate)
+        if proposals:
+            return "shallow_navix_refinement", [
+                {
+                    "workload": workload,
+                    "method": method,
+                    "itopk": itopk,
+                    "search_width": width,
+                    "max_iterations": maximum,
+                }
+                for workload, method, itopk, width, maximum in sorted(proposals)
+            ]
+
+    # Stage 3: explicit continuation is legal only when no B0 configuration reaches the target.
     for workload in WORKLOADS:
         goal = target(workload)
         for method in METHODS:
@@ -1007,21 +1367,59 @@ def candidate_selection(result_root: Path) -> dict:
             local = [row for row in rows if row["workload"] == workload and row["method"] == method]
             b0 = [row for row in local if int(row["max_iterations"]) == 0]
             b0_reaches = any(float(row["recall"]) >= goal for row in b0)
-            eligible = b0 if b0_reaches else local
+            b0_within = any(
+                goal <= float(row["recall"]) <= goal + TARGET_WINDOW for row in b0
+            )
+            shallow = [
+                row
+                for row in local
+                if method == "navix_reference"
+                and int(row["itopk"]) == MIN_L
+                and 0
+                < int(row["max_iterations"])
+                < resolved_iterations(
+                    workload,
+                    int(row["itopk"]),
+                    int(row["search_width"]),
+                    0,
+                )
+            ]
+            b0_overshoots = bool(b0) and min(float(row["recall"]) for row in b0) > (
+                goal + TARGET_WINDOW
+            )
+            if b0_within:
+                eligible = b0
+                eligibility_rule = "B0 reaches the strict target window"
+            elif ALLOW_SHALLOW_NAVIX and b0_overshoots and shallow:
+                minimum_b0 = [row for row in b0 if int(row["itopk"]) == MIN_L]
+                eligible = shallow + minimum_b0
+                eligibility_rule = "minimum-L NaviX B0 overshoots; use shallow iteration tuning"
+            elif b0_reaches:
+                eligible = b0
+                eligibility_rule = "B0 reaches target; explicit continuation is excluded"
+            else:
+                eligible = local
+                eligibility_rule = "no B0 point reaches target; explicit continuation is allowed"
             qualifying = [row for row in eligible if float(row["recall"]) >= goal]
             if qualifying:
                 within = [row for row in qualifying if float(row["recall"]) <= goal + TARGET_WINDOW]
                 if within:
-                    finalists = sorted(within, key=lambda row: float(row["qps"]), reverse=True)[:3]
+                    finalists = sorted(
+                        within, key=lambda row: float(row["qps"]), reverse=True
+                    )[:FINALIST_COUNT]
                     rule = "fastest calibration QPS within target window"
                 else:
                     finalists = sorted(
                         qualifying,
                         key=lambda row: (float(row["recall"]) - goal, -float(row["qps"])),
-                    )[:3]
+                    )[:FINALIST_COUNT]
                     rule = "smallest measured overshoot"
             else:
-                finalists = sorted(local, key=lambda row: (float(row["recall"]), float(row["qps"])), reverse=True)[:3]
+                finalists = sorted(
+                    local,
+                    key=lambda row: (float(row["recall"]), float(row["qps"])),
+                    reverse=True,
+                )[:FINALIST_COUNT]
                 rule = "target not reached; rerun maximum-recall endpoints"
             unique: list[dict[str, object]] = []
             seen: set[tuple[str, str, int, int, int]] = set()
@@ -1045,6 +1443,7 @@ def candidate_selection(result_root: Path) -> dict:
                     "method": method,
                     "target_recall": goal,
                     "b0_reaches_target": b0_reaches,
+                    "eligibility_rule": eligibility_rule,
                     "selection_rule": rule,
                     "calibration_candidates": unique,
                 }
@@ -1053,6 +1452,7 @@ def candidate_selection(result_root: Path) -> dict:
         "schema_version": 1,
         "experiment": "retrieve_workshop_matched_recall",
         "generated_utc": datetime.now(timezone.utc).isoformat(),
+        "k": RESULT_K,
         "target_window": TARGET_WINDOW,
         "max_l": MAX_L,
         "widths": list(WIDTHS),
@@ -1186,10 +1586,16 @@ def provenance(result_root: Path, summaries: list[dict], selected: list[dict]) -
     provenance_max_queries = int(
         run_payload.get("fixed_contract", {}).get("max_queries", -1)
     )
+    provenance_k = int(run_payload.get("fixed_contract", {}).get("k", -1))
     if provenance_max_queries != MAX_QUERIES:
         raise ValueError(
             "matched-recall provenance/config max_queries mismatch: "
             f"provenance={provenance_max_queries}, active_profile={MAX_QUERIES}"
+        )
+    if provenance_k != RESULT_K:
+        raise ValueError(
+            f"matched-recall provenance/config k mismatch: provenance={provenance_k}, "
+            f"active={RESULT_K}"
         )
     manifests = [
         path
@@ -1204,6 +1610,11 @@ def provenance(result_root: Path, summaries: list[dict], selected: list[dict]) -
             "matched-recall manifests mix max_queries values: "
             f"{sorted(manifest_max_queries)}"
         )
+    manifest_k = {
+        int(json.loads(path.read_text()).get("k", -1)) for path in manifests
+    }
+    if manifest_k != {RESULT_K}:
+        raise ValueError(f"matched-recall manifests mix k values: {sorted(manifest_k)}")
     raw_files = sorted((result_root / "raw").glob("*/*/shard_*.json"))
     state_files = sorted((result_root / "state").glob("*.json"))
     analysis_files = [
@@ -1215,12 +1626,15 @@ def provenance(result_root: Path, summaries: list[dict], selected: list[dict]) -
         "schema_version": 1,
         "experiment": "retrieve_workshop_matched_recall",
         "generated_utc": datetime.now(timezone.utc).isoformat(),
+        "k": RESULT_K,
         "max_queries": MAX_QUERIES,
         "targets": TARGETS,
         "target_window": TARGET_WINDOW,
         "selection_contract": (
-            "Use B0 only whenever any B0 configuration reaches the workload target. "
-            "Otherwise allow explicit continuation through 7569 iterations where the L/W/depth "
+            "Use B0 whenever it intersects the target window. If minimum-L NaviX B0 "
+            "overshoots and shallow tuning is enabled, preserve all k bitmap seeds and tune an "
+            "explicit traversal cap below B0. Otherwise allow explicit continuation only when "
+            "no B0 configuration reaches the target, through 7569 iterations where the L/W/depth "
             "combination fits SINGLE_CTA's 20-bit normal visited hash at 0.5 fill. Final selection "
             "requires recall_min>=target, prefers median recall<=target+0.002, and chooses maximum "
             "median QPS inside that window; no interpolation."
@@ -1242,6 +1656,11 @@ def provenance(result_root: Path, summaries: list[dict], selected: list[dict]) -
         "analysis_inputs": [
             {"path": str(path.resolve()), "sha256": sha256(path)} for path in analysis_files
         ],
+        "imported_b0": (
+            json.loads((result_root / "state" / IMPORTED_BASELINE_PROVENANCE).read_text())
+            if (result_root / "state" / IMPORTED_BASELINE_PROVENANCE).is_file()
+            else None
+        ),
         "summary_rows": len(summaries),
         "selected_rows": selected,
     }
@@ -1254,6 +1673,11 @@ def main() -> None:
     next_parser = subparsers.add_parser("next")
     next_parser.add_argument("--result-root", type=Path, required=True)
     next_parser.add_argument("--output", type=Path, required=True)
+
+    baseline = subparsers.add_parser("import-baseline")
+    baseline.add_argument("--result-root", type=Path, required=True)
+    baseline.add_argument("--summary", type=Path, required=True)
+    baseline.add_argument("--provenance", type=Path, required=True)
 
     generate = subparsers.add_parser("generate-group")
     generate.add_argument("--result-root", type=Path, required=True)
@@ -1302,7 +1726,10 @@ def main() -> None:
     finalize.add_argument("--result-root", type=Path, required=True)
 
     args = parser.parse_args()
-    if args.command == "next":
+    if args.command == "import-baseline":
+        payload = import_baseline(args.result_root, args.summary, args.provenance)
+        print(json.dumps(payload, indent=2))
+    elif args.command == "next":
         reason, points = next_points(args.result_root)
         payload = {"schema_version": 1, "reason": reason, "points": points}
         args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -1353,7 +1780,7 @@ def main() -> None:
         payload = validate_raw_output(args.raw, args.config, args.repetitions)
         print(json.dumps(payload))
     elif args.command == "analyze":
-        rows = measurements(args.result_root)
+        rows = analysis_measurements(args.result_root)
         write_csv(args.result_root / "analysis" / "measurements.csv", MEASUREMENT_FIELDS, rows)
         print(json.dumps({"measurements": len(rows)}))
     elif args.command == "select-final":
@@ -1362,7 +1789,7 @@ def main() -> None:
         args.output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
         print(json.dumps({"points": len(payload["points"])}))
     elif args.command == "finalize":
-        rows = measurements(args.result_root)
+        rows = analysis_measurements(args.result_root)
         write_csv(args.result_root / "analysis" / "measurements.csv", MEASUREMENT_FIELDS, rows)
         summaries, selected = summarize_final(args.result_root)
         write_csv(args.result_root / "analysis" / "final_summary.csv", SUMMARY_FIELDS, summaries)

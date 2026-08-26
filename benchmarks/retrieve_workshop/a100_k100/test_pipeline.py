@@ -450,6 +450,96 @@ class K100PipelineTest(unittest.TestCase):
             )
             self.assertEqual(len(set(map(int, output_gt[1]))), 100)
 
+    def test_matched_table_and_bundle_hide_configs_but_preserve_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            matched = root / "matched_recall/analysis"
+            graph = root / "gpu_graph/analysis"
+            exact = root / "exact_bitmap/analysis"
+            run_provenance = root / "provenance"
+            for directory in (matched, graph, exact, run_provenance):
+                directory.mkdir(parents=True)
+            selected_rows = []
+            measurement_rows = []
+            for workload in WORKLOADS:
+                target = 0.80 if workload == "yfcc" else 0.95
+                for method in METHODS:
+                    selected_rows.append(
+                        {
+                            "workload": workload,
+                            "method": method,
+                            "recall_median": target + 0.001,
+                            "recall_min": target + 0.0005,
+                            "within_target_window": True,
+                            "target_reached": True,
+                            "qps_median": 12_345,
+                            "itopk": 100,
+                            "search_width": 1,
+                            "max_iterations": 7 if method == "navix_reference" else 0,
+                            "resolved_iterations": 7 if method == "navix_reference" else 105,
+                            "filter_violations": 0,
+                            "sentinel_errors": 0,
+                            "duplicate_output_query_rate_max": 0,
+                        }
+                    )
+                    measurement_rows.append(
+                        {
+                            "workload": workload,
+                            "method": method,
+                            "recall": target + 0.001,
+                            "qps": 12_345,
+                        }
+                    )
+            with (matched / "selected_points.csv").open("w", newline="") as output:
+                writer = csv.DictWriter(output, fieldnames=list(selected_rows[0]))
+                writer.writeheader()
+                writer.writerows(selected_rows)
+            with (matched / "measurements.csv").open("w", newline="") as output:
+                writer = csv.DictWriter(output, fieldnames=list(measurement_rows[0]))
+                writer.writeheader()
+                writer.writerows(measurement_rows)
+            provenance = {
+                "k": 100,
+                "max_queries": 2048,
+                "targets": {"yfcc": 0.80, "em": 0.95, "emis": 0.95, "r": 0.95},
+                "target_window": 0.002,
+                "selected_rows": selected_rows,
+            }
+            (matched / "provenance.json").write_text(json.dumps(provenance) + "\n")
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT_DIR / "matched_table.py"),
+                    "--result-root",
+                    str(root / "matched_recall"),
+                ],
+                check=True,
+                env={**os.environ, "MPLBACKEND": "Agg"},
+            )
+            latex = (matched / "fixed_recall_k100_results.tex").read_text()
+            self.assertIn(r"\FixedRecallKOneHundredRows", latex)
+            self.assertNotIn("L=", latex)
+            self.assertNotIn("W=", latex)
+
+            (graph / "summary_points.csv").write_text("fixture\n")
+            (graph / "provenance.json").write_text(json.dumps({"k": 100}) + "\n")
+            (exact / "exact_results.json").write_text(json.dumps({"k": 100}) + "\n")
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT_DIR / "bundle.py"),
+                    "--run-root",
+                    str(root),
+                ],
+                check=True,
+            )
+            bundle = root / "paper_gpu_bundle_k100_matched"
+            manifest = json.loads((bundle / "manifest.json").read_text())
+            self.assertEqual(manifest["k"], 100)
+            self.assertTrue(
+                (bundle / "matched_recall/fixed_recall_k100_results.tex").is_file()
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -12,10 +12,13 @@ It does not alter the frozen Recall@10 paper runner in =../a100_paper=.  The exp
 - masked cuVS Brute Force KNN, used as the exact-search control
 
 The workloads are YFCC-10M and ArXiv-large EM, EMIS, and R.  All graph-search points use the
-degree-64 CAGRA graphs, SINGLE_CTA, =max_queries=2048=, =k=100=, and B0
-(=max_iterations=0=).  The sweep is the Cartesian product
-=L in {128,256,512}= and =W in {1,2}=.  Correctness uses 1,000 queries and one repetition;
-reported throughput uses all 10,000 queries and three repetitions.
+degree-64 CAGRA graphs, SINGLE_CTA, =max_queries=2048=, and =k=100=.  The initial B0 sweep is the
+Cartesian product =L in {128,256,512}= and =W in {1,2}=.  A second adaptive sweep produces a
+matched-recall table at =[0.800,0.802]= on YFCC and =[0.950,0.952]= on every ArXiv predicate.
+It tests the minimum legal =L=100=, refines arbitrary integer L at B0, lowers NaviX's explicit
+iteration cap when minimum-L B0 overshoots, and deepens a method only when no B0 point reaches the
+target.  Correctness uses 1,000 queries and one repetition; reported throughput and every frozen
+matched finalist use all 10,000 queries and three repetitions.
 
 * Important ground-truth detail
 
@@ -67,7 +70,7 @@ script reuses the proven Recall@10 conversion when it already exists.
 
 * Complete run
 
-From a clean checkout of branch =retrieve-a100-k100=:
+From a clean checkout of branch =retrieve-a100-k100-matched=:
 
 #+begin_src bash
 cd /home/ubuntu/cuvs-filter
@@ -97,7 +100,9 @@ benchmarks/retrieve_workshop/a100_k100/run.sh prepare-yfcc-gt
 benchmarks/retrieve_workshop/a100_k100/run.sh prepare-views
 benchmarks/retrieve_workshop/a100_k100/run.sh graph
 benchmarks/retrieve_workshop/a100_k100/run.sh exact
+benchmarks/retrieve_workshop/a100_k100/run.sh matched-recall
 benchmarks/retrieve_workshop/a100_k100/run.sh analyze
+benchmarks/retrieve_workshop/a100_k100/run.sh bundle
 #+end_src
 
 The =all= ordering is mandatory on a fresh machine.  In particular, =prepare-views= requires the
@@ -115,6 +120,12 @@ completed YFCC top-100 manifest, and both search stages require those views.
   QPS values are never averaged.
 - The YFCC top-100 generation pass is excluded from all QPS figures.  It creates evaluation labels,
   just as downloading published ground truth does; it is not an online search stage.
+- The matched-recall calibration imports the completed 72-point B0 summary only as tuning anchors.
+  Every selected configuration is rerun for three complete repetitions before it can enter the
+  table.  No QPS or recall value is interpolated.
+- NaviX always retains up to 100 passing bitmap seeds.  If =L=100= at B0 exceeds the target window,
+  a positive =max_iterations= below B0 tunes only graph traversal; =max_iterations=0= continues to
+  mean automatic B0.
 
 * Outputs
 
@@ -129,12 +140,39 @@ analysis/combined_points.csv
 analysis/summary.json
 analysis/plots/{yfcc,em,emis,r}_qps_recall_k100.{png,pdf}
 analysis/plots/gpu_qps_recall_k100.{png,pdf}
+matched_recall/analysis/selected_points.csv
+matched_recall/analysis/matched_recall_k100_table.{csv,json}
+matched_recall/analysis/fixed_recall_k100_results.tex
+matched_recall/analysis/gpu_matched_recall_k100.{png,pdf}
+paper_gpu_bundle_k100_matched/manifest.json
 #+end_src
 
 The combined CSV must contain 72 graph points (four workloads x three methods x three L values x
 two W values) and four exact points.  The analyzer rejects missing repetitions, mixed =k= or
 =max_queries= contracts, predicate violations, malformed sentinels, duplicate outputs on the new
 paths, or an incorrect exact control.
+
+The generated LaTeX table intentionally contains only QPS and achieved recall.  Exact =L=, =W=,
+configured iteration cap, and resolved iteration count remain in =selected_points.csv= and
+=matched_recall_k100_table.csv=.  Stage the completed bundle into the paper checkout with:
+
+#+begin_src bash
+cd /home/ubuntu/retrieve-cagra-paper
+python scripts/stage_k100_matched.py \
+  --bundle /data/retrieve_workshop_runs/a100_k100_RUN/paper_gpu_bundle_k100_matched
+#+end_src
+
+The manuscript includes the Recall@100 table conditionally, so it continues to compile before this
+staging step.
+
+To transfer only the compact evidence, run:
+
+#+begin_src bash
+tar -C "${RETRIEVE_A100_K100_RUN_ROOT}" -czf \
+  "$HOME/a100_k100_matched_paper_gpu_bundle.tar.gz" \
+  paper_gpu_bundle_k100_matched
+sha256sum "$HOME/a100_k100_matched_paper_gpu_bundle.tar.gz"
+#+end_src
 
 * Recovery
 

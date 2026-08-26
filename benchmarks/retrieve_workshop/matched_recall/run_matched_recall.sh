@@ -9,6 +9,8 @@ result_root=${RETRIEVE_RESULT_ROOT:-"/home/ubuntu/retrieve_workshop_runs/matched
 bench_bin=${RETRIEVE_BENCH_BIN:-"${repo_dir}/cpp/build/bench/ann/CUVS_CAGRA_ANN_BENCH"}
 build_libcuvs=${RETRIEVE_LIBCUVS:-"${repo_dir}/cpp/build/libcuvs.so"}
 min_time=${RETRIEVE_BENCH_MIN_TIME:-0.10s}
+baseline_summary=${RETRIEVE_MATCHED_BASELINE_SUMMARY:-}
+baseline_provenance=${RETRIEVE_MATCHED_BASELINE_PROVENANCE:-}
 stage=${1:-all}
 
 require_runtime() {
@@ -17,6 +19,23 @@ require_runtime() {
   "${python_bin}" "${script_dir}/../gpu_graph/capture_provenance.py" \
     --result-root "${result_root}" --repo "${repo_dir}" --stage "$1" \
     --bench-bin "${bench_bin}" --libcuvs "${build_libcuvs}" --data-root "${data_root}"
+}
+
+prepare_baseline() {
+  if test -z "${baseline_summary}"; then
+    return
+  fi
+  test -f "${baseline_summary}" || {
+    echo "missing matched-recall baseline summary: ${baseline_summary}" >&2
+    exit 2
+  }
+  test -n "${baseline_provenance}" && test -f "${baseline_provenance}" || {
+    echo "missing matched-recall baseline provenance: ${baseline_provenance}" >&2
+    exit 2
+  }
+  "${python_bin}" "${script_dir}/matched_recall.py" import-baseline \
+    --result-root "${result_root}" --summary "${baseline_summary}" \
+    --provenance "${baseline_provenance}"
 }
 
 run_group() {
@@ -108,6 +127,7 @@ run_navix_refinement() {
 }
 
 calibrate() {
+  prepare_baseline
   local round=0
   while true; do
     local proposal group count

@@ -15,6 +15,7 @@ libcuvs=${RETRIEVE_LIBCUVS:-"${repo_dir}/cpp/build/libcuvs.so"}
 yfcc_gt_root=${RETRIEVE_YFCC_GT100_ROOT:-"${data_root}/retrieve_workshop/k100_groundtruth/yfcc"}
 yfcc_float_base=${RETRIEVE_K100_YFCC_FLOAT_BASE:-"${data_root}/retrieve_workshop/exact_bitmap_a100/yfcc/base.10M.fbin"}
 exact_data_root=${RETRIEVE_K100_EXACT_DATA_ROOT:-"${data_root}/retrieve_workshop/exact_bitmap_a100_k100"}
+matched_root=${RETRIEVE_K100_MATCHED_ROOT:-"${run_root}/matched_recall"}
 stage=${1:-all}
 
 export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
@@ -107,6 +108,7 @@ test_gate() {
   env -u RETRIEVE_DATASET_PROFILE MPLBACKEND=Agg \
     "${python_bin}" "${repo_dir}/benchmarks/retrieve_workshop/exact_bitmap/test_pipeline.py"
   env MPLBACKEND=Agg "${python_bin}" "${script_dir}/test_pipeline.py"
+  env MPLBACKEND=Agg "${python_bin}" "${script_dir}/test_matched_recall.py"
   mark_done test
 }
 
@@ -228,6 +230,27 @@ run_exact() {
   mark_done exact
 }
 
+run_matched() {
+  is_done matched_recall && return
+  local baseline_summary="${run_root}/gpu_graph/analysis/summary_points.csv"
+  local baseline_provenance="${run_root}/gpu_graph/analysis/provenance.json"
+  test -f "${baseline_summary}" && test -f "${baseline_provenance}" || {
+    echo "run the k=100 graph stage before matched recall" >&2
+    exit 2
+  }
+  env RETRIEVE_RESULT_ROOT="${matched_root}" \
+    RETRIEVE_MATCHED_K=100 \
+    RETRIEVE_MATCHED_ALLOW_SHALLOW_NAVIX=1 \
+    RETRIEVE_MATCHED_BASELINE_SUMMARY="${baseline_summary}" \
+    RETRIEVE_MATCHED_BASELINE_PROVENANCE="${baseline_provenance}" \
+    RETRIEVE_PROVENANCE_K=100 \
+    RETRIEVE_PROVENANCE_MAX_QUERIES=2048 \
+    "${repo_dir}/benchmarks/retrieve_workshop/matched_recall/run_matched_recall.sh" all
+  env RETRIEVE_MATCHED_K=100 RETRIEVE_MATCHED_ALLOW_SHALLOW_NAVIX=1 MPLBACKEND=Agg \
+    "${python_bin}" "${script_dir}/matched_table.py" --result-root "${matched_root}"
+  mark_done matched_recall
+}
+
 analyze() {
   env RETRIEVE_RESULT_ROOT="${run_root}/gpu_graph" \
     "${repo_dir}/benchmarks/retrieve_workshop/gpu_graph/run_gpu_graph.sh" analyze
@@ -239,6 +262,18 @@ analyze() {
     RETRIEVE_EXACT_K=100 RETRIEVE_EXACT_YFCC_FLOAT_BASE="${yfcc_float_base}" \
     "${repo_dir}/benchmarks/retrieve_workshop/exact_bitmap/run_exact.sh" analyze
   env MPLBACKEND=Agg "${python_bin}" "${script_dir}/analyze.py" --run-root "${run_root}"
+  if test -d "${matched_root}/configs"; then
+    env RETRIEVE_RESULT_ROOT="${matched_root}" RETRIEVE_MATCHED_K=100 \
+      RETRIEVE_MATCHED_ALLOW_SHALLOW_NAVIX=1 RETRIEVE_PROVENANCE_K=100 \
+      RETRIEVE_PROVENANCE_MAX_QUERIES=2048 \
+      "${repo_dir}/benchmarks/retrieve_workshop/matched_recall/run_matched_recall.sh" analyze
+    env RETRIEVE_MATCHED_K=100 RETRIEVE_MATCHED_ALLOW_SHALLOW_NAVIX=1 MPLBACKEND=Agg \
+      "${python_bin}" "${script_dir}/matched_table.py" --result-root "${matched_root}"
+  fi
+}
+
+bundle() {
+  "${python_bin}" "${script_dir}/bundle.py" --run-root "${run_root}"
 }
 
 case "${stage}" in
@@ -249,7 +284,9 @@ case "${stage}" in
   prepare-views) prepare_views ;;
   graph) run_graph ;;
   exact) run_exact ;;
+  matched-recall) run_matched ;;
   analyze) analyze ;;
+  bundle) bundle ;;
   all)
     preflight
     build_binaries
@@ -258,10 +295,12 @@ case "${stage}" in
     prepare_views
     run_graph
     run_exact
+    run_matched
     analyze
+    bundle
     ;;
   *)
-    echo "usage: $0 {preflight|build|test|prepare-yfcc-gt|prepare-views|graph|exact|analyze|all}" >&2
+    echo "usage: $0 {preflight|build|test|prepare-yfcc-gt|prepare-views|graph|exact|matched-recall|analyze|bundle|all}" >&2
     exit 2
     ;;
 esac
