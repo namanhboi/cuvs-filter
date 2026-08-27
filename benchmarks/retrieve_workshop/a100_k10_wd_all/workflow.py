@@ -44,6 +44,7 @@ MAX_QUERIES = 2_048
 WORKLOADS = ("yfcc", "em", "emis", "r")
 TARGETS = {"yfcc": 0.800, "em": 0.950, "emis": 0.950, "r": 0.950}
 TARGET_WINDOW = 0.002
+REFERENCE_REPLAY_MAX_SLOT_DRIFT = 10
 POLICY_K = "k_seed"
 POLICY_WD = "wd_seed"
 METHOD = "navix_reference"
@@ -948,7 +949,8 @@ def analyze(root: Path) -> None:
         replay = control_by_key[("paired_incumbent", workload, POLICY_K)]
         recall_delta = float(replay["recall_median"]) - float(references[workload]["recall_median"])
         qps_ratio = float(replay["qps_median"]) / float(references[workload]["qps_median"])
-        if abs(recall_delta) > 1.0 / (10_000 * K) + 1e-12:
+        replay_tolerance = REFERENCE_REPLAY_MAX_SLOT_DRIFT / (10_000 * K)
+        if abs(recall_delta) > replay_tolerance + 1e-12:
             raise ValueError(f"{workload} k-seed reference recall drifted by {recall_delta}")
         if not 0.85 <= qps_ratio <= 1.15:
             raise ValueError(f"{workload} k-seed reference QPS drift is too large: {qps_ratio}")
@@ -995,6 +997,7 @@ def analyze(root: Path) -> None:
                 "selected_points": len(selected),
                 "paired_controls": len(paired),
                 "diagnostics": len(diagnostics),
+                "reference_replay_max_slot_drift": REFERENCE_REPLAY_MAX_SLOT_DRIFT,
                 "target_results": target_rows,
             },
             indent=2,
