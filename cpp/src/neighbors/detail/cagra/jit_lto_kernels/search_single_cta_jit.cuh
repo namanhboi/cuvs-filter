@@ -640,10 +640,10 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
       // Default filtering and sparse automatic FAVOR retirement may invalidate expanded parents
       // between top-k updates. Restore the sorted internal-top-k invariant before merging.
       const bool retire_rejected_now = retire_rejected_parents || (NAVIX && !navix_seeded);
-      if (retire_rejected_now && *filter_flag != 0) {
+      const bool compact_rejected    = retire_rejected_now && *filter_flag != 0;
+      if (compact_rejected) {
         compact_invalid_to_end_of_list<TOPK_BY_BITONIC_SORT>(
           result_indices_buffer, result_distances_buffer, internal_topk);
-        if (threadIdx.x == 0) { *terminate_flag = 0; }
         if constexpr (BITONIC_SORT_AND_MERGE_MULTI_WARPS) {
           // Compaction is performed by the first warp. Do not let the second merge warp read the
           // shared top-k buffer while the first warp is still rewriting it.
@@ -662,6 +662,11 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
         topk_ws,
         (iter == 0));
       __syncthreads();
+      // Keep the compaction decision uniform across the CTA. Clearing the shared flag before all
+      // warps have evaluated it can make one warp skip the branch (and its CTA barrier) while
+      // another enters it. The top-k synchronization above is already required, so deferring this
+      // store fixes that race without adding a barrier to the search loop.
+      if (compact_rejected && threadIdx.x == 0) { *terminate_flag = 0; }
       _CLK_REC(clk_topk);
     } else {
       _CLK_START();

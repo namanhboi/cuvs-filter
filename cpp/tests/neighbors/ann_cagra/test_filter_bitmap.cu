@@ -1355,6 +1355,96 @@ TEST_P(CagraBitmapFilterDegree64Test, BitmapSeededDefaultSupportsIndependentSeed
   }
 }
 
+TEST(CagraBitmapSeededHighDimTest, DeepFilteredSearchKeepsCompactionDecisionCTAUniform)
+{
+  constexpr std::int64_t rows       = 769;
+  constexpr std::int64_t dim        = 4096;
+  constexpr std::int64_t result_k   = 10;
+  constexpr std::int64_t batch_size = 2048;
+  constexpr int repetitions         = 32;
+
+  raft::device_resources resources;
+  auto dataset       = raft::make_device_matrix<float, std::int64_t>(resources, rows, dim);
+  auto batch_queries = raft::make_device_matrix<float, std::int64_t>(resources, batch_size, dim);
+  raft::random::RngState rng(9012ULL);
+  raft::random::uniform(resources, rng, dataset.data_handle(), dataset.size(), -1.0f, 1.0f);
+  raft::random::uniform(
+    resources, rng, batch_queries.data_handle(), batch_queries.size(), -1.0f, 1.0f);
+
+  // The regression targets search, not graph construction.  Use a deterministic degree-64 graph
+  // so it can run on every supported GPU without invoking NN-descent first.
+  constexpr std::int64_t graph_degree = 64;
+  auto graph = raft::make_host_matrix<std::uint32_t, std::int64_t>(rows, graph_degree);
+  for (std::int64_t row = 0; row < rows; ++row) {
+    for (std::int64_t edge = 0; edge < graph_degree; ++edge) {
+      graph(row, edge) = static_cast<std::uint32_t>((row + edge + 1) % rows);
+    }
+  }
+  cagra::index<float, std::uint32_t> high_dim_index(resources,
+                                                    cuvs::distance::DistanceType::L2Expanded,
+                                                    raft::make_const_mdspan(dataset.view()),
+                                                    raft::make_const_mdspan(graph.view()));
+
+  device_bitmap bitmap(resources, batch_size, rows, [](auto query_id, auto source_id) {
+    const auto modulus = query_id % 17 == 0 ? 37 : 3;
+    return source_id % modulus != 1;
+  });
+  auto filter                            = bitmap.filter();
+  auto stream                            = raft::resource::get_cuda_stream(resources);
+  constexpr std::uint32_t itopk          = 512;
+  constexpr std::uint32_t width          = 2;
+  constexpr std::uint32_t point_seed_cap = width * 64;
+  cagra::search_params search_params;
+  search_params.algo              = cagra::search_algo::SINGLE_CTA;
+  search_params.itopk_size        = itopk;
+  search_params.search_width      = width;
+  search_params.max_iterations    = 0;
+  search_params.max_queries       = batch_size;
+  search_params.thread_block_size = 0;
+  search_params.filtering_rate    = 0.0f;
+
+  for (const bool passing_accumulator : {false, true}) {
+    auto neighbors =
+      raft::make_device_matrix<std::int64_t, std::int64_t>(resources, batch_size, result_k);
+    auto distances = raft::make_device_matrix<float, std::int64_t>(resources, batch_size, result_k);
+    rmm::device_uvector<std::uint32_t> seeds(batch_size * point_seed_cap, stream);
+    rmm::device_uvector<std::uint32_t> counts(batch_size, stream);
+    rmm::device_uvector<std::uint32_t> inspected(batch_size, stream);
+    for (int repetition = 0; repetition < repetitions; ++repetition) {
+      SCOPED_TRACE(::testing::Message() << "L=" << itopk << ", W=" << width << ", accumulator="
+                                        << passing_accumulator << ", repetition=" << repetition);
+      detail::benchmark_search_bitmap_seeded<float>(resources,
+                                                    search_params,
+                                                    high_dim_index,
+                                                    raft::make_const_mdspan(batch_queries.view()),
+                                                    neighbors.view(),
+                                                    distances.view(),
+                                                    filter,
+                                                    0,
+                                                    seeds.data(),
+                                                    counts.data(),
+                                                    inspected.data(),
+                                                    passing_accumulator,
+                                                    point_seed_cap);
+      raft::resource::sync_stream(resources);
+    }
+
+    std::vector<std::int64_t> host_neighbors(neighbors.size());
+    raft::copy(host_neighbors.data(), neighbors.data_handle(), neighbors.size(), stream);
+    raft::resource::sync_stream(resources);
+    for (std::int64_t query_id = 0; query_id < batch_size; ++query_id) {
+      for (std::int64_t rank = 0; rank < result_k; ++rank) {
+        const auto source_id = host_neighbors[static_cast<std::size_t>(query_id * result_k + rank)];
+        if (source_id == std::numeric_limits<std::int64_t>::max()) { continue; }
+        ASSERT_GE(source_id, 0);
+        ASSERT_LT(source_id, rows);
+        const auto modulus = query_id % 17 == 0 ? 37 : 3;
+        EXPECT_NE(source_id % modulus, 1);
+      }
+    }
+  }
+}
+
 INSTANTIATE_TEST_CASE_P(CagraBitmapFilters,
                         CagraBitmapFilterTest,
                         ::testing::Values(cagra::search_algo::SINGLE_CTA,
