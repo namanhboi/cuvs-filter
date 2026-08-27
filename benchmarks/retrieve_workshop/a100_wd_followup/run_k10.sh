@@ -137,7 +137,7 @@ test_gate() {
   is_done test && return
   env LD_PRELOAD="${libcuvs}${LD_PRELOAD:+:${LD_PRELOAD}}" \
     "${repo_dir}/cpp/build/gtests/NEIGHBORS_ANN_CAGRA_FILTER_BITMAP_TEST" \
-    --gtest_filter='*BitmapSeededDefaultSupportsIndependentSeedCaps*:*BitmapSeededNavixSupportsSeedCapAboveResultWidth*:*BitmapSeededNavixSupportsSeedCapBelowResultWidth*' \
+    --gtest_filter='CagraBitmapSeededHighDimTest.DeepFilteredSearchKeepsCompactionDecisionCTAUniform:*BitmapSeededDefaultSupportsIndependentSeedCaps*:*BitmapSeededNavixSupportsSeedCapAboveResultWidth*:*BitmapSeededNavixSupportsSeedCapBelowResultWidth*' \
     --gtest_color=no
   env -u RETRIEVE_DATASET_PROFILE "${python_bin}" \
     "${repo_dir}/benchmarks/retrieve_workshop/gpu_graph/test_pipeline.py"
