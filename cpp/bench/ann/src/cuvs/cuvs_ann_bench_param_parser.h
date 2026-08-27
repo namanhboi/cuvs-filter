@@ -567,10 +567,15 @@ void parse_search_param(const nlohmann::json& conf,
   }
   param.navix_seed_k   = conf.value("k", 10u);
   param.navix_seed_cap = conf.value("navix_seed_cap", param.navix_seed_k);
+  param.cagra_seed_cap = conf.value("cagra_seed_cap", param.navix_seed_k);
   if (conf.contains("navix_seed_cap") && !param.navix_bitmap_seeds) {
     THROW("navix_seed_cap requires navix_bitmap_seeds");
   }
+  if (conf.contains("cagra_seed_cap") && !param.cagra_bitmap_seeds) {
+    THROW("cagra_seed_cap requires cagra_bitmap_seeds");
+  }
   if (param.navix_seed_cap == 0) { THROW("navix_seed_cap must be positive"); }
+  if (param.cagra_seed_cap == 0) { THROW("cagra_seed_cap must be positive"); }
   if (conf.contains("favor_delta_d_file")) {
     param.favor_delta_d_file = conf.at("favor_delta_d_file").get<std::string>();
   }

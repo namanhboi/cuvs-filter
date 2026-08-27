@@ -101,12 +101,19 @@ def search_point(
     *,
     k: int = DEFAULT_K,
     max_queries: int | None = None,
+    seed_policy: str = "k",
+    graph_degree: int | None = None,
 ) -> dict:
     if method not in METHODS:
         raise ValueError(f"unknown method {method!r}")
     effective_max_queries = MAX_QUERIES if max_queries is None else int(max_queries)
     if effective_max_queries <= 0:
         raise ValueError("max_queries must be positive")
+    if seed_policy not in {"k", "wd"}:
+        raise ValueError(f"unknown bitmap seed policy {seed_policy!r}")
+    if seed_policy == "wd" and (graph_degree is None or graph_degree <= 0):
+        raise ValueError("W*D bitmap seeds require a positive graph degree")
+    seed_cap = k if seed_policy == "k" else width * int(graph_degree)
     row: dict[str, object] = {
         "algo": "single_cta",
         "filter_mode": "default",
@@ -133,20 +140,26 @@ def search_point(
                 "navix_scheduler": "tiled",
                 "navix_bitmap_seeds": True,
                 "navix_kernel_variant": "reference",
+                "navix_seed_cap": seed_cap,
             }
         )
     elif method.endswith("_seeded"):
         row["cagra_bitmap_seeds"] = True
+        row["cagra_seed_cap"] = seed_cap
     return row
 
 
 def point_identity(row: dict) -> dict:
-    return {
+    identity = {
         "method": row["bitmap_method"],
         "itopk": int(row["itopk"]),
         "search_width": int(row["search_width"]),
         "max_iterations": int(row["max_iterations"]),
     }
+    for key in ("navix_seed_cap", "cagra_seed_cap"):
+        if key in row:
+            identity[key] = int(row[key])
+    return identity
 
 
 def config_payload(
@@ -210,6 +223,7 @@ def write_group(
     searches: list[dict],
     yfcc_graph_degree: int,
     k: int = DEFAULT_K,
+    seed_policy: str = "k",
 ) -> None:
     max_query_values = {int(row["max_queries"]) for row in searches}
     if len(max_query_values) != 1:
@@ -297,6 +311,12 @@ def write_group(
         "expected_queries": expected_queries,
         "expected_shards": len(generated),
         "source_bitmap_manifest": str(paths.manifest.resolve()),
+        "passing_seed_policy": seed_policy,
+        # Compatibility key consumed by the existing GPU analyzer and matched-recall importer.
+        "navix_seed_policy": seed_policy,
+        "seed_cap_contract": (
+            "result k" if seed_policy == "k" else "search_width * graph_degree"
+        ),
         "search_points": [point_identity(row) for row in searches],
         "configs": generated,
     }
@@ -343,6 +363,18 @@ def main() -> None:
         help="generate Base, Retain, and NaviX without matched-seed controls",
     )
     parser.add_argument(
+        "--methods",
+        help=(
+            "comma-separated method subset; choices are " + ",".join(METHODS)
+        ),
+    )
+    parser.add_argument(
+        "--seed-policy",
+        choices=("k", "wd"),
+        default="k",
+        help="passing bitmap seed cap: result width k or one W*D expansion quantum",
+    )
+    parser.add_argument(
         "--cartesian-b0",
         action="store_true",
         help="use every L/W pair from L={64,128,256,512}, W={1,2}",
@@ -382,19 +414,49 @@ def main() -> None:
     deep_cells = tuple(cell for cell in DEEP_CELLS if cell[0] >= args.k)
     if not b0_cells:
         parser.error("no configured B0 cell has L >= k")
-    methods = PRIMARY_METHODS if args.primary_methods_only else METHODS
+    if args.primary_methods_only and args.methods:
+        parser.error("--primary-methods-only and --methods are mutually exclusive")
+    if args.methods:
+        requested_methods = tuple(item.strip() for item in args.methods.split(",") if item.strip())
+        if not requested_methods or len(set(requested_methods)) != len(requested_methods):
+            parser.error("--methods must contain unique method names")
+        invalid_methods = set(requested_methods) - set(METHODS)
+        if invalid_methods:
+            parser.error(f"unknown --methods values: {sorted(invalid_methods)}")
+        methods = requested_methods
+    else:
+        methods = PRIMARY_METHODS if args.primary_methods_only else METHODS
 
-    b0_searches = [
-        search_point(method, itopk, width, 0, k=args.k)
-        for method in methods
-        for itopk, width in b0_cells
-    ]
     correctness_itopk = min(itopk for itopk, _ in b0_cells)
-    correctness_searches = [
-        search_point(method, correctness_itopk, 1, 0, k=args.k)
-        for method in methods
-    ]
     for workload in WORKLOADS:
+        degree = dataset_paths(
+            args.data_root, workload, "correctness", args.yfcc_graph_degree
+        ).graph_degree
+        b0_searches = [
+            search_point(
+                method,
+                itopk,
+                width,
+                0,
+                k=args.k,
+                seed_policy=args.seed_policy,
+                graph_degree=degree,
+            )
+            for method in methods
+            for itopk, width in b0_cells
+        ]
+        correctness_searches = [
+            search_point(
+                method,
+                correctness_itopk,
+                1,
+                0,
+                k=args.k,
+                seed_policy=args.seed_policy,
+                graph_degree=degree,
+            )
+            for method in methods
+        ]
         write_group(
             args.output,
             args.data_root,
@@ -404,6 +466,7 @@ def main() -> None:
             searches=correctness_searches,
             yfcc_graph_degree=args.yfcc_graph_degree,
             k=args.k,
+            seed_policy=args.seed_policy,
         )
         write_group(
             args.output,
@@ -414,6 +477,7 @@ def main() -> None:
             searches=b0_searches,
             yfcc_graph_degree=args.yfcc_graph_degree,
             k=args.k,
+            seed_policy=args.seed_policy,
         )
 
     deep_pairs = parse_deep_pairs(args)
@@ -445,6 +509,9 @@ def main() -> None:
             # One method per deep group lets the staged runner stop that workload/method series
             # immediately after either retained cell reaches the target recall.
             for method in selected_methods:
+                degree = dataset_paths(
+                    args.data_root, workload, "throughput", args.yfcc_graph_degree
+                ).graph_degree
                 write_group(
                     args.output,
                     args.data_root,
@@ -452,11 +519,20 @@ def main() -> None:
                     workload=workload,
                     phase="throughput",
                     searches=[
-                        search_point(method, itopk, width, iterations, k=args.k)
+                        search_point(
+                            method,
+                            itopk,
+                            width,
+                            iterations,
+                            k=args.k,
+                            seed_policy=args.seed_policy,
+                            graph_degree=degree,
+                        )
                         for itopk, width in deep_cells
                     ],
                     yfcc_graph_degree=args.yfcc_graph_degree,
                     k=args.k,
+                    seed_policy=args.seed_policy,
                 )
 
 

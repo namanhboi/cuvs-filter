@@ -137,7 +137,7 @@ class cuvs_cagra : public algo<T>, public algo_gpu {
     std::optional<std::uint32_t> navix_policy;
     /** Replace NaviX's in-kernel seed discovery with passing bitmap nodes. */
     bool navix_bitmap_seeds = false;
-    /** Give default CAGRA the same first-k passing bitmap seeds as the NaviX control. */
+    /** Give default CAGRA a deterministic prefix of passing bitmap seeds. */
     bool cagra_bitmap_seeds = false;
     /** Paper-control assertion: internal graph IDs must also be externally reported source IDs. */
     bool require_identity_source_indices = false;
@@ -145,6 +145,8 @@ class cuvs_cagra : public algo<T>, public algo_gpu {
     std::uint32_t navix_seed_k = 10;
     /** Benchmark-only cap on NaviX bitmap seeds. Independent of and defaults to result width. */
     std::uint32_t navix_seed_cap = 10;
+    /** Benchmark-only cap on default-CAGRA bitmap seeds. Defaults to result width. */
+    std::uint32_t cagra_seed_cap = 10;
     float refine_ratio;
     AllocatorType graph_mem   = AllocatorType::kDevice;
     AllocatorType dataset_mem = AllocatorType::kDevice;
@@ -293,6 +295,7 @@ class cuvs_cagra : public algo<T>, public algo_gpu {
   bool cagra_bitmap_seeds_{};
   std::uint32_t navix_seed_k_{10};
   std::uint32_t navix_seed_cap_{10};
+  std::uint32_t cagra_seed_cap_{10};
   std::shared_ptr<rmm::device_uvector<std::uint32_t>> navix_seed_ids_;
   std::shared_ptr<rmm::device_uvector<std::uint32_t>> navix_seed_counts_;
   std::shared_ptr<rmm::device_uvector<std::uint32_t>> navix_seed_inspected_units_;
@@ -479,6 +482,7 @@ void cuvs_cagra<T, IdxT>::set_search_param(const search_param_base& param,
   cagra_bitmap_seeds_      = sp.cagra_bitmap_seeds;
   navix_seed_k_            = sp.navix_seed_k;
   navix_seed_cap_          = sp.navix_seed_cap;
+  cagra_seed_cap_          = sp.cagra_seed_cap;
   filter_empty_            = false;
   favor_udf_sampled_rates_.reset();
   favor_udf_sampled_passing_counts_.reset();
@@ -552,26 +556,26 @@ void cuvs_cagra<T, IdxT>::set_search_param(const search_param_base& param,
     RAFT_EXPECTS(bitmap_filter_adapter_ != nullptr,
                  "bitmap seed control requires a query-dependent bitmap filter");
     RAFT_EXPECTS(navix_seed_k_ > 0, "bitmap seed control requires a positive result width");
-    RAFT_EXPECTS(!navix_bitmap_seeds_ || navix_seed_cap_ > 0,
-                 "NaviX bitmap seed cap must be positive");
-    if (navix_bitmap_seeds_) {
+    const auto configured_seed_cap = navix_bitmap_seeds_ ? navix_seed_cap_ : cagra_seed_cap_;
+    RAFT_EXPECTS(configured_seed_cap > 0, "bitmap seed cap must be positive");
+    {
       // SINGLE_CTA rounds L to a warp before appending its W*D candidate tail.  Bitmap seeds are
       // initial candidates, not output slots, so their cap may exceed k but must fit that exact
-      // initialized result buffer.  Keeping this check in the benchmark adapter leaves the public
-      // cuVS API unchanged and preserves the k=100/cap=100 control at L=100,W=1.
+      // initialized result buffer. Keeping this check in the benchmark adapter leaves the public
+      // cuVS API unchanged for both NaviX and matched default-CAGRA controls.
       constexpr std::size_t warp_size = 32;
       const auto configured_itopk = std::max<std::size_t>(search_params_.itopk_size, navix_seed_k_);
       const auto aligned_itopk    = ((configured_itopk + warp_size - 1) / warp_size) * warp_size;
       const auto seed_capacity =
         aligned_itopk + search_params_.search_width * index_->graph().extent(1);
-      RAFT_EXPECTS(navix_seed_cap_ <= seed_capacity,
-                   "NaviX bitmap seed cap %u exceeds SINGLE_CTA initialization capacity %zu",
-                   navix_seed_cap_,
+      RAFT_EXPECTS(configured_seed_cap <= seed_capacity,
+                   "bitmap seed cap %u exceeds SINGLE_CTA initialization capacity %zu",
+                   configured_seed_cap,
                    seed_capacity);
     }
     auto stream            = raft::resource::get_cuda_stream(handle_);
     const auto query_rows  = static_cast<std::size_t>(bitmap_filter_adapter_->query_rows());
-    const auto seed_stride = navix_bitmap_seeds_ ? navix_seed_cap_ : navix_seed_k_;
+    const auto seed_stride = navix_bitmap_seeds_ ? navix_seed_cap_ : cagra_seed_cap_;
     navix_seed_ids_ =
       std::make_shared<rmm::device_uvector<std::uint32_t>>(query_rows * seed_stride, stream);
     navix_seed_counts_ = std::make_shared<rmm::device_uvector<std::uint32_t>>(query_rows, stream);
@@ -878,7 +882,7 @@ std::unique_ptr<algo<T>> cuvs_cagra<T, IdxT>::copy()
     if (navix_bitmap_seeds_ || cagra_bitmap_seeds_) {
       auto stream            = raft::resource::get_cuda_stream(result->handle_);
       const auto query_rows  = static_cast<std::size_t>(bitmap_filter_adapter_->query_rows());
-      const auto seed_stride = navix_bitmap_seeds_ ? navix_seed_cap_ : navix_seed_k_;
+      const auto seed_stride = navix_bitmap_seeds_ ? navix_seed_cap_ : cagra_seed_cap_;
       result->navix_seed_ids_ =
         std::make_shared<rmm::device_uvector<std::uint32_t>>(query_rows * seed_stride, stream);
       result->navix_seed_counts_ =
@@ -988,7 +992,8 @@ void cuvs_cagra<T, IdxT>::search_base(
           navix_seed_ids_->data(),
           navix_seed_counts_->data(),
           navix_seed_inspected_units_->data(),
-          favor_udf_passing_accumulator_);
+          favor_udf_passing_accumulator_,
+          cagra_seed_cap_);
         return;
       }
       cuvs::neighbors::cagra::detail::benchmark_search_bitmap_with_query_offset<T>(

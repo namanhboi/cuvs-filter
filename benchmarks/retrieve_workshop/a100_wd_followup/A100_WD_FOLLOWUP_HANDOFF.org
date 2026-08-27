@@ -1,0 +1,100 @@
+#+title: A100 matched W x D seed follow-up
+
+* What these runs measure
+
+The follow-up has two independent, immutable campaigns.
+
+1. The =k=10= campaign gives Base, Retain, and NaviX the same deterministic
+   prefix of passing bitmap IDs. The cap is one graph-expansion quantum,
+   =W * D=, so it is 64 IDs at =W=1= and 128 IDs at =W=2= on every degree-64
+   graph. It measures all six reviewed B0 =L/W= cells, with one 1,000-query
+   correctness pass and three repetitions over all 10,000 throughput queries.
+   This is a matched-seed ablation; it does not replace the native Base/Retain
+   headline measurements.
+
+2. The =k=100= campaign rebuilds the complete NaviX W*D B0 frontier, performs
+   measured matched-recall tuning for YFCC [0.800,0.802] and ArXiv-large
+   [0.950,0.952], and repeats finalists three times. It then runs k-seed and
+   W*D-seed NaviX at both the old k-seed winner and the new W*D winner. Those
+   paired controls separate the effect of seed count from movement along the
+   tuning frontier. Base, Retain, and exact =brute_force/knn= evidence is
+   preserved from the reviewed k=100 bundle.
+
+The choice =W * D= is a graph-local experimental unit: it is exactly the
+number of neighbor slots exposed by one width-wide degree-=D= expansion. It
+is not claimed to reproduce native CAGRA initialization, which starts from
+=L_internal + W * D= random candidates.
+
+* Required reviewed inputs
+
+Place these existing archives in the A100 user's home directory:
+
+- =~/a100_k10_wd_all_merged_paper_gpu_bundle.tar.gz=
+- =~/a100_k100_matched_paper_gpu_bundle.tar.gz=
+
+The k=100 bitmap views and ground truth under =/data/retrieve_data= are reused;
+the workflow does not regenerate them.
+
+* Run the k=10 matched-seed campaign
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter
+git fetch origin retrieve-a100-k10-wd-seeds
+git switch retrieve-a100-k10-wd-seeds
+git pull --ff-only origin retrieve-a100-k10-wd-seeds
+
+micromamba activate cuvs
+export CUDA_VISIBLE_DEVICES=0
+export PYTHON="$(command -v python)"
+export MPLBACKEND=Agg
+export RETRIEVE_DATA_ROOT=/data/retrieve_data
+export RETRIEVE_RUN_TAG=$(date -u +%Y%m%dT%H%M%SZ)
+export RETRIEVE_A100_K10_WD_MATCHED_RUN_ROOT=/data/retrieve_workshop_runs/a100_k10_wd_matched_${RETRIEVE_RUN_TAG}
+
+benchmarks/retrieve_workshop/a100_wd_followup/run_k10.sh all
+#+end_src
+
+The script writes and prints a compressed bundle in =~/=. The key analysis
+files are =matched_wd_seed_b0_selected.csv=, =matched_wd_seed_controls.csv=,
+=navix_k_vs_wd_target.csv=, and their generated TeX fragments.
+
+* Run the k=100 NaviX W*D campaign
+
+Use a new run tag; the two campaigns may share the same checkout but must not
+share a result root.
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter
+micromamba activate cuvs
+export CUDA_VISIBLE_DEVICES=0
+export PYTHON="$(command -v python)"
+export MPLBACKEND=Agg
+export RETRIEVE_DATA_ROOT=/data/retrieve_data
+export RETRIEVE_RUN_TAG=$(date -u +%Y%m%dT%H%M%SZ)
+export RETRIEVE_A100_K100_WD_RUN_ROOT=/data/retrieve_workshop_runs/a100_k100_wd_${RETRIEVE_RUN_TAG}
+
+benchmarks/retrieve_workshop/a100_wd_followup/run_k100.sh all
+#+end_src
+
+The key files are =matched_recall_k100_wd_table.csv=,
+=navix_k_vs_wd_target.csv=, =paired_seed_policy_controls.csv=, and
+=fixed_recall_k100_wd_results.tex=. The composite bundle replaces only NaviX
+rows and regenerates the paper-facing graph and matched-recall views; the
+complete displaced k-seed views are retained under =seed_ablation/=.
+
+* Resume and failure behavior
+
+Both drivers accept named stages and keep a lock, a pinned source/reference
+contract, and completion markers. Reuse the exact same exported result root to
+resume. A complete raw file is validated and retained. An incomplete raw file
+is never overwritten; the error names the one file that must be removed.
+
+The k=10 stages are =preflight=, =build=, =test=, =graph=, =analyze=, and
+=bundle=. The k=100 stages are =preflight=, =build=, =test=, =frontier=,
+=matched=, =controls=, =analyze=, and =bundle=.
+
+Every reported throughput point covers all 10,000 queries as five serial host
+calls (2048, 2048, 2048, 2048, 1808), with QPS computed as
+=10000 / sum(shard wall-search seconds)=. Analysis requires zero predicate,
+invalid-sentinel, sentinel-order, invalid-sentinel-distance, and duplicate
+output errors for the new seeded paths.

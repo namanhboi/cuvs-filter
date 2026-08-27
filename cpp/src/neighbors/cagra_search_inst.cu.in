@@ -258,7 +258,8 @@ CUVS_EXPORT void benchmark_search_bitmap_seeded<data_t>(
   std::uint32_t* seed_ids,
   std::uint32_t* seed_counts,
   std::uint32_t* inspected_units,
-  bool passing_accumulator)
+  bool passing_accumulator,
+  std::uint32_t seed_stride)
 {
   using bitmap_t = cuvs::neighbors::filtering::bitmap_filter<std::uint32_t, std::int64_t>;
   RAFT_EXPECTS(params.algo == search_algo::SINGLE_CTA,
@@ -270,8 +271,9 @@ CUVS_EXPORT void benchmark_search_bitmap_seeded<data_t>(
   RAFT_EXPECTS(seed_ids != nullptr && seed_counts != nullptr,
                "benchmark_search_bitmap_seeded requires seed ID and count buffers");
   auto const& bitmap = validate_navix_bitmap<bitmap_t>(index, queries, sample_filter, query_offset);
-  const auto num_queries    = static_cast<std::uint32_t>(queries.extent(0));
-  const auto seed_stride    = static_cast<std::uint32_t>(neighbors.extent(1));
+  const auto num_queries = static_cast<std::uint32_t>(queries.extent(0));
+  if (seed_stride == 0) { seed_stride = static_cast<std::uint32_t>(neighbors.extent(1)); }
+  RAFT_EXPECTS(seed_stride > 0, "benchmark_search_bitmap_seeded requires a positive seed stride");
   const auto source_indices = index.source_indices();
   select_navix_bitmap_seeds(res,
                             bitmap,

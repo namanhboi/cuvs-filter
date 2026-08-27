@@ -169,41 +169,41 @@ def write_synthetic_raw(result_root: Path, group: str) -> None:
                         - 4.0 * point["itopk"]
                         - 100.0 * shard["shard_index"]
                     ) * (1.0 + 0.01 * (repetition - 1))
-                    rows.append(
-                        {
-                            "name": "synthetic",
-                            "run_type": "iteration",
-                            "repetitions": repetitions,
-                            "repetition_index": repetition,
-                            "n_queries": shard["query_count"],
-                            "k": 10,
-                            "max_queries": 512,
-                            "Recall": recall,
-                            "ValidGTRecall": recall,
-                            "ValidGTFraction": 1.0,
-                            "items_per_second": qps,
-                            "itopk": point["itopk"],
-                            "search_width": point["search_width"],
-                            "max_iterations": point["max_iterations"],
-                            "favor_udf_passing_accumulator": float(
-                                "accumulator" in method
-                            ),
-                            "cagra_bitmap_seeds": float(
-                                method.endswith("_seeded")
-                            ),
-                            "navix_bitmap_seeds": float(
-                                method == "navix_reference"
-                            ),
-                            "require_identity_source_indices": 1.0,
-                            "FilterViolations": 0,
-                            "InvalidSentinelErrors": 0,
-                            "DuplicateOutputQueries": 0,
-                            "OutputSetSemanticsVersion": 1,
-                            "UnderfilledQueries": 0,
-                            "MissingResultSlots": 0,
-                            "label": benchmark_label(method),
-                        }
-                    )
+                    row = {
+                        "name": "synthetic",
+                        "run_type": "iteration",
+                        "repetitions": repetitions,
+                        "repetition_index": repetition,
+                        "n_queries": shard["query_count"],
+                        "k": manifest["k"],
+                        "max_queries": manifest["max_queries"],
+                        "Recall": recall,
+                        "ValidGTRecall": recall,
+                        "ValidGTFraction": 1.0,
+                        "items_per_second": qps,
+                        "itopk": point["itopk"],
+                        "search_width": point["search_width"],
+                        "max_iterations": point["max_iterations"],
+                        "favor_udf_passing_accumulator": float(
+                            "accumulator" in method
+                        ),
+                        "cagra_bitmap_seeds": float(method.endswith("_seeded")),
+                        "navix_bitmap_seeds": float(method == "navix_reference"),
+                        "require_identity_source_indices": 1.0,
+                        "FilterViolations": 0,
+                        "InvalidSentinelErrors": 0,
+                        "SentinelOrderErrors": 0,
+                        "InvalidSentinelDistanceErrors": 0,
+                        "DuplicateOutputQueries": 0,
+                        "OutputSetSemanticsVersion": 1,
+                        "UnderfilledQueries": 0,
+                        "MissingResultSlots": 0,
+                        "label": benchmark_label(method),
+                    }
+                    for key in ("navix_seed_cap", "cagra_seed_cap"):
+                        if key in point:
+                            row[key] = point[key]
+                    rows.append(row)
             destination = raw_dir / f"shard_{shard['shard_index']:02d}.json"
             destination.write_text(json.dumps({"benchmarks": rows}) + "\n")
 
@@ -524,6 +524,42 @@ class PipelineTest(unittest.TestCase):
             )
             self.assertNotEqual(completed.returncode, 0)
             self.assertIn("correctness failure", completed.stderr)
+
+    def test_analyzer_rejects_all_sentinel_failure_modes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            data = root / "data"
+            make_source_manifests(data)
+            generate(root, data)
+            write_synthetic_raw(root, "b0")
+            target = root / "raw" / "b0" / "em" / "shard_00.json"
+            original = json.loads(target.read_text())
+            command = [
+                PYTHON,
+                str(SCRIPT_DIR / "analyze_gpu_graph.py"),
+                "--result-root",
+                str(root),
+                "--require-group",
+                "b0",
+                "--no-plots",
+            ]
+            for key in (
+                "InvalidSentinelErrors",
+                "SentinelOrderErrors",
+                "InvalidSentinelDistanceErrors",
+            ):
+                payload = copy.deepcopy(original)
+                payload["benchmarks"][0][key] = 1
+                target.write_text(json.dumps(payload) + "\n")
+                completed = subprocess.run(
+                    command,
+                    env=dict(os.environ, MPLBACKEND="Agg"),
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertNotEqual(completed.returncode, 0)
+                self.assertIn("correctness failure", completed.stderr)
 
     def test_analyzer_requires_duplicate_counter(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

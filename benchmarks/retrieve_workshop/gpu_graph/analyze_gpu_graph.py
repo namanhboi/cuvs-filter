@@ -108,6 +108,8 @@ class RawPoint:
     itopk: int
     search_width: int
     max_iterations: int
+    seed_policy: str
+    seed_cap: int
     queries: int
     recall: float
     valid_gt_fraction: float
@@ -133,6 +135,8 @@ class RepetitionPoint:
     itopk: int
     search_width: int
     max_iterations: int
+    seed_policy: str
+    seed_cap: int
     shards: int
     queries: int
     recall: float
@@ -157,6 +161,8 @@ class SummaryPoint:
     itopk: int
     search_width: int
     max_iterations: int
+    seed_policy: str
+    seed_cap: int
     repetitions: int
     shards_per_repetition: int
     queries_per_repetition: int
@@ -183,6 +189,31 @@ def point_key(row: dict) -> tuple[str, int, int, int]:
         int(row["search_width"]),
         int(row["max_iterations"]),
     )
+
+
+def expected_seed_identity(
+    manifest: dict, point: dict, method: str, graph_degree: int, expected_k: int
+) -> tuple[str, int, str | None]:
+    if method != "navix_reference" and not method.endswith("_seeded"):
+        return "none", 0, None
+    policy = str(
+        manifest.get(
+            "passing_seed_policy", manifest.get("navix_seed_policy", "k")
+        )
+    )
+    if policy not in {"k", "wd"}:
+        raise ValueError(f"invalid passing seed policy {policy!r}")
+    cap = expected_k if policy == "k" else int(point["search_width"]) * graph_degree
+    key = "navix_seed_cap" if method == "navix_reference" else "cagra_seed_cap"
+    recorded = int(point.get(key, expected_k if policy == "k" else -1))
+    if recorded != cap:
+        raise ValueError(
+            f"{method} manifest seed cap {recorded} disagrees with {policy} contract {cap}"
+        )
+    # Historical k-seed manifests relied on the benchmark's result-width default and therefore
+    # have no emitted seed-cap counter. New manifests make the cap explicit and are checked at
+    # runtime; W*D manifests are already rejected above unless they record the key.
+    return policy, cap, key if key in point else None
 
 
 def validate_runtime_flags(
@@ -275,8 +306,11 @@ def load_group(path: Path, manifest: dict, raw_root: Path) -> list[RawPoint]:
             f"G={graph_degree}, IG={intermediate_graph_degree}"
         )
     repetitions = int(manifest["repetitions"])
-    expected_points = {point_key(row) for row in manifest["search_points"]}
-    if len(expected_points) != len(manifest["search_points"]):
+    expected_point_rows = {
+        point_key(row): row for row in manifest["search_points"]
+    }
+    expected_points = set(expected_point_rows)
+    if len(expected_point_rows) != len(manifest["search_points"]):
         raise ValueError(f"duplicate search point in {path}")
     source_manifest_path = Path(manifest["source_bitmap_manifest"])
     source_manifest = json.loads(source_manifest_path.read_text())
@@ -358,6 +392,20 @@ def load_group(path: Path, manifest: dict, raw_root: Path) -> list[RawPoint]:
                     f"duplicate search point {key}, repetition {repetition} in {raw_path}"
                 )
             rows_by_repetition[repetition].add(key)
+            seed_policy, seed_cap, seed_counter = expected_seed_identity(
+                manifest,
+                expected_point_rows[key],
+                method,
+                graph_degree,
+                expected_k,
+            )
+            if seed_counter is not None:
+                runtime_cap = round(finite(record, seed_counter, raw_path))
+                if runtime_cap != seed_cap:
+                    raise ValueError(
+                        f"runtime {seed_counter}={runtime_cap} disagrees with manifest "
+                        f"cap={seed_cap} in {raw_path}"
+                    )
             validate_runtime_flags(
                 record,
                 label,
@@ -387,7 +435,16 @@ def load_group(path: Path, manifest: dict, raw_root: Path) -> list[RawPoint]:
                     f"qps={qps}, recall={recall}, valid_gt_fraction={valid_gt_fraction}"
                 )
             violations = finite(record, "FilterViolations", raw_path)
-            sentinels = finite(record, "InvalidSentinelErrors", raw_path)
+            invalid_sentinels = finite(record, "InvalidSentinelErrors", raw_path)
+            sentinel_order_errors = finite(record, "SentinelOrderErrors", raw_path)
+            invalid_sentinel_distance_errors = finite(
+                record, "InvalidSentinelDistanceErrors", raw_path
+            )
+            sentinels = (
+                invalid_sentinels
+                + sentinel_order_errors
+                + invalid_sentinel_distance_errors
+            )
             # Mandatory for paper data: absence must not masquerade as a successful check.
             duplicates = finite(record, "DuplicateOutputQueries", raw_path)
             underfilled = finite(record, "UnderfilledQueries", raw_path)
@@ -425,7 +482,10 @@ def load_group(path: Path, manifest: dict, raw_root: Path) -> list[RawPoint]:
             ):
                 raise ValueError(
                     f"correctness failure in {raw_path}, repetition {repetition}, {key}: "
-                    f"filter={violations}, sentinel={sentinels}, duplicate={duplicates}"
+                    f"filter={violations}, invalid_sentinel={invalid_sentinels}, "
+                    f"sentinel_order={sentinel_order_errors}, "
+                    f"invalid_sentinel_distance={invalid_sentinel_distance_errors}, "
+                    f"duplicate={duplicates}"
                 )
             result.append(
                 RawPoint(
@@ -443,6 +503,8 @@ def load_group(path: Path, manifest: dict, raw_root: Path) -> list[RawPoint]:
                     itopk=key[1],
                     search_width=key[2],
                     max_iterations=key[3],
+                    seed_policy=seed_policy,
+                    seed_cap=seed_cap,
                     queries=queries,
                     recall=recall,
                     valid_gt_fraction=valid_gt_fraction,
@@ -480,6 +542,8 @@ def aggregate_repetitions(points: list[RawPoint]) -> list[RepetitionPoint]:
             point.itopk,
             point.search_width,
             point.max_iterations,
+            point.seed_policy,
+            point.seed_cap,
         )
         groups.setdefault(key, []).append(point)
     output: list[RepetitionPoint] = []
@@ -495,6 +559,8 @@ def aggregate_repetitions(points: list[RawPoint]) -> list[RepetitionPoint]:
             itopk,
             width,
             iterations,
+            seed_policy,
+            seed_cap,
         ) = key
         total_queries = sum(row.queries for row in members)
         total_seconds = sum(row.seconds for row in members)
@@ -542,6 +608,8 @@ def aggregate_repetitions(points: list[RawPoint]) -> list[RepetitionPoint]:
                 itopk=int(itopk),
                 search_width=int(width),
                 max_iterations=int(iterations),
+                seed_policy=str(seed_policy),
+                seed_cap=int(seed_cap),
                 shards=len(members),
                 queries=total_queries,
                 recall=valid_gt_matches / valid_gt_slots,
@@ -586,6 +654,8 @@ def summarize(
             point.itopk,
             point.search_width,
             point.max_iterations,
+            point.seed_policy,
+            point.seed_cap,
         )
         groups.setdefault(key, []).append(point)
     rows: list[SummaryPoint] = []
@@ -600,6 +670,8 @@ def summarize(
             itopk,
             width,
             iterations,
+            seed_policy,
+            seed_cap,
         ) = key
         indices = sorted(row.repetition_index for row in members)
         expected_indices = [0] if phase == "correctness" else [0, 1, 2]
@@ -622,6 +694,8 @@ def summarize(
                 itopk=int(itopk),
                 search_width=int(width),
                 max_iterations=int(iterations),
+                seed_policy=str(seed_policy),
+                seed_cap=int(seed_cap),
                 repetitions=len(members),
                 shards_per_repetition=members[0].shards,
                 queries_per_repetition=members[0].queries,
@@ -935,32 +1009,35 @@ def main() -> None:
     raw_files = sorted({Path(row.source_file) for row in raw_points})
     config_files: set[Path] = set()
     source_manifests: set[Path] = set()
-    navix_seed_policies: set[str] = set()
+    passing_seed_policies: set[str] = set()
     for manifest_path in used_manifests:
         manifest = json.loads(manifest_path.read_text())
-        policy = str(manifest.get("navix_seed_policy", "k"))
+        policy = str(
+            manifest.get(
+                "passing_seed_policy", manifest.get("navix_seed_policy", "k")
+            )
+        )
         if policy not in {"k", "wd"}:
             raise ValueError(
-                f"invalid NaviX seed policy {policy!r} in {manifest_path}"
+                f"invalid passing seed policy {policy!r} in {manifest_path}"
             )
-        navix_seed_policies.add(policy)
-        if policy == "wd":
-            degree = int(manifest["graph_degree"])
-            for point in manifest["search_points"]:
-                if point.get("method") != "navix_reference":
-                    continue
-                expected_cap = int(point["search_width"]) * degree
-                if int(point.get("navix_seed_cap", -1)) != expected_cap:
-                    raise ValueError(
-                        f"invalid W*D seed cap in {manifest_path}: {point}"
-                    )
+        passing_seed_policies.add(policy)
+        degree = int(manifest["graph_degree"])
+        for point in manifest["search_points"]:
+            expected_seed_identity(
+                manifest,
+                point,
+                str(point["method"]),
+                degree,
+                int(manifest["k"]),
+            )
         config_files.update(Path(row["config"]) for row in manifest["configs"])
         source_manifests.add(Path(manifest["source_bitmap_manifest"]))
-    if len(navix_seed_policies) != 1:
+    if len(passing_seed_policies) != 1:
         raise ValueError(
-            f"result root mixes NaviX seed policies: {sorted(navix_seed_policies)}"
+            f"result root mixes passing seed policies: {sorted(passing_seed_policies)}"
         )
-    navix_seed_policy = next(iter(navix_seed_policies))
+    passing_seed_policy = next(iter(passing_seed_policies))
     run_provenance = args.result_root / "provenance" / "run.json"
     if not run_provenance.is_file():
         raise FileNotFoundError(
@@ -1044,10 +1121,17 @@ def main() -> None:
         "result_root": str(args.result_root.resolve()),
         "max_queries": expected_max_queries,
         "k": expected_k,
-        "navix_seed_policy": navix_seed_policy,
+        "passing_seed_policy": passing_seed_policy,
+        # Compatibility aliases retained for older bundle consumers.
+        "navix_seed_policy": passing_seed_policy,
         "navix_seed_cap_contract": (
             "result k"
-            if navix_seed_policy == "k"
+            if passing_seed_policy == "k"
+            else "search_width * graph_degree"
+        ),
+        "seed_cap_contract": (
+            "result k"
+            if passing_seed_policy == "k"
             else "search_width * graph_degree"
         ),
         "target_recall": args.target_recall,
@@ -1101,6 +1185,7 @@ def main() -> None:
         "groups": sorted(available_groups),
         "max_queries": expected_max_queries,
         "k": expected_k,
+        "passing_seed_policy": passing_seed_policy,
         "correctness_error_total": sum(
             row.filter_violations
             + row.sentinel_errors

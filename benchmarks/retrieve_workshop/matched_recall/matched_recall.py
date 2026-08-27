@@ -211,7 +211,11 @@ def import_baseline(
     set_semantics = contract.get("output_set_semantics") == "distinct_valid_output_ids_v1" or (
         "distinct output ID" in str(provenance.get("recall_contract", ""))
     )
-    observed_seed_policy = str(provenance.get("navix_seed_policy", "k"))
+    observed_seed_policy = str(
+        provenance.get(
+            "passing_seed_policy", provenance.get("navix_seed_policy", "k")
+        )
+    )
     if (
         observed_k != RESULT_K
         or observed_max_queries != MAX_QUERIES
@@ -296,6 +300,7 @@ def import_baseline(
         "k": RESULT_K,
         "max_queries": MAX_QUERIES,
         "methods": list(METHODS),
+        "passing_seed_policy": NAVIX_SEED_POLICY,
         "navix_seed_policy": NAVIX_SEED_POLICY,
         "source_summary": str(summary_path.resolve()),
         "source_summary_sha256": sha256(summary_path),
@@ -360,13 +365,6 @@ def validate_raw_output(
 
 def target(workload: str) -> float:
     return TARGETS[workload]
-
-
-def navix_seed_cap(workload: str, width: int) -> int:
-    """Return the frozen passing-seed cap for the active NaviX policy."""
-    if NAVIX_SEED_POLICY == "k":
-        return RESULT_K
-    return width * int(workload_spec(workload, PROFILE)["graph_degree"])
 
 
 def internal_itopk(itopk: int) -> int:
@@ -499,6 +497,7 @@ def write_group(
         "stage": stage,
         "repetitions": repetitions,
         "methods": list(METHODS),
+        "passing_seed_policy": NAVIX_SEED_POLICY,
         "navix_seed_policy": NAVIX_SEED_POLICY,
         "navix_seed_cap_contract": (
             "result k"
@@ -525,14 +524,11 @@ def write_group(
                 int(row["search_width"]),
                 int(row["max_iterations"]),
                 k=RESULT_K,
+                seed_policy=NAVIX_SEED_POLICY,
+                graph_degree=paths.graph_degree,
             )
             for row in local
         ]
-        for normalized_point, search in zip(local, searches, strict=True):
-            if str(normalized_point["method"]) == "navix_reference":
-                search["navix_seed_cap"] = navix_seed_cap(
-                    workload, int(normalized_point["search_width"])
-                )
         workload_root = group_root / workload
         workload_root.mkdir(parents=True, exist_ok=False)
         configs: list[dict] = []
@@ -586,6 +582,7 @@ def write_group(
             "expected_queries": EXPECTED_QUERIES,
             "expected_shards": len(configs),
             "source_bitmap_manifest": str(paths.manifest.resolve()),
+            "passing_seed_policy": NAVIX_SEED_POLICY,
             "navix_seed_policy": NAVIX_SEED_POLICY,
             "navix_seed_cap_contract": (
                 "result k"
@@ -1680,10 +1677,16 @@ def provenance(result_root: Path, summaries: list[dict], selected: list[dict]) -
     }
     if manifest_k != {RESULT_K}:
         raise ValueError(f"matched-recall manifests mix k values: {sorted(manifest_k)}")
-    manifest_seed_policies = {
-        str(json.loads(path.read_text()).get("navix_seed_policy", "k"))
-        for path in manifests
-    }
+    manifest_seed_policies = set()
+    for path in manifests:
+        manifest = json.loads(path.read_text())
+        manifest_seed_policies.add(
+            str(
+                manifest.get(
+                    "passing_seed_policy", manifest.get("navix_seed_policy", "k")
+                )
+            )
+        )
     if manifest_seed_policies != {NAVIX_SEED_POLICY}:
         raise ValueError(
             "matched-recall manifests mix NaviX seed policies: "
@@ -1718,6 +1721,7 @@ def provenance(result_root: Path, summaries: list[dict], selected: list[dict]) -
             "QPS=10000/sum(shard seconds) within each repetition."
         ),
         "methods": list(METHODS),
+        "passing_seed_policy": NAVIX_SEED_POLICY,
         "navix_seed_policy": NAVIX_SEED_POLICY,
         "navix_seed_cap_contract": (
             "result k"

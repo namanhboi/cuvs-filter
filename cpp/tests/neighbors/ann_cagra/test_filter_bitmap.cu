@@ -1292,6 +1292,69 @@ TEST_P(CagraBitmapFilterDegree64Test, K100SparseDefaultOutputHasValidPrefix)
   EXPECT_TRUE(observed_full);
 }
 
+TEST_P(CagraBitmapFilterDegree64Test, BitmapSeededDefaultSupportsIndependentSeedCaps)
+{
+  device_bitmap bitmap(
+    res, kQueries, kRows, [](auto, auto source_id) { return source_id % 3 != 1; });
+  auto filter = bitmap.filter();
+  auto stream = raft::resource::get_cuda_stream(res);
+
+  for (const auto [seed_cap, search_width] : {std::pair{std::uint32_t{4}, std::uint32_t{1}},
+                                              std::pair{std::uint32_t{64}, std::uint32_t{1}},
+                                              std::pair{std::uint32_t{128}, std::uint32_t{2}}}) {
+    for (const bool passing_accumulator : {false, true}) {
+      SCOPED_TRACE(::testing::Message() << "seed_cap=" << seed_cap << ", search_width="
+                                        << search_width << ", accumulator=" << passing_accumulator);
+      auto search_params         = params(k, 0.0f);
+      search_params.algo         = cagra::search_algo::SINGLE_CTA;
+      search_params.itopk_size   = 64;
+      search_params.search_width = search_width;
+      auto neighbors = raft::make_device_matrix<std::int64_t, std::int64_t>(res, kQueries, k);
+      auto distances = raft::make_device_matrix<float, std::int64_t>(res, kQueries, k);
+      rmm::device_uvector<std::uint32_t> seeds(kQueries * seed_cap, stream);
+      rmm::device_uvector<std::uint32_t> counts(kQueries, stream);
+      rmm::device_uvector<std::uint32_t> inspected(kQueries, stream);
+      detail::benchmark_search_bitmap_seeded<float>(res,
+                                                    search_params,
+                                                    *index,
+                                                    raft::make_const_mdspan(queries->view()),
+                                                    neighbors.view(),
+                                                    distances.view(),
+                                                    filter,
+                                                    0,
+                                                    seeds.data(),
+                                                    counts.data(),
+                                                    inspected.data(),
+                                                    passing_accumulator,
+                                                    seed_cap);
+
+      std::vector<std::uint32_t> host_seeds(seeds.size());
+      std::vector<std::uint32_t> host_counts(counts.size());
+      std::vector<std::int64_t> host_neighbors(neighbors.size());
+      raft::copy(host_seeds.data(), seeds.data(), seeds.size(), stream);
+      raft::copy(host_counts.data(), counts.data(), counts.size(), stream);
+      raft::copy(host_neighbors.data(), neighbors.data_handle(), neighbors.size(), stream);
+      raft::resource::sync_stream(res);
+
+      for (std::int64_t query_id = 0; query_id < kQueries; ++query_id) {
+        EXPECT_EQ(host_counts[static_cast<std::size_t>(query_id)], seed_cap);
+        const auto seed_begin = static_cast<std::size_t>(query_id) * seed_cap;
+        for (std::uint32_t position = 0, expected = 0; position < seed_cap; ++position) {
+          while (expected % 3 == 1) {
+            ++expected;
+          }
+          EXPECT_EQ(host_seeds[seed_begin + position], expected);
+          ++expected;
+        }
+        for (std::int64_t rank = 0; rank < k; ++rank) {
+          const auto node = host_neighbors[static_cast<std::size_t>(query_id * k + rank)];
+          if (node != std::numeric_limits<std::int64_t>::max()) { EXPECT_NE(node % 3, 1); }
+        }
+      }
+    }
+  }
+}
+
 INSTANTIATE_TEST_CASE_P(CagraBitmapFilters,
                         CagraBitmapFilterTest,
                         ::testing::Values(cagra::search_algo::SINGLE_CTA,

@@ -86,7 +86,8 @@ CUVS_EXPORT void benchmark_search_bitmap_with_query_offset(
   bool passing_accumulator = false);
 
 /**
- * Select the first k passing bitmap nodes, then run default SINGLE_CTA from only those seeds.
+ * Select the first seed_stride passing bitmap nodes, then run default SINGLE_CTA from only those
+ * seeds. A zero stride preserves the historical benchmark control and uses the result width.
  * This is a benchmark control: traversal remains default CAGRA and the optional accumulator only
  * changes result retention.
  */
@@ -103,7 +104,8 @@ CUVS_EXPORT void benchmark_search_bitmap_seeded(
   std::uint32_t* seed_ids,
   std::uint32_t* seed_counts,
   std::uint32_t* inspected_units,
-  bool passing_accumulator = false);
+  bool passing_accumulator  = false,
+  std::uint32_t seed_stride = 0);
 
 /** Run legacy in-kernel-seeded NaviX against a per-query bitmap. */
 template <typename T>
