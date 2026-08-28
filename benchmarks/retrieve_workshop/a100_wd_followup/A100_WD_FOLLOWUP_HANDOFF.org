@@ -98,3 +98,28 @@ calls (2048, 2048, 2048, 2048, 1808), with QPS computed as
 =10000 / sum(shard wall-search seconds)=. Analysis requires zero predicate,
 invalid-sentinel, sentinel-order, invalid-sentinel-distance, and duplicate
 output errors for the new seeded paths.
+
+* Verify k=100 Retain's occupancy ceiling
+
+This short resource-only run replays the four paper-selected k=100 Retain
+configurations and a matched Base configuration on the first throughput shard.
+It fails unless Retain adds exactly 804 dynamic-shared bytes while preserving
+threads per CTA, registers per thread, static shared memory, and CUDA's
+active-CTA-per-SM ceiling.
+
+#+begin_src sh
+cd /home/ubuntu/cuvs-filter
+micromamba activate cuvs
+export CUDA_VISIBLE_DEVICES=0
+export PYTHON="$(command -v python)"
+export RETRIEVE_DATA_ROOT=/data/retrieve_data
+export RETRIEVE_A100_K100_RUN_ROOT=/data/retrieve_workshop_runs/a100_k100_20260825T232747Z
+export RETRIEVE_A100_K100_REFERENCE_BUNDLE="$HOME/a100_k100_matched_paper_gpu_bundle.tar.gz"
+export RETRIEVE_A100_K100_OCCUPANCY_ROOT=/data/retrieve_workshop_runs/a100_k100_retain_occupancy_$(date -u +%Y%m%dT%H%M%SZ)
+
+benchmarks/retrieve_workshop/a100_wd_followup/verify_k100_retain_occupancy.sh all
+#+end_src
+
+The final text, CSV, and JSON reports are under =analysis/=. This validates the
+static ceiling reported by =cudaOccupancyMaxActiveBlocksPerMultiprocessor=;
+it is not a measurement of achieved runtime occupancy or throughput.
