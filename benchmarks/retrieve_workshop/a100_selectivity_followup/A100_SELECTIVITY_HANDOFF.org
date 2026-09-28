@@ -1,0 +1,94 @@
+#+title: A100 selectivity follow-up handoff
+
+* Where the code and data live
+
+Use Git branch =retrieve-a100-k10-wd-seeds=. The development worktree may be
+=/home/ubuntu/cuvs-filter-a100-refine=, but on the A100 the checkout is
+=/home/ubuntu/cuvs-filter=. Git carries this workflow and its already-tracked
+CAGRA kernels and benchmark helpers; no source-file copying between machines
+is needed. Do not upload datasets, compiled binaries, or run outputs to GitHub.
+
+The A100 must already have =/data/retrieve_data/arxiv-for-fanns-large/base.fbin=
+(2,735,264 by 4,096 float32), a nonempty =cagra_g64_ig128.index= beside it,
+and the EM, EMIS, and R =throughput_10000/manifest.json= files under
+=/data/retrieve_data/navix_bitmap/arxiv-large/=. Each manifest names five
+query/ground-truth/bitmap shards by absolute path. The read-only preflight
+checks every referenced file's path, header, size, and shard sequence. It does
+not read the full vector payload or verify index contents.
+
+* Pull, check, and run on A100
+
+Paste the entire block. The subshell stops on the first error without changing
+your interactive shell's error-handling settings. Keep the printed run root for
+resuming; each path assignment below occupies one shell line.
+
+#+begin_src sh
+(
+  set -e
+  cd /home/ubuntu/cuvs-filter
+  git fetch origin retrieve-a100-k10-wd-seeds
+  git switch retrieve-a100-k10-wd-seeds
+  git pull --ff-only origin retrieve-a100-k10-wd-seeds
+  git rev-parse --short HEAD
+  micromamba activate cuvs
+  export CUDA_VISIBLE_DEVICES=0
+  export PYTHON="$(command -v python)"
+  export RETRIEVE_DATA_ROOT=/data/retrieve_data
+  benchmarks/retrieve_workshop/a100_selectivity_followup/run.sh check-data
+  export RETRIEVE_SELECTIVITY_RUN_ROOT="/data/retrieve_workshop_runs/a100_selectivity_$(date -u +%Y%m%dT%H%M%SZ)"
+  benchmarks/retrieve_workshop/a100_selectivity_followup/run.sh all
+  ls -lh "$HOME/$(basename "$RETRIEVE_SELECTIVITY_RUN_ROOT")_results.tar.gz"
+)
+#+end_src
+
+To check data alone after pulling, activate =cuvs= and run:
+
+#+begin_src sh
+RETRIEVE_DATA_ROOT=/data/retrieve_data benchmarks/retrieve_workshop/a100_selectivity_followup/run.sh check-data
+#+end_src
+
+=check-data= does not build, use the GPU, or create a result root. If it fails,
+repair the reported input path or manifest on A100 before running =all=.
+Do not switch branches or overwrite a partially complete run to recover from
+an error. Use the same =RETRIEVE_SELECTIVITY_RUN_ROOT= for a retry; use a new
+root if code, binaries, source data, or generation policy changes. The runner
+checks data again before data-dependent stages.
+
+* Stages, outputs, and interpretation
+
+=run.sh all= builds the A100 binaries, executes the tests, runs =real=, =low=,
+and =correlation=, analyzes each stage, and creates
+=$HOME/$(basename "$RETRIEVE_SELECTIVITY_RUN_ROOT")_results.tar.gz=. To resume,
+export the original =RETRIEVE_SELECTIVITY_RUN_ROOT= and run the needed stage:
+=run.sh real=, =run.sh low=, =run.sh correlation=, =run.sh analyze=, or
+=run.sh bundle=. Run =run.sh matched-control= after =correlation= only if its
+outcome needs a matched-initialization attribution check. A second =bundle=
+will refuse to overwrite the first immutable archive.
+
+This is a new =k=10= result root; the paper's original graph, bitmaps, and
+bundles remain unchanged. It uses the degree-64 ArXiv-large CAGRA index,
+=max_queries=2048=, Base/Retain native initialization, and NaviX =W*D=
+passing seeds. The graph path uses three repetitions per point, retunes the
+six paper B0 cells, and tries two deep cells through 7,569 iterations until
+0.95 valid-GT recall is reached or the sweep is exhausted. Exact bitmap KNN
+uses three timed repetitions and native-L2-cutoff validation.
+
+=real= uses all existing <1% EM/EMIS/R queries and equally sized deterministic
+1–3% controls within each workload; it copies the official ground truth.
+=low= uses independent random bitmaps at 0.01%, 0.03%, 0.1%, 0.3%, and 1%
+global passing fractions on the first 2,048 ArXiv queries. =correlation=
+uses 10%, 25%, 50%, 90%, and 99% fractions with random and positively
+correlated conditions. The positive condition samples passing IDs from each
+query's exact nearest 1,024; observed local passing fractions are recorded.
+Synthetic ground truth is generated before graph benchmarking.
+
+=analysis/selected.csv= reports target status, selected QPS and recall, and
+maximum measured recall for each method/cohort; full frontiers are in
+=analysis/graph_summary.csv=. EM's 24-query and R's 14-query real cohorts are
+exploratory for throughput: compare methods within the same cohort, not with
+the paper's 10,000-query throughput values. The 90% and 99% cases are
+near-unfiltered controls, not the main correlation evidence. Do not make a
+paper claim until =run.sh analyze= succeeds and all exact controls pass.
+
+The bundle includes source and generated-data hashes, configs, raw
+repetitions, and analyzed CSVs, but omits large vector and bitmap payloads.
