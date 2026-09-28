@@ -204,6 +204,40 @@ class SelectivityFollowupTest(unittest.TestCase):
                 ),
             )
 
+    def test_deep_sweep_respects_cagra_hash_capacity(self) -> None:
+        self.assertEqual(
+            study.legal_hash_iterations("default_cagra", 512, 2), 4092
+        )
+        self.assertEqual(
+            study.legal_hash_iterations("default_cagra_accumulator", 64, 1),
+            8191,
+        )
+        self.assertEqual(
+            study.legal_hash_iterations("navix_reference", 512, 2), 2046
+        )
+        self.assertEqual(
+            study.legal_hash_iterations("navix_reference", 64, 1), 4095
+        )
+        for method in study.METHODS + study.MATCHED_METHODS:
+            measured: set[tuple[int, int, int]] = set()
+            for requested in study.DEEP_ITERATIONS:
+                points = study.deep_search_points(method, requested, measured)
+                for point in points:
+                    cell = (
+                        int(point["itopk"]),
+                        int(point["search_width"]),
+                        int(point["max_iterations"]),
+                    )
+                    self.assertNotIn(cell, measured)
+                    self.assertLessEqual(
+                        cell[2], study.legal_hash_iterations(method, *cell[:2])
+                    )
+                    measured.add(cell)
+            self.assertEqual(
+                study.deep_search_points(method, study.DEEP_ITERATIONS[-1], measured),
+                [],
+            )
+
     def test_cohort_geometry_gt_and_immutable_resume(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -277,6 +311,15 @@ class SelectivityFollowupTest(unittest.TestCase):
                     "fixture",
                     "bad",
                     [dict(points[0], max_queries=512)],
+                    3,
+                )
+            with self.assertRaisesRegex(ValueError, "normal-hash limit 4092"):
+                study.graph_manifest(
+                    root,
+                    root,
+                    "fixture",
+                    "too_deep",
+                    [study.followup_search_point("default_cagra", 512, 2, 4176)],
                     3,
                 )
             raw = root / "graph/raw/b0/fixture/shard_00.json"

@@ -69,9 +69,12 @@ This is a new =k=10= result root; the paper's original graph, bitmaps, and
 bundles remain unchanged. It uses the degree-64 ArXiv-large CAGRA index,
 =max_queries=2048=, Base/Retain native initialization, and NaviX =W*D=
 passing seeds. The graph path uses three repetitions per point, retunes the
-six paper B0 cells, and tries two deep cells through 7,569 iterations until
-0.95 valid-GT recall is reached or the sweep is exhausted. Exact bitmap KNN
-uses three timed repetitions and native-L2-cutoff validation.
+six paper B0 cells, then tries two deep cells at requested depths through
+7,569 iterations until 0.95 valid-GT recall is reached or the sweep is
+exhausted. Each depth is capped at the legal SINGLE_CTA visited-hash limit;
+duplicate saturated cells are skipped. For degree 64, the L=512, W=2 cap is
+4,092 iterations for Base/Retain and 2,046 for NaviX. Exact bitmap KNN uses
+three timed repetitions and native-L2-cutoff validation.
 
 =real= uses all existing <1% EM/EMIS/R queries and equally sized deterministic
 1–3% controls within each workload; it copies the official ground truth.

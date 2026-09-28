@@ -47,6 +47,10 @@ DIM = 4096
 K = 10
 MAX_QUERIES = 2048
 TARGET = 0.95
+GRAPH_DEGREE = 64
+# SINGLE_CTA filtered search uses a normal visited hash with at most 2^20 slots
+# and the default 0.5 maximum fill rate (search_plan.cuh).
+MAX_HASH_VISITS = (1 << 20) // 2
 WORKLOADS = ("em", "emis", "r")
 EXPECTED_REAL_LOW = {"em": 24, "emis": 197, "r": 14}
 METHODS = ("default_cagra", "default_cagra_accumulator", "navix_reference")
@@ -68,8 +72,36 @@ def followup_search_point(
         max_iterations,
         max_queries=MAX_QUERIES,
         seed_policy="wd",
-        graph_degree=64,
+        graph_degree=GRAPH_DEGREE,
     )
+
+
+def legal_hash_iterations(method: str, itopk: int, width: int) -> int:
+    if method not in METHODS + MATCHED_METHODS or itopk <= 0 or width <= 0:
+        raise ValueError(f"invalid deep-search cell: {method}, L={itopk}, W={width}")
+    rounded_itopk = ((itopk + 31) // 32) * 32
+    visit_multiplier = 2 if method == "navix_reference" else 1
+    return (MAX_HASH_VISITS - rounded_itopk) // (
+        width * GRAPH_DEGREE * visit_multiplier
+    )
+
+
+def deep_search_points(
+    method: str,
+    requested_iterations: int,
+    measured: set[tuple[int, int, int]],
+) -> list[dict]:
+    points = []
+    for itopk, width in DEEP_CELLS:
+        iterations = min(
+            requested_iterations, legal_hash_iterations(method, itopk, width)
+        )
+        cell = (itopk, width, iterations)
+        if iterations <= 0:
+            raise ValueError(f"no legal deep iterations for {method} at L/W={cell}")
+        if cell not in measured:
+            points.append(followup_search_point(method, *cell))
+    return points
 
 
 def inspect_required_data(data_root: Path) -> tuple[list[str], list[str]]:
@@ -649,6 +681,18 @@ def graph_manifest(
         raise ValueError(
             f"{cohort}/{group}: every search point must use max_queries={MAX_QUERIES}"
         )
+    for point in searches:
+        method = str(point["bitmap_method"])
+        maximum = int(point["max_iterations"])
+        legal = legal_hash_iterations(
+            method, int(point["itopk"]), int(point["search_width"])
+        )
+        if maximum > legal:
+            raise ValueError(
+                f"{cohort}/{group}: {method} L={point['itopk']} "
+                f"W={point['search_width']} max_iterations={maximum} "
+                f"exceeds normal-hash limit {legal}"
+            )
     source_path = root / "data" / cohort / "manifest.json"
     source = json.loads(source_path.read_text())
     paths = DatasetPaths(
@@ -865,6 +909,7 @@ def run_graph(
         run_graph_group(root, data_root, cohort, "b0", b0, binary, library)
     for cohort in names:
         for method in METHODS:
+            measured: set[tuple[int, int, int]] = set()
             for iterations in DEEP_ITERATIONS:
                 rows = analyzed_rows(root)
                 if any(
@@ -874,10 +919,9 @@ def run_graph(
                     for row in rows
                 ):
                     break
-                searches = [
-                    followup_search_point(method, l, w, iterations)
-                    for l, w in DEEP_CELLS
-                ]
+                searches = deep_search_points(method, iterations, measured)
+                if not searches:
+                    break
                 run_graph_group(
                     root,
                     data_root,
@@ -886,6 +930,11 @@ def run_graph(
                     searches,
                     binary,
                     library,
+                )
+                measured.update(
+                    (int(point["itopk"]), int(point["search_width"]),
+                     int(point["max_iterations"]))
+                    for point in searches
                 )
 
 
@@ -912,6 +961,7 @@ def run_matched_seed_control(
         )
     for cohort in names:
         for method in MATCHED_METHODS:
+            measured: set[tuple[int, int, int]] = set()
             for iterations in DEEP_ITERATIONS:
                 rows = analyzed_rows(root)
                 if any(
@@ -921,10 +971,9 @@ def run_matched_seed_control(
                     for row in rows
                 ):
                     break
-                searches = [
-                    followup_search_point(method, l, w, iterations)
-                    for l, w in DEEP_CELLS
-                ]
+                searches = deep_search_points(method, iterations, measured)
+                if not searches:
+                    break
                 run_graph_group(
                     root,
                     data_root,
@@ -933,6 +982,11 @@ def run_matched_seed_control(
                     searches,
                     binary,
                     library,
+                )
+                measured.update(
+                    (int(point["itopk"]), int(point["search_width"]),
+                     int(point["max_iterations"]))
+                    for point in searches
                 )
 
 
