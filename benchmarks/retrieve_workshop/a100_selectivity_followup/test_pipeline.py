@@ -245,24 +245,40 @@ class SelectivityFollowupTest(unittest.TestCase):
                 manifest,
             )
             points = [
-                study.search_point(
-                    method, 64, 2, 0, seed_policy="wd", graph_degree=64
-                )
+                study.followup_search_point(method, 64, 2, 0)
                 for method in study.METHODS
             ]
+            self.assertEqual(
+                {point["max_queries"] for point in points},
+                {study.MAX_QUERIES},
+            )
             graph_manifest = study.graph_manifest(
                 root, root, "fixture", "b0", points, 3
             )
             graph = json.loads(graph_manifest.read_text())
             self.assertEqual(graph["expected_queries"], 2)
+            self.assertEqual(graph["max_queries"], study.MAX_QUERIES)
             self.assertEqual(graph["search_points"][2]["navix_seed_cap"], 128)
             config = json.loads(
                 Path(graph["configs"][0]["config"]).read_text()
             )
             self.assertEqual(
+                {row["max_queries"] for row in config["index"][0]["search_params"]},
+                {study.MAX_QUERIES},
+            )
+            self.assertEqual(
                 config["dataset"]["filter"]["file"],
                 str(Path(payload["shards"][0]["directory"]) / "filter.bitmap"),
             )
+            with self.assertRaisesRegex(ValueError, "max_queries=2048"):
+                study.graph_manifest(
+                    root,
+                    root,
+                    "fixture",
+                    "bad",
+                    [dict(points[0], max_queries=512)],
+                    3,
+                )
             raw = root / "graph/raw/b0/fixture/shard_00.json"
             raw.parent.mkdir(parents=True)
             records = []

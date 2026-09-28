@@ -58,6 +58,20 @@ MATRIX_HEADER = struct.Struct("<II")
 SEED = 20260928
 
 
+def followup_search_point(
+    method: str, itopk: int, width: int, max_iterations: int
+) -> dict:
+    return search_point(
+        method,
+        itopk,
+        width,
+        max_iterations,
+        max_queries=MAX_QUERIES,
+        seed_policy="wd",
+        graph_degree=64,
+    )
+
+
 def inspect_required_data(data_root: Path) -> tuple[list[str], list[str]]:
     """Check A100 inputs using headers and file sizes, without reading vector payloads."""
     summaries: list[str] = []
@@ -629,6 +643,12 @@ def graph_manifest(
     searches: list[dict],
     repetitions: int,
 ) -> Path:
+    if not searches or {
+        int(point["max_queries"]) for point in searches
+    } != {MAX_QUERIES}:
+        raise ValueError(
+            f"{cohort}/{group}: every search point must use max_queries={MAX_QUERIES}"
+        )
     source_path = root / "data" / cohort / "manifest.json"
     source = json.loads(source_path.read_text())
     paths = DatasetPaths(
@@ -830,7 +850,7 @@ def run_graph(
     if not names:
         raise ValueError(f"no prepared cohorts matching {cohort_prefix!r}")
     b0 = [
-        search_point(method, l, w, 0, seed_policy="wd", graph_degree=64)
+        followup_search_point(method, l, w, 0)
         for method in METHODS
         for l, w in B0_CELLS
     ]
@@ -855,14 +875,7 @@ def run_graph(
                 ):
                     break
                 searches = [
-                    search_point(
-                        method,
-                        l,
-                        w,
-                        iterations,
-                        seed_policy="wd",
-                        graph_degree=64,
-                    )
+                    followup_search_point(method, l, w, iterations)
                     for l, w in DEEP_CELLS
                 ]
                 run_graph_group(
@@ -889,7 +902,7 @@ def run_matched_seed_control(
     if not names:
         raise ValueError("no correlation cohorts prepared")
     b0 = [
-        search_point(method, l, w, 0, seed_policy="wd", graph_degree=64)
+        followup_search_point(method, l, w, 0)
         for method in MATCHED_METHODS
         for l, w in B0_CELLS
     ]
@@ -909,14 +922,7 @@ def run_matched_seed_control(
                 ):
                     break
                 searches = [
-                    search_point(
-                        method,
-                        l,
-                        w,
-                        iterations,
-                        seed_policy="wd",
-                        graph_degree=64,
-                    )
+                    followup_search_point(method, l, w, iterations)
                     for l, w in DEEP_CELLS
                 ]
                 run_graph_group(
