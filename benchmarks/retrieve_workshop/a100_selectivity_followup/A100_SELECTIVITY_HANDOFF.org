@@ -95,3 +95,150 @@ paper claim until =run.sh analyze= succeeds and all exact controls pass.
 
 The bundle includes source and generated-data hashes, configs, raw
 repetitions, and analyzed CSVs, but omits large vector and bitmap payloads.
+
+* Negative-correlation extension
+
+The negative condition keeps each query's global bitmap cardinality equal to
+its random and positive counterparts. If global passing is =s= and positive
+nearest-1,024 passing is =p+=(1+s)/2=, negative nearest-1,024 passing is
+=p-=s^2/p+=2s^2/(1+s)=. Therefore the negative local/global ratio is the
+reciprocal of the positive ratio. The five expected local passing fractions
+are approximately 1.8%, 10%, 33.3%, 85.3%, and 98.5% for global rates 10%,
+25%, 50%, 90%, and 99%. These are controlled query-local bitmaps, not shared
+metadata labels. The first 2,048 queries, exact nearest-1,024 IDs, graph,
+binary, and exact-control policy are the same as in the prior study.
+
+Use a *new* root and the completed run's frozen nearest-ID file. Never write
+new cohorts into the 21-cohort reference root. On the A100:
+
+#+begin_src sh
+export RETRIEVE_SELECTIVITY_REFERENCE_ROOT=/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z
+export RETRIEVE_SELECTIVITY_RUN_ROOT="$HOME/a100_selectivity_negative_$(date -u +%Y%m%dT%H%M%SZ)"
+benchmarks/retrieve_workshop/a100_selectivity_followup/run.sh negative
+export RETRIEVE_SELECTIVITY_REFERENCE_ROOT="$RETRIEVE_SELECTIVITY_RUN_ROOT"
+export RETRIEVE_SELECTIVITY_MATCHED_ROOT="$HOME/a100_selectivity_negative_matched_$(date -u +%Y%m%dT%H%M%SZ)"
+export RETRIEVE_SELECTIVITY_MATCHED_UPPER=0.952
+benchmarks/retrieve_workshop/a100_selectivity_followup/run.sh tight-match all
+benchmarks/retrieve_workshop/a100_selectivity_followup/run.sh tight-match bundle
+#+end_src
+
+Retain both printed roots. The negative runner validates each stage before
+bundling. The matched stage accepts exactly these five cohorts and records
+three-repetition target points in =[0.950, 0.952]=, one-repetition calibration
+points, and maximum measured recall when the target is unavailable. A paper
+table may interpolate latency only between adjacent iteration caps that
+straddle 0.951; it must mark such cells as estimates. The paper importer
+=scripts/import_selectivity_negative.py= takes the negative reference and
+matched roots after both analyses complete.
+
+* Strict matched-recall refinement
+
+The original =analysis/selected.csv= picks the fastest point with recall at
+least 0.950, even when that point overshoots the target substantially. It is
+not a matched-recall QPS comparison. The separate =tight-match= stage keeps
+the completed run immutable and measures all 21 cohorts and all three graph
+methods against the closed =[0.950, 0.951]= recall@10 window. Every one of
+three final repetitions must be inside the window; a method without such a
+point is labeled =unmatched= and excluded from matched QPS comparisons.
+
+#+begin_src sh
+export RETRIEVE_SELECTIVITY_REFERENCE_ROOT=/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z
+export RETRIEVE_SELECTIVITY_MATCHED_ROOT="$HOME/a100_selectivity_matched_$(date -u +%Y%m%dT%H%M%SZ)"
+benchmarks/retrieve_workshop/a100_selectivity_followup/run.sh tight-match
+#+end_src
+
+Keep =RETRIEVE_SELECTIVITY_MATCHED_ROOT= when resuming. The optional second
+argument selects =calibrate=, =finalists=, =analyze=, or =bundle=. The runner
+reuses the frozen query, bitmap, ground-truth, graph, and exact-control inputs.
+It performs one-repetition calibration over integer requested =L=, width 1
+or 2, and explicit traversal budgets, then runs in-window finalists in batches
+of up to four for three repetitions. If a batch misses the strict window, it
+tries the remaining calibrated settings until one passes or none remain.
+=analysis/matched_selected.csv= gives each method's
+status, achieved recall range, QPS, selected parameters, and nearest misses;
+=analysis/calibration_points.csv= records the measured search points, and
+=analysis/matched_comparisons.csv= contains pairwise QPS only where both
+methods passed the strict recall gate. No
+interpolation or upper-window relaxation is used. Recall resolution is coarse
+for the 14- and 24-query real cohorts, so they may remain unmatched unless a
+setting achieves exactly 0.950. The new bundle omits large bitmap payloads.
+
+The 2026-09-28 A100 strict run is at
+=/home/ubuntu/a100_selectivity_matched_20260928T082104Z=. Its completed
+=analysis/matched_selected.csv= has 36 matched and 27 unmatched method/cohort
+rows. The pairwise table has 19 matched comparisons out of 63 possible pairs;
+unmatched comparisons have blank QPS fields. All 36 selected rows passed the
+three-repetition recall gate. The archive is
+=/home/ubuntu/a100_selectivity_matched_20260928T082104Z_results.tar.gz=
+(SHA-256 =070e41821e87c38c0dfbeca2198d041ceb9a29886139b319cdd906f2b44ab9a5=).
+The native Base CAGRA path reports duplicate valid IDs on one selected row;
+the shared graph analyzer accepts this documented native behavior and uses
+set-valued recall, while all other selected rows satisfy its zero-duplicate
+checks.
+
+* Widened matched-recall run
+
+When the one-point recall steps skipped =[0.950, 0.951]=, the same measured
+calibration frontier was reused with a separate upper bound of =0.952=. This
+run used the following command and kept the original strict run unchanged:
+
+#+begin_src sh
+export RETRIEVE_SELECTIVITY_REFERENCE_ROOT=/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z
+export RETRIEVE_SELECTIVITY_CALIBRATION_ROOT=$HOME/a100_selectivity_matched_20260928T082104Z
+export RETRIEVE_SELECTIVITY_MATCHED_UPPER=0.952
+export RETRIEVE_SELECTIVITY_MATCHED_ROOT=$HOME/a100_selectivity_matched_002_20260928T094801Z
+benchmarks/retrieve_workshop/a100_selectivity_followup/run.sh tight-match finalists
+benchmarks/retrieve_workshop/a100_selectivity_followup/run.sh tight-match analyze
+benchmarks/retrieve_workshop/a100_selectivity_followup/run.sh tight-match bundle
+#+end_src
+
+The widened result root has 43 matched and 20 unmatched method/cohort rows,
+with 30 matched pairwise comparisons out of 63. Every selected row passed
+three repetitions in =[0.950, 0.952]=. The result files are
+=/home/ubuntu/a100_selectivity_matched_002_20260928T094801Z= and
+=/home/ubuntu/a100_selectivity_matched_002_20260928T094801Z_results.tar.gz=;
+the archive SHA-256 is
+=4ec7e0383e5449af31475cf3b875213246bf968499de65c5be5c40c280757536=.
+
+* Targeted overshoot rescue
+
+The widened run still has three unmatched NaviX pairs whose nearest points
+straddle the target but jump over the =[0.950, 0.952]= window. The rescue
+stage probes only those pairs, with the existing W x D seed policy, widths 1
+and 2, a small requested-L neighborhood, and every legal integer traversal
+cap around each measured crossing. Ceiling cases are left unmatched because
+their legal maximum is already below the target or above the upper bound.
+
+The strict run supplies the one-repetition calibration frontier. The widened
+run supplies the previously confirmed finalists so the rescue analysis keeps
+all 43 existing matches and adds only newly confirmed rescue matches:
+
+#+begin_src sh
+export RETRIEVE_SELECTIVITY_REFERENCE_ROOT=/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z
+export RETRIEVE_SELECTIVITY_CALIBRATION_ROOT=$HOME/a100_selectivity_matched_20260928T082104Z
+export RETRIEVE_SELECTIVITY_PRIOR_FINALISTS_ROOT=$HOME/a100_selectivity_matched_002_20260928T094801Z
+export RETRIEVE_SELECTIVITY_MATCHED_UPPER=0.952
+export RETRIEVE_SELECTIVITY_MATCHED_ROOT=$HOME/a100_selectivity_rescue_$(date -u +%Y%m%dT%H%M%SZ)
+benchmarks/retrieve_workshop/a100_selectivity_followup/run.sh tight-match rescue
+#+end_src
+
+The rescue root is resumable. Run =tight-match analyze= and =tight-match
+bundle= afterward to regenerate its CSVs and archive. Its analysis keeps the
+same three-repeat, closed-window gate; it never interpolates recall or treats
+an overshoot as a match.
+
+The completed rescue run is at
+=/home/ubuntu/a100_selectivity_rescue_20260928T101554Z=. It measured 12 new
+requested-L points: six for =synthetic_correlation_0p10_positive= and six
+for =synthetic_correlation_0p90_random=. The new points were all outside the
+window: the first cohort ranged from 0.961523 to 0.983008, while the second
+ranged from 0.931348 to 0.942334. The 0.25-random pair had no distinct legal
+L execution left to probe. Integer-cap refinement likewise added no distinct
+execution after fingerprint deduplication, and no rescue finalist was sent
+to three repetitions.
+
+The merged result therefore remains 43 matched and 20 unmatched rows, with
+30 matched pairwise comparisons out of 63. The archive is
+=/home/ubuntu/a100_selectivity_rescue_20260928T101554Z_results.tar.gz= with
+SHA-256
+=e36dbc1fee5c738797fde8801d018726a28c981d90b772d01fa90fcc1a70ffab=.

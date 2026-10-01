@@ -204,6 +204,31 @@ class SelectivityFollowupTest(unittest.TestCase):
                 ),
             )
 
+    def test_negative_bitmap_has_exact_cardinality_and_reciprocal_lift(self) -> None:
+        nearest = np.random.default_rng(7).choice(
+            study.BASE_ROWS, 1024, replace=False
+        )
+        for fraction in (0.10, 0.25, 0.50, 0.90, 0.99):
+            passing = round(fraction * study.BASE_ROWS)
+            selectivity = passing / study.BASE_ROWS
+            first = study.sampled_words(
+                np.random.default_rng(42), passing, nearest, relation="negative"
+            )
+            second = study.sampled_words(
+                np.random.default_rng(42), passing, nearest, relation="negative"
+            )
+            np.testing.assert_array_equal(first, second)
+            self.assertEqual(int(study.popcounts(first.reshape(1, -1))[0]), passing)
+            local_count = int(np.count_nonzero(
+                first[nearest >> 5] & (np.uint32(1) << (nearest & 31))
+            ))
+            self.assertEqual(
+                local_count,
+                round(1024 * 2 * selectivity * selectivity / (1 + selectivity)),
+            )
+            self.assertGreaterEqual(local_count, study.K)
+            self.assertLess(local_count / 1024, selectivity)
+
     def test_deep_sweep_respects_cagra_hash_capacity(self) -> None:
         self.assertEqual(
             study.legal_hash_iterations("default_cagra", 512, 2), 4092

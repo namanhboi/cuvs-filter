@@ -11,6 +11,7 @@ import argparse
 import csv
 import hashlib
 import json
+import math
 import os
 import struct
 import subprocess
@@ -514,9 +515,12 @@ def bitwords_from_ids(ids: np.ndarray) -> np.ndarray:
 
 
 def sampled_words(
-    rng: np.random.Generator, passing: int, nearby: np.ndarray | None = None
+    rng: np.random.Generator, passing: int, nearby: np.ndarray | None = None,
+    relation: str = "positive",
 ) -> np.ndarray:
     if nearby is None:
+        if relation != "positive":
+            raise ValueError("negative correlation requires exact nearest IDs")
         if passing <= BASE_ROWS // 2:
             return bitwords_from_ids(
                 rng.choice(BASE_ROWS, passing, replace=False)
@@ -535,7 +539,15 @@ def sampled_words(
             "correlation requires 1,024 distinct exact-nearest IDs"
         )
     selectivity = passing / BASE_ROWS
-    near_passing = round((selectivity + 0.5 * (1 - selectivity)) * len(nearby))
+    if relation == "positive":
+        local_selectivity = (1 + selectivity) / 2
+    elif relation == "negative":
+        # Invert the positive local/global ratio so its normalized
+        # correlation strength has the opposite sign and equal magnitude.
+        local_selectivity = 2 * selectivity * selectivity / (1 + selectivity)
+    else:
+        raise ValueError(f"unknown correlation relation: {relation}")
+    near_passing = round(local_selectivity * len(nearby))
     near_pass_ids = rng.choice(nearby, near_passing, replace=False)
     outside_total = BASE_ROWS - len(nearby)
     outside_passing = passing - near_passing
@@ -570,7 +582,8 @@ def sampled_words(
 
 
 def prepare_synthetic(
-    root: Path, data_root: Path, kind: str, nearest: Path | None
+    root: Path, data_root: Path, kind: str, nearest: Path | None,
+    relations: tuple[str, ...] | None = None,
 ) -> None:
     query_manifest_hash = sha256(
         data_root
@@ -582,19 +595,23 @@ def prepare_synthetic(
     if kind == "correlation":
         if nearest is None or not nearest.is_file():
             raise FileNotFoundError(
-                "positive correlation requires exact nearest-1024 output"
+                "correlation requires exact nearest-1024 output"
             )
         nearest_rows = matrix(nearest, "<u4")
         if nearest_rows.shape != (MAX_QUERIES, 1024):
             raise ValueError("unexpected exact-nearest matrix shape")
     nearest_hash = sha256(nearest) if nearest_rows is not None else None
     levels = LOW_SELECTIVITIES if kind == "low" else CORRELATION_SELECTIVITIES
+    if relations is None:
+        relations = ("random",) if kind == "low" else ("random", "positive")
+    if not relations or any(r not in ("random", "positive", "negative") for r in relations):
+        raise ValueError(f"invalid synthetic relations: {relations}")
+    if kind == "low" and relations != ("random",):
+        raise ValueError("low-selectivity cohorts must use random filters")
     for level in levels:
         fraction = float(level)
         passing = round(BASE_ROWS * fraction)
-        for relation in (
-            ("random",) if kind == "low" else ("random", "positive")
-        ):
+        for relation in relations:
             name = f"synthetic_{kind}_{level.replace('.', 'p')}_{relation}"
             existing = root / "data" / name / "manifest.json"
             if existing.is_file():
@@ -621,14 +638,14 @@ def prepare_synthetic(
                     SEED
                     + 1_000_003 * query
                     + int(fraction * 1_000_000) * 13
-                    + (1 if relation == "positive" else 0)
+                    + {"random": 0, "positive": 1, "negative": 2}[relation]
                 )
                 near = (
                     np.asarray(nearest_rows[query])
-                    if relation == "positive"
+                    if relation != "random"
                     else None
                 )
-                words = sampled_words(rng, passing, near)
+                words = sampled_words(rng, passing, near, relation=relation if near is not None else "positive")
                 bitmap_rows.append(words)
                 if nearest_rows is not None:
                     ids = np.asarray(nearest_rows[query])
@@ -665,6 +682,49 @@ def prepare_synthetic(
                     "selection_seed": SEED,
                 },
             )
+
+
+def validate_synthetic_negative(root: Path, nearest: Path) -> None:
+    nearest_rows = matrix(nearest, "<u4")
+    if nearest_rows.shape != (MAX_QUERIES, 1024):
+        raise ValueError("unexpected exact-nearest matrix shape")
+    nearest_hash = sha256(nearest)
+    summary = []
+    for level in CORRELATION_SELECTIVITIES:
+        cohort = f"synthetic_correlation_{level.replace('.', 'p')}_negative"
+        manifest = validate_existing_cohort(root / "data" / cohort / "manifest.json")
+        meta = manifest["metadata"]
+        passing = round(BASE_ROWS * float(level))
+        selectivity = passing / BASE_ROWS
+        near_passing = round(1024 * 2 * selectivity * selectivity / (1 + selectivity))
+        if (meta["relation"] != "negative" or int(meta["exact_passing"]) != passing
+                or meta["nearest_1024_sha256"] != nearest_hash):
+            raise ValueError(f"negative cohort metadata drifted: {cohort}")
+        bitmap = Path(manifest["shards"][0]["bitmap"])
+        words = np.memmap(
+            bitmap, dtype="<u4", mode="r", offset=BITMAP_HEADER.size,
+            shape=(MAX_QUERIES, BASE_ROWS // 32),
+        )
+        counts = popcounts(words)
+        if not np.all(counts == passing):
+            raise ValueError(f"negative bitmap global cardinality drifted: {cohort}")
+        local = np.count_nonzero(
+            words[np.arange(MAX_QUERIES)[:, None], nearest_rows >> 5]
+            & (np.uint32(1) << (nearest_rows & 31)), axis=1,
+        )
+        if not np.all(local == near_passing):
+            raise ValueError(f"negative bitmap local cardinality drifted: {cohort}")
+        if not math.isclose(float(meta["nearest_1024_passing_mean"]), near_passing / 1024):
+            raise ValueError(f"negative bitmap manifest local rate drifted: {cohort}")
+        summary.append({
+            "cohort": cohort, "global_passing": passing,
+            "global_selectivity": selectivity,
+            "nearest_1024_passing": near_passing,
+            "nearest_1024_selectivity": near_passing / 1024,
+            "local_global_ratio": (near_passing / 1024) / selectivity,
+        })
+    atomic_json(root / "analysis/negative_bitmap_validation.json", summary)
+    print(json.dumps({"validated_negative_cohorts": len(summary), "rows_per_cohort": MAX_QUERIES}))
 
 
 def graph_manifest(
@@ -1479,6 +1539,8 @@ def main() -> None:
             "prepare-synthetic-low",
             "prepare-nearest",
             "prepare-synthetic-correlation",
+            "prepare-synthetic-negative",
+            "validate-synthetic-negative",
             "generate-gt",
             "graph",
             "matched-control",
@@ -1506,6 +1568,7 @@ def main() -> None:
         "--library", type=Path, default=REPO / "cpp/build/libcuvs.so"
     )
     parser.add_argument("--bundle-path", type=Path)
+    parser.add_argument("--nearest-file", type=Path)
     args = parser.parse_args()
     if args.stage == "check-data":
         summaries, errors = inspect_required_data(args.data_root)
@@ -1529,6 +1592,16 @@ def main() -> None:
     elif args.stage == "prepare-synthetic-correlation":
         prepare_synthetic(
             root, data_root, "correlation", root / "state/nearest_1024.ibin"
+        )
+    elif args.stage == "prepare-synthetic-negative":
+        prepare_synthetic(
+            root, data_root, "correlation",
+            args.nearest_file or root / "state/nearest_1024.ibin",
+            relations=("negative",),
+        )
+    elif args.stage == "validate-synthetic-negative":
+        validate_synthetic_negative(
+            root, args.nearest_file or root / "state/nearest_1024.ibin"
         )
     elif args.stage == "generate-gt":
         generate_gt(

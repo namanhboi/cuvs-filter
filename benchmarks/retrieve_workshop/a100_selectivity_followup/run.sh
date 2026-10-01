@@ -5,8 +5,16 @@ script_dir=$(cd "$(dirname "$0")"; pwd)
 repo_dir=$(cd "${script_dir}/../../.."; pwd)
 python_bin=${PYTHON:-/home/ubuntu/micromamba/envs/cuvs/bin/python}
 data_root=${RETRIEVE_DATA_ROOT:-/data/retrieve_data}
-run_root=${RETRIEVE_SELECTIVITY_RUN_ROOT:-/data/retrieve_workshop_runs/a100_selectivity_$(date -u +%Y%m%dT%H%M%SZ)}
 stage=${1:-real}
+if [[ "${stage}" == negative ]]; then
+  run_root=${RETRIEVE_SELECTIVITY_RUN_ROOT:-${HOME}/a100_selectivity_negative_$(date -u +%Y%m%dT%H%M%SZ)}
+else
+  run_root=${RETRIEVE_SELECTIVITY_RUN_ROOT:-/data/retrieve_workshop_runs/a100_selectivity_$(date -u +%Y%m%dT%H%M%SZ)}
+fi
+
+if [[ "${stage}" == tight-match ]]; then
+  exec bash "${script_dir}/run_tight.sh" "${2:-all}"
+fi
 
 export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
 export MPLBACKEND=Agg
@@ -17,6 +25,7 @@ if [[ "${stage}" == check-data ]]; then
   exit 0
 fi
 if [[ "${stage}" == real || "${stage}" == low || "${stage}" == correlation ||
+      "${stage}" == negative ||
       "${stage}" == matched-control || "${stage}" == all ]]; then
   "${python_bin}" "${script_dir}/workflow.py" check-data --data-root "${data_root}"
 fi
@@ -119,16 +128,30 @@ correlation() {
   invoke analyze
 }
 
+negative() {
+  nearest_file=${RETRIEVE_SELECTIVITY_NEAREST_FILE:-${RETRIEVE_SELECTIVITY_REFERENCE_ROOT:?set RETRIEVE_SELECTIVITY_REFERENCE_ROOT to the completed selectivity run}/state/nearest_1024.ibin}
+  test -f "${nearest_file}" || { echo "missing exact nearest IDs: ${nearest_file}" >&2; exit 2; }
+  "${python_bin}" "${script_dir}/workflow.py" prepare-synthetic-negative \
+    --root "${run_root}" --data-root "${data_root}" --nearest-file "${nearest_file}"
+  "${python_bin}" "${script_dir}/workflow.py" validate-synthetic-negative \
+    --root "${run_root}" --data-root "${data_root}" --nearest-file "${nearest_file}"
+  invoke generate-gt synthetic_correlation_
+  invoke graph synthetic_correlation_
+  invoke exact-control synthetic_correlation_
+  invoke analyze
+}
+
 case "${stage}" in
   build) build ;;
   real) build; record_contract; real ;;
   low) build; record_contract; low ;;
   correlation) build; record_contract; correlation ;;
+  negative) build; record_contract; negative; bundle ;;
   matched-control) build; record_contract; invoke matched-control; invoke analyze ;;
   analyze) invoke analyze ;;
   bundle) bundle ;;
   all) build; record_contract; real; low; correlation; bundle ;;
-  *) echo "usage: $0 {check-data|build|real|low|correlation|matched-control|analyze|bundle|all}" >&2; exit 2 ;;
+  *) echo "usage: $0 {check-data|build|real|low|correlation|negative|matched-control|tight-match|analyze|bundle|all}" >&2; exit 2 ;;
 esac
 
 printf '%s\n' "${run_root}"
