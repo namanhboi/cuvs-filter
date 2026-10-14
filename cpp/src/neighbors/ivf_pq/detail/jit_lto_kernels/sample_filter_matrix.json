@@ -6,5 +6,9 @@
   {
     "filter_name": "bitset",
     "filter_type": "cuvs::neighbors::filtering::bitset_filter<uint32_t, int64_t>"
+  },
+  {
+    "filter_name": "bitmap",
+    "filter_type": "cuvs::neighbors::filtering::bitmap_filter<uint32_t, int64_t>"
   }
 ]

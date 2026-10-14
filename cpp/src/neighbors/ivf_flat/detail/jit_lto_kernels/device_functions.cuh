@@ -33,6 +33,7 @@ __device__ bool sample_filter(const IndexT* const* const inds_ptrs,
                               const uint32_t sample_ix,
                               uint32_t* bitset_ptr,
                               IndexT bitset_len,
-                              IndexT original_nbits);
+                              IndexT original_nbits,
+                              IndexT bitmap_cols);
 
 }  // namespace cuvs::neighbors::ivf_flat::detail

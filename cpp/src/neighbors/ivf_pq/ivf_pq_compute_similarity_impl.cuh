@@ -114,6 +114,9 @@ auto get_filter_type_tag()
   if constexpr (std::is_same_v<FilterT, bitset_filter<uint32_t, int64_t>>) {
     return cuvs::neighbors::detail::tag_filter_bitset{};
   }
+  if constexpr (std::is_same_v<FilterT, bitmap_filter<uint32_t, int64_t>>) {
+    return cuvs::neighbors::detail::tag_filter_bitmap{};
+  }
 }
 
 template <typename OutT,
@@ -286,6 +289,7 @@ void compute_similarity_run(selected<OutT, LutT> s,
                             uint32_t* bitset_ptr,
                             int64_t bitset_len,
                             int64_t original_nbits,
+                            int64_t bitmap_cols,
                             LutT* lut_scores,
                             OutT* _out_scores,
                             uint32_t* _out_indices)
@@ -314,6 +318,7 @@ void compute_similarity_run(selected<OutT, LutT> s,
                                                                        bitset_ptr,
                                                                        bitset_len,
                                                                        original_nbits,
+                                                                       bitmap_cols,
                                                                        lut_scores,
                                                                        _out_scores,
                                                                        _out_indices);

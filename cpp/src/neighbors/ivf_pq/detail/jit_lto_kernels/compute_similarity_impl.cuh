@@ -94,6 +94,7 @@ __device__ void compute_similarity_impl(uint32_t dim,
                                         uint32_t* bitset_ptr,
                                         int64_t bitset_len,
                                         int64_t original_nbits,
+                                        int64_t bitmap_cols,
                                         LutT* lut_scores,
                                         OutT* _out_scores,
                                         uint32_t* _out_indices)
@@ -168,7 +169,8 @@ __device__ void compute_similarity_impl(uint32_t dim,
                                   inds_ptrs,
                                   bitset_ptr,
                                   bitset_len,
-                                  original_nbits);
+                                  original_nbits,
+                                  bitmap_cols);
   }
 }
 

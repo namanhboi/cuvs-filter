@@ -83,6 +83,7 @@ __device__ __forceinline__ void interleaved_scan_impl(const uint32_t query_smem_
                                                       uint32_t* bitset_ptr,
                                                       IdxT bitset_len,
                                                       IdxT original_nbits,
+                                                      IdxT bitmap_cols,
                                                       uint32_t* neighbors,
                                                       float* distances)
 {
@@ -162,7 +163,8 @@ __device__ __forceinline__ void interleaved_scan_impl(const uint32_t query_smem_
                                                                        vec_id,
                                                                        bitset_ptr,
                                                                        bitset_len,
-                                                                       original_nbits);
+                                                                       original_nbits,
+                                                                       bitmap_cols);
 
         // Enqueue one element per thread
         float val = local_topk_t::queue_t::kDummy;

@@ -25,6 +25,7 @@ using interleaved_scan_func_t = void(const uint32_t query_smem_elems,
                                      uint32_t* bitset_ptr,
                                      IdxT bitset_len,
                                      IdxT original_nbits,
+                                     IdxT bitmap_cols,
                                      uint32_t* neighbors,
                                      float* distances);
 

@@ -68,7 +68,8 @@ __device__ void compute_distances(const uint32_t* chunk_indices,
                                   const int64_t* const* inds_ptrs,
                                   uint32_t* bitset_ptr,
                                   int64_t bitset_len,
-                                  int64_t original_nbits);
+                                  int64_t original_nbits,
+                                  int64_t bitmap_cols);
 
 template <typename OutT>
 __device__ OutT get_early_stop_limit(OutT query_kth);
@@ -79,7 +80,8 @@ __device__ bool sample_filter(const int64_t* const* const inds_ptrs,
                               const uint32_t sample_ix,
                               uint32_t* bitset_ptr,
                               int64_t bitset_len,
-                              int64_t original_nbits);
+                              int64_t original_nbits,
+                              int64_t bitmap_cols);
 
 __device__ uint32_t get_line_width(uint32_t pq_dim);
 

@@ -78,6 +78,8 @@ struct search_params : cuvs::neighbors::search_params {
   uint32_t n_probes = 20;
   /** Custom metric UDF code. */
   std::optional<std::string> metric_udf = std::nullopt;
+  /** First row of a per-query bitmap filter for this search call. Ignored by other filters. */
+  uint32_t filter_query_offset = 0;
 };
 
 static_assert(std::is_aggregate_v<index_params>);
@@ -1438,8 +1440,11 @@ void extend(raft::resources const& handle,
  * dataset [n_queries, k]
  * @param[out] distances raft::device_matrix_view to the distances to the selected neighbors
  * [n_queries, k]
- * @param[in] sample_filter an optional device filter function object that greenlights samples
- * for a given query. (none_sample_filter for no filtering)
+ * @param[in] sample_filter an optional device filter: none_sample_filter, a shared
+ * bitset_filter<uint32_t, int64_t>, or a per-query bitmap_filter<uint32_t, int64_t>.
+ * Bitmap columns correspond to source dataset IDs, its width must equal the index size, and its
+ * rows must cover params.filter_query_offset + queries.extent(0). A set bit permits the candidate.
+ * The caller must keep the device filter storage alive until search completes.
  */
 void search(raft::resources const& handle,
             const cuvs::neighbors::ivf_flat::search_params& params,
@@ -1482,8 +1487,11 @@ void search(raft::resources const& handle,
  * dataset [n_queries, k]
  * @param[out] distances raft::device_matrix_view to the distances to the selected neighbors
  * [n_queries, k]
- * @param[in] sample_filter an optional device filter function object that greenlights samples
- * for a given query. (none_sample_filter for no filtering)
+ * @param[in] sample_filter an optional device filter: none_sample_filter, a shared
+ * bitset_filter<uint32_t, int64_t>, or a per-query bitmap_filter<uint32_t, int64_t>.
+ * Bitmap columns correspond to source dataset IDs, its width must equal the index size, and its
+ * rows must cover params.filter_query_offset + queries.extent(0). A set bit permits the candidate.
+ * The caller must keep the device filter storage alive until search completes.
  */
 void search(raft::resources const& handle,
             const cuvs::neighbors::ivf_flat::search_params& params,
@@ -1525,8 +1533,11 @@ void search(raft::resources const& handle,
  * dataset [n_queries, k]
  * @param[out] distances raft::device_matrix_view to the distances to the selected neighbors
  * [n_queries, k]
- * @param[in] sample_filter an optional device filter function object that greenlights samples
- * for a given query. (none_sample_filter for no filtering)
+ * @param[in] sample_filter an optional device filter: none_sample_filter, a shared
+ * bitset_filter<uint32_t, int64_t>, or a per-query bitmap_filter<uint32_t, int64_t>.
+ * Bitmap columns correspond to source dataset IDs, its width must equal the index size, and its
+ * rows must cover params.filter_query_offset + queries.extent(0). A set bit permits the candidate.
+ * The caller must keep the device filter storage alive until search completes.
  */
 void search(raft::resources const& handle,
             const cuvs::neighbors::ivf_flat::search_params& params,
@@ -1569,8 +1580,11 @@ void search(raft::resources const& handle,
  * dataset [n_queries, k]
  * @param[out] distances raft::device_matrix_view to the distances to the selected neighbors
  * [n_queries, k]
- * @param[in] sample_filter an optional device filter function object that greenlights samples
- * for a given query. (none_sample_filter for no filtering)
+ * @param[in] sample_filter an optional device filter: none_sample_filter, a shared
+ * bitset_filter<uint32_t, int64_t>, or a per-query bitmap_filter<uint32_t, int64_t>.
+ * Bitmap columns correspond to source dataset IDs, its width must equal the index size, and its
+ * rows must cover params.filter_query_offset + queries.extent(0). A set bit permits the candidate.
+ * The caller must keep the device filter storage alive until search completes.
  */
 void search(raft::resources const& handle,
             const cuvs::neighbors::ivf_flat::search_params& params,

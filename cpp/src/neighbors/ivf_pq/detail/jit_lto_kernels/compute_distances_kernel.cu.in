@@ -37,7 +37,8 @@ __device__ void compute_distances<out_t, lut_t>(const uint32_t* chunk_indices,
                                                 const int64_t* const* inds_ptrs,
                                                 uint32_t* bitset_ptr,
                                                 int64_t bitset_len,
-                                                int64_t original_nbits)
+                                                int64_t original_nbits,
+                                                int64_t bitmap_cols)
 {
   compute_distances_impl<out_t, lut_t, capacity>(chunk_indices,
                                                  query_kths,
@@ -58,7 +59,8 @@ __device__ void compute_distances<out_t, lut_t>(const uint32_t* chunk_indices,
                                                  inds_ptrs,
                                                  bitset_ptr,
                                                  bitset_len,
-                                                 original_nbits);
+                                                 original_nbits,
+                                                 bitmap_cols);
 }
 
 }  // namespace cuvs::neighbors::ivf_pq::detail

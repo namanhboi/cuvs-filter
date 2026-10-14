@@ -7,6 +7,7 @@
 
 #include "../../core/nvtx.hpp"
 #include "../detail/ann_utils.cuh"
+#include "../ivf_bitmap_filter.cuh"
 #include "../ivf_common.cuh"
 #include "../sample_filter.cuh"  // none_sample_filter
 #include "ivf_pq_compute_similarity.cuh"
@@ -442,7 +443,11 @@ void ivfpq_search_worker(raft::resources const& handle,
   auto stream = raft::resource::get_cuda_stream(handle);
   auto mr     = raft::resource::get_workspace_resource_ref(handle);
 
-  bool manage_local_topk         = is_local_topk_feasible(topK, n_probes, n_queries);
+  bool manage_local_topk = is_local_topk_feasible(topK, n_probes, n_queries);
+  // Dense select-k requires at least topK input columns. A large refinement pool can exceed
+  // even the largest set of probed vectors; the distance kernel pads those extra columns with
+  // dummy scores, and neighbor postprocessing rejects their out-of-range positions.
+  if (!manage_local_topk) { max_samples = std::max(max_samples, topK); }
   auto topk_len                  = manage_local_topk ? n_probes * topK : max_samples;
   std::size_t n_queries_probes   = std::size_t(n_queries) * std::size_t(n_probes);
   std::size_t n_queries_topk_len = std::size_t(n_queries) * std::size_t(topk_len);
@@ -589,11 +594,19 @@ void ivfpq_search_worker(raft::resources const& handle,
   uint32_t* bitset_ptr   = nullptr;
   int64_t bitset_len     = 0;
   int64_t original_nbits = 0;
+  int64_t bitmap_cols    = 0;
   if constexpr (std::is_same_v<IvfSampleFilterT,
                                cuvs::neighbors::filtering::bitset_filter<uint32_t, int64_t>>) {
     bitset_ptr     = sample_filter.view().data();
     bitset_len     = sample_filter.view().size();
     original_nbits = sample_filter.view().get_original_nbits();
+  } else if constexpr (std::is_same_v<
+                         IvfSampleFilterT,
+                         cuvs::neighbors::filtering::bitmap_filter<uint32_t, int64_t>>) {
+    bitset_ptr     = sample_filter.view().data();
+    bitset_len     = sample_filter.view().get_n_rows();
+    original_nbits = sample_filter.view().get_original_nbits();
+    bitmap_cols    = sample_filter.view().get_n_cols();
   }
 
   rmm::device_uvector<LutT> device_lut(search_instance.device_lut_size, stream, mr);
@@ -630,6 +643,7 @@ void ivfpq_search_worker(raft::resources const& handle,
                          bitset_ptr,
                          bitset_len,
                          original_nbits,
+                         bitmap_cols,
                          device_lut.data(),
                          distances_buf.data(),
                          neighbors_ptr);
@@ -637,12 +651,8 @@ void ivfpq_search_worker(raft::resources const& handle,
   // Select topk vectors for each query
   rmm::device_uvector<ScoreT> topk_dists(n_queries * topK, stream, mr);
 
-  std::optional<raft::device_vector_view<const uint32_t>> num_samples_vector;
-  if (!manage_local_topk) {
-    num_samples_vector =
-      raft::make_device_vector_view<const uint32_t>(num_samples.data(), n_queries);
-  }
-
+  // Every dense row includes initialized dummy scores past its probed vectors. Select from
+  // the complete padded row, including when a query has fewer than topK probed vectors.
   cuvs::selection::select_k(
     handle,
     raft::make_device_matrix_view<const ScoreT, int64_t>(distances_buf.data(), n_queries, topk_len),
@@ -651,8 +661,7 @@ void ivfpq_search_worker(raft::resources const& handle,
     raft::make_device_matrix_view<uint32_t, int64_t>(neighbors_uint32, n_queries, topK),
     true,
     false,
-    cuvs::selection::SelectAlgo::kAuto,
-    num_samples_vector);
+    cuvs::selection::SelectAlgo::kAuto);
 
   // Postprocessing
   ivf::detail::postprocess_distances(handle,
@@ -775,7 +784,7 @@ inline auto get_max_fine_batch_size(raft::resources const& res,
   // Check in the tmp distance buffer is not too big
   auto ws_size = [k, n_probes, max_samples](uint32_t bs) -> uint64_t {
     const uint64_t buffers_fused     = 12ull * k * n_probes;
-    const uint64_t buffers_non_fused = 4ull * max_samples;
+    const uint64_t buffers_non_fused = 4ull * std::max(max_samples, k);
     const uint64_t other             = 32ull * n_probes;
     return static_cast<uint64_t>(bs) *
            (other + (is_local_topk_feasible(k, n_probes, bs) ? buffers_fused : buffers_non_fused));
@@ -1035,7 +1044,7 @@ inline void search(raft::resources const& handle,
                       n_probes,
                       k,
                       batch_size,
-                      offset_q + offset_b,
+                      params.filter_query_offset + offset_q + offset_b,
                       clusters_to_probe.data() + uint64_t(n_probes) * offset_b,
                       rot_queries.data() + uint64_t(index.rot_dim()) * offset_b,
                       neighbors + uint64_t(k) * (offset_q + offset_b),
@@ -1096,6 +1105,8 @@ void search_with_filtering(raft::resources const& handle,
                "Number of query dimensions should equal number of dimensions in the index.");
 
   std::uint32_t k = neighbors.extent(1);
+  filtering::validate_ivf_bitmap_filter(
+    sample_filter, idx.size(), queries.extent(0), params.filter_query_offset);
   search(handle,
          params,
          idx,
@@ -1105,6 +1116,13 @@ void search_with_filtering(raft::resources const& handle,
          neighbors.data_handle(),
          distances.data_handle(),
          sample_filter);
+  filtering::normalize_ivf_bitmap_results(handle,
+                                          sample_filter,
+                                          neighbors.data_handle(),
+                                          distances.data_handle(),
+                                          queries.extent(0),
+                                          neighbors.extent(1),
+                                          params.filter_query_offset);
 }
 
 template <typename T, typename IdxT>
@@ -1126,6 +1144,14 @@ void search(raft::resources const& handle,
   try {
     auto& sample_filter =
       dynamic_cast<const cuvs::neighbors::filtering::bitset_filter<uint32_t, int64_t>&>(
+        sample_filter_ref);
+    return search_with_filtering(handle, params, idx, queries, neighbors, distances, sample_filter);
+  } catch (const std::bad_cast&) {
+  }
+
+  try {
+    auto& sample_filter =
+      dynamic_cast<const cuvs::neighbors::filtering::bitmap_filter<uint32_t, int64_t>&>(
         sample_filter_ref);
     return search_with_filtering(handle, params, idx, queries, neighbors, distances, sample_filter);
   } catch (const std::bad_cast&) {

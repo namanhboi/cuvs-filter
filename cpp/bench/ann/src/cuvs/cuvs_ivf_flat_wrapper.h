@@ -6,6 +6,7 @@
 
 #include "../common/ann_types.hpp"
 #include "cuvs_ann_bench_utils.h"
+#include "ivf_filter_adapter.h"
 
 #include <cuvs/distance/distance.hpp>
 #include <cuvs/neighbors/ivf_flat.hpp>
@@ -56,6 +57,23 @@ class cuvs_ivf_flat : public algo<T>, public algo_gpu {
               algo_base::index_type* neighbors,
               float* distances) const override;
 
+  void search_with_query_offset(const T* queries,
+                                int batch_size,
+                                int k,
+                                algo_base::index_type* neighbors,
+                                float* distances,
+                                std::size_t query_offset) const override;
+
+  [[nodiscard]] auto supports_filter_validation() const -> bool override
+  {
+    return filter_.has_bitmap();
+  }
+  [[nodiscard]] auto is_filter_valid(std::size_t query_id, algo_base::index_type candidate_id) const
+    -> bool override
+  {
+    return filter_.passes(query_id, candidate_id);
+  }
+
   [[nodiscard]] auto get_sync_stream() const noexcept -> cudaStream_t override
   {
     return handle_.get_sync_stream();
@@ -82,7 +100,7 @@ class cuvs_ivf_flat : public algo<T>, public algo_gpu {
   int device_;
   int dimension_;
 
-  std::shared_ptr<cuvs::neighbors::filtering::base_filter> filter_;
+  detail::ivf_benchmark_filter filter_;
 };
 
 template <typename T, typename IdxT>
@@ -105,7 +123,7 @@ template <typename T, typename IdxT>
 void cuvs_ivf_flat<T, IdxT>::set_search_param(const search_param_base& param,
                                               const void* filter_bitset)
 {
-  filter_        = make_cuvs_filter(filter_bitset, index_->size());
+  filter_.configure(handle_, index_->size(), filter_bitset);
   auto sp        = dynamic_cast<const search_param&>(param);
   search_params_ = sp.ivf_flat_params;
   assert(search_params_.n_probes <= index_params_.n_lists);
@@ -138,6 +156,17 @@ template <typename T, typename IdxT>
 void cuvs_ivf_flat<T, IdxT>::search(
   const T* queries, int batch_size, int k, algo_base::index_type* neighbors, float* distances) const
 {
+  search_with_query_offset(queries, batch_size, k, neighbors, distances, 0);
+}
+
+template <typename T, typename IdxT>
+void cuvs_ivf_flat<T, IdxT>::search_with_query_offset(const T* queries,
+                                                      int batch_size,
+                                                      int k,
+                                                      algo_base::index_type* neighbors,
+                                                      float* distances,
+                                                      std::size_t query_offset) const
+{
   static_assert(std::is_integral_v<algo_base::index_type>);
   static_assert(std::is_integral_v<IdxT>);
 
@@ -151,12 +180,12 @@ void cuvs_ivf_flat<T, IdxT>::search(
   }
   cuvs::neighbors::ivf_flat::search(
     handle_,
-    search_params_,
+    filter_.params_for_batch(search_params_, query_offset, batch_size),
     *index_,
     raft::make_device_matrix_view<const T, int64_t>(queries, batch_size, index_->dim()),
     raft::make_device_matrix_view<IdxT, int64_t>(neighbors_idx_t, batch_size, k),
     raft::make_device_matrix_view<float, int64_t>(distances, batch_size, k),
-    *filter_);
+    filter_.filter());
   if constexpr (sizeof(IdxT) != sizeof(algo_base::index_type)) {
     raft::linalg::unaryOp(neighbors,
                           neighbors_idx_t,

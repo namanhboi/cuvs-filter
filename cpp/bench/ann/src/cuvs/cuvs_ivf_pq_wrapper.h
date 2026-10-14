@@ -6,6 +6,7 @@
 
 #include "../common/ann_types.hpp"
 #include "cuvs_ann_bench_utils.h"
+#include "ivf_filter_adapter.h"
 
 #include <cuvs/distance/distance.hpp>
 #include <cuvs/neighbors/dynamic_batching.hpp>
@@ -67,7 +68,25 @@ class cuvs_ivf_pq : public algo<T>, public algo_gpu {
                    int batch_size,
                    int k,
                    algo_base::index_type* neighbors,
-                   float* distances) const;
+                   float* distances,
+                   std::size_t query_offset = 0) const;
+
+  void search_with_query_offset(const T* queries,
+                                int batch_size,
+                                int k,
+                                algo_base::index_type* neighbors,
+                                float* distances,
+                                std::size_t query_offset) const override;
+
+  [[nodiscard]] auto supports_filter_validation() const -> bool override
+  {
+    return filter_.has_bitmap();
+  }
+  [[nodiscard]] auto is_filter_valid(std::size_t query_id, algo_base::index_type candidate_id) const
+    -> bool override
+  {
+    return filter_.passes(query_id, candidate_id);
+  }
 
   [[nodiscard]] auto get_sync_stream() const noexcept -> cudaStream_t override
   {
@@ -99,7 +118,7 @@ class cuvs_ivf_pq : public algo<T>, public algo_gpu {
   std::shared_ptr<cuvs::neighbors::dynamic_batching::index<T, IdxT>> dynamic_batcher_;
   cuvs::neighbors::dynamic_batching::search_params dynamic_batcher_sp_{};
 
-  std::shared_ptr<cuvs::neighbors::filtering::base_filter> filter_;
+  detail::ivf_benchmark_filter filter_;
 };
 
 template <typename T, typename IdxT>
@@ -137,12 +156,14 @@ template <typename T, typename IdxT>
 void cuvs_ivf_pq<T, IdxT>::set_search_param(const search_param_base& param,
                                             const void* filter_bitset)
 {
-  filter_        = make_cuvs_filter(filter_bitset, index_->size());
+  filter_.configure(handle_, index_->size(), filter_bitset);
   auto sp        = dynamic_cast<const search_param&>(param);
   search_params_ = sp.pq_param;
   refine_ratio_  = sp.refine_ratio;
   assert(search_params_.n_probes <= index_params_.n_lists);
 
+  RAFT_EXPECTS(!filter_.has_bitmap() || !sp.dynamic_batching,
+               "The IVF-PQ benchmark does not support bitmap filters with dynamic batching");
   if (sp.dynamic_batching) {
     dynamic_batcher_ = std::make_shared<cuvs::neighbors::dynamic_batching::index<T, IdxT>>(
       handle_,
@@ -167,8 +188,12 @@ void cuvs_ivf_pq<T, IdxT>::set_search_dataset(const T* dataset, size_t nrow)
 }
 
 template <typename T, typename IdxT>
-void cuvs_ivf_pq<T, IdxT>::search_base(
-  const T* queries, int batch_size, int k, algo_base::index_type* neighbors, float* distances) const
+void cuvs_ivf_pq<T, IdxT>::search_base(const T* queries,
+                                       int batch_size,
+                                       int k,
+                                       algo_base::index_type* neighbors,
+                                       float* distances,
+                                       std::size_t query_offset) const
 {
   static_assert(std::is_integral_v<algo_base::index_type>);
   static_assert(std::is_integral_v<IdxT>);
@@ -197,7 +222,13 @@ void cuvs_ivf_pq<T, IdxT>::search_base(
                                               distances_view);
   } else {
     cuvs::neighbors::ivf_pq::search(
-      handle_, search_params_, *index_, queries_view, neighbors_view, distances_view, *filter_);
+      handle_,
+      filter_.params_for_batch(search_params_, query_offset, batch_size),
+      *index_,
+      queries_view,
+      neighbors_view,
+      distances_view,
+      filter_.filter());
   }
 
   if constexpr (sizeof(IdxT) != sizeof(algo_base::index_type)) {
@@ -213,12 +244,23 @@ template <typename T, typename IdxT>
 void cuvs_ivf_pq<T, IdxT>::search(
   const T* queries, int batch_size, int k, algo_base::index_type* neighbors, float* distances) const
 {
+  search_with_query_offset(queries, batch_size, k, neighbors, distances, 0);
+}
+
+template <typename T, typename IdxT>
+void cuvs_ivf_pq<T, IdxT>::search_with_query_offset(const T* queries,
+                                                    int batch_size,
+                                                    int k,
+                                                    algo_base::index_type* neighbors,
+                                                    float* distances,
+                                                    std::size_t query_offset) const
+{
   auto k0                       = static_cast<size_t>(refine_ratio_ * k);
   const bool disable_refinement = k0 <= static_cast<size_t>(k);
   const raft::resources& res    = handle_;
 
   if (disable_refinement) {
-    search_base(queries, batch_size, k, neighbors, distances);
+    search_base(queries, batch_size, k, neighbors, distances, query_offset);
   } else {
     auto queries_v = raft::make_device_matrix_view<const T, algo_base::index_type>(
       queries, batch_size, dimension_);
@@ -226,10 +268,46 @@ void cuvs_ivf_pq<T, IdxT>::search(
       raft::make_device_matrix<algo_base::index_type, algo_base::index_type>(res, batch_size, k0);
     auto candidate_dists =
       raft::make_device_matrix<float, algo_base::index_type>(res, batch_size, k0);
-    search_base(
-      queries, batch_size, k0, candidate_ixs.data_handle(), candidate_dists.data_handle());
-    refine_helper(
-      res, dataset_, queries_v, candidate_ixs, k, neighbors, distances, index_->metric());
+    search_base(queries,
+                batch_size,
+                k0,
+                candidate_ixs.data_handle(),
+                candidate_dists.data_handle(),
+                query_offset);
+    // GPU refinement gathers a temporary IVF-Flat index containing every candidate vector.
+    // Bound that temporary for high-dimensional bitmap workloads while retaining the complete
+    // batched PQ search and including every refinement chunk in the measured search call.
+    if (filter_.has_bitmap() && raft::get_device_for_address(dataset_.data_handle()) >= 0) {
+      constexpr std::size_t refinement_budget = std::size_t{1} << 30;
+      const auto padded_candidates            = ((k0 + 31) / 32) * 32;
+      const auto bytes_per_query =
+        padded_candidates * (std::size_t(dimension_) * sizeof(T) + sizeof(IdxT) + sizeof(uint32_t));
+      const auto chunk_size =
+        std::max<std::size_t>(1,
+                              std::min({std::size_t(batch_size),
+                                        std::size_t(search_params_.max_internal_batch_size),
+                                        refinement_budget / bytes_per_query}));
+      for (std::size_t first = 0; first < std::size_t(batch_size); first += chunk_size) {
+        const auto count   = std::min(chunk_size, std::size_t(batch_size) - first);
+        auto chunk_queries = raft::make_device_matrix_view<const T, algo_base::index_type>(
+          queries + first * dimension_, count, dimension_);
+        auto chunk_candidates =
+          raft::make_device_matrix_view<const algo_base::index_type, algo_base::index_type>(
+            candidate_ixs.data_handle() + first * k0, count, k0);
+        refine_helper(res,
+                      dataset_,
+                      chunk_queries,
+                      chunk_candidates,
+                      k,
+                      neighbors + first * k,
+                      distances + first * k,
+                      index_->metric());
+      }
+      filter_.normalize_results(res, neighbors, distances, batch_size, k, query_offset);
+    } else {
+      refine_helper(
+        res, dataset_, queries_v, candidate_ixs, k, neighbors, distances, index_->metric());
+    }
   }
 }
 }  // namespace cuvs::bench

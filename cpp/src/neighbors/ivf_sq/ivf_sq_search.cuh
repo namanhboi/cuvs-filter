@@ -7,6 +7,7 @@
 
 #include "../../core/nvtx.hpp"
 #include "../detail/ann_utils.cuh"
+#include "../ivf_bitmap_filter.cuh"
 #include "../ivf_common.cuh"
 #include "../sample_filter.cuh"
 #include "detail/jit_lto_kernels/kernel_def.hpp"
@@ -97,6 +98,8 @@ constexpr auto get_filter_type_tag()
     return cuvs::neighbors::detail::tag_filter_none{};
   } else if constexpr (std::is_same_v<FilterT, bitset_filter<uint32_t, int64_t>>) {
     return cuvs::neighbors::detail::tag_filter_bitset{};
+  } else if constexpr (std::is_same_v<FilterT, bitmap_filter<uint32_t, int64_t>>) {
+    return cuvs::neighbors::detail::tag_filter_bitmap{};
   }
 }
 
@@ -141,6 +144,7 @@ void launch_kernel(const index<CodeT>& idx,
                    const float* queries_float,
                    const float* query_norms,
                    uint32_t n_queries,
+                   uint32_t queries_offset,
                    uint32_t n_probes,
                    uint32_t k,
                    uint32_t max_samples,
@@ -178,11 +182,19 @@ void launch_kernel(const index<CodeT>& idx,
   uint32_t* bitset_ptr          = nullptr;
   int64_t bitset_len            = 0;
   int64_t original_nbits        = 0;
+  int64_t bitmap_cols           = 0;
   if constexpr (std::is_same_v<IvfSampleFilterT,
                                cuvs::neighbors::filtering::bitset_filter<uint32_t, int64_t>>) {
     bitset_ptr     = sample_filter.view().data();
     bitset_len     = sample_filter.view().size();
     original_nbits = sample_filter.view().get_original_nbits();
+  } else if constexpr (std::is_same_v<
+                         IvfSampleFilterT,
+                         cuvs::neighbors::filtering::bitmap_filter<uint32_t, int64_t>>) {
+    bitset_ptr     = sample_filter.view().data();
+    bitset_len     = sample_filter.view().get_n_rows();
+    original_nbits = sample_filter.view().get_original_nbits();
+    bitmap_cols    = sample_filter.view().get_n_cols();
   }
 
   size_t smem = sq_scan_total_smem<Capacity>(dim, k);
@@ -269,7 +281,9 @@ void launch_kernel(const index<CodeT>& idx,
                                                            inds_ptrs_dev,
                                                            bitset_ptr,
                                                            bitset_len,
-                                                           original_nbits);
+                                                           original_nbits,
+                                                           bitmap_cols,
+                                                           queries_offset + query_offset);
   }
 }
 
@@ -282,6 +296,7 @@ void ivf_sq_scan(raft::resources const& handle,
                  const float* queries_float,
                  const float* query_norms,
                  uint32_t n_queries,
+                 uint32_t queries_offset,
                  uint32_t n_probes,
                  uint32_t k,
                  uint32_t max_samples,
@@ -316,6 +331,7 @@ void ivf_sq_scan(raft::resources const& handle,
                                                                                   queries_float,
                                                                                   query_norms,
                                                                                   n_queries,
+                                                                                  queries_offset,
                                                                                   n_probes,
                                                                                   k,
                                                                                   max_samples,
@@ -347,6 +363,7 @@ void search_impl(raft::resources const& handle,
                  const index<CodeT>& index,
                  const T* queries,
                  uint32_t n_queries,
+                 uint32_t queries_offset,
                  uint32_t k,
                  uint32_t n_probes,
                  int64_t* neighbors,
@@ -501,6 +518,7 @@ void search_impl(raft::resources const& handle,
                 converted_queries_ptr,
                 qn_ptr,
                 n_queries,
+                queries_offset,
                 n_probes,
                 k,
                 0,
@@ -550,6 +568,7 @@ void search_impl(raft::resources const& handle,
                 converted_queries_ptr,
                 qn_ptr,
                 n_queries,
+                queries_offset,
                 n_probes,
                 k,
                 0,
@@ -601,6 +620,7 @@ void search_impl(raft::resources const& handle,
                 converted_queries_ptr,
                 qn_ptr,
                 n_queries,
+                queries_offset,
                 n_probes,
                 k,
                 max_samples,
@@ -725,6 +745,7 @@ inline void search_with_filtering(raft::resources const& handle,
                                             index,
                                             queries + std::size_t(offset_q) * index.dim(),
                                             queries_batch,
+                                            params.filter_query_offset + offset_q,
                                             k,
                                             n_probes,
                                             neighbors + std::size_t(offset_q) * k,
@@ -751,6 +772,9 @@ void search_with_filtering(raft::resources const& handle,
   RAFT_EXPECTS(queries.extent(1) == index.dim(),
                "Number of query dimensions should equal number of dimensions in the index.");
 
+  filtering::validate_ivf_bitmap_filter(
+    sample_filter, index.size(), queries.extent(0), params.filter_query_offset);
+
   search_with_filtering(handle,
                         params,
                         index,
@@ -760,6 +784,13 @@ void search_with_filtering(raft::resources const& handle,
                         neighbors.data_handle(),
                         distances.data_handle(),
                         sample_filter);
+  filtering::normalize_ivf_bitmap_results(handle,
+                                          sample_filter,
+                                          neighbors.data_handle(),
+                                          distances.data_handle(),
+                                          queries.extent(0),
+                                          neighbors.extent(1),
+                                          params.filter_query_offset);
 }
 
 template <typename T, typename CodeT>
@@ -781,6 +812,14 @@ void search(raft::resources const& handle,
   try {
     auto& sample_filter =
       dynamic_cast<const cuvs::neighbors::filtering::bitset_filter<uint32_t, int64_t>&>(
+        sample_filter_ref);
+    return search_with_filtering(handle, params, idx, queries, neighbors, distances, sample_filter);
+  } catch (const std::bad_cast&) {
+  }
+
+  try {
+    auto& sample_filter =
+      dynamic_cast<const cuvs::neighbors::filtering::bitmap_filter<uint32_t, int64_t>&>(
         sample_filter_ref);
     return search_with_filtering(handle, params, idx, queries, neighbors, distances, sample_filter);
   } catch (const std::bad_cast&) {

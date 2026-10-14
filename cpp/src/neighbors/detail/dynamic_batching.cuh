@@ -910,6 +910,10 @@ class batch_runner {
       request_ptrs_{raft::make_pinned_matrix<request_pointers<T, IdxT>, uint32_t>(
         res_, n_queues_, max_batch_size_)}
   {
+    RAFT_EXPECTS(sample_filter == nullptr || sample_filter->get_filter_type() !=
+                                               cuvs::neighbors::filtering::FilterType::Bitmap,
+                 "Dynamic batching does not support per-query bitmap filters because query row IDs "
+                 "are not preserved");
     RAFT_CUDA_TRY(cudaMemsetAsync(
       kernel_progress_counters_.data_handle(),
       0,

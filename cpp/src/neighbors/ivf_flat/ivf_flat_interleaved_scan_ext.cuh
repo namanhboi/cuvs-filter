@@ -85,6 +85,15 @@ CUVS_INST_IVF_FLAT_INTERLEAVED_SCAN(
 
 CUVS_INST_IVF_FLAT_INTERLEAVED_SCAN(
   uint8_t, int64_t, cuvs::neighbors::filtering::bitset_filter<uint32_t COMMA int64_t>);
+CUVS_INST_IVF_FLAT_INTERLEAVED_SCAN(
+  float, int64_t, cuvs::neighbors::filtering::bitmap_filter<uint32_t COMMA int64_t>);
+CUVS_INST_IVF_FLAT_INTERLEAVED_SCAN(
+  half, int64_t, cuvs::neighbors::filtering::bitmap_filter<uint32_t COMMA int64_t>);
+CUVS_INST_IVF_FLAT_INTERLEAVED_SCAN(
+  int8_t, int64_t, cuvs::neighbors::filtering::bitmap_filter<uint32_t COMMA int64_t>);
+CUVS_INST_IVF_FLAT_INTERLEAVED_SCAN(
+  uint8_t, int64_t, cuvs::neighbors::filtering::bitmap_filter<uint32_t COMMA int64_t>);
+
 #undef COMMA
 #undef CUVS_INST_IVF_FLAT_INTERLEAVED_SCAN
 

@@ -34,6 +34,7 @@ extern "C" __global__ __launch_bounds__(kThreadsPerBlock) void interleaved_scan(
   uint32_t* bitset_ptr,
   index_t bitset_len,
   index_t original_nbits,
+  index_t bitmap_cols,
   uint32_t* neighbors,
   float* distances)
 {
@@ -52,6 +53,7 @@ extern "C" __global__ __launch_bounds__(kThreadsPerBlock) void interleaved_scan(
                                                                      bitset_ptr,
                                                                      bitset_len,
                                                                      original_nbits,
+                                                                     bitmap_cols,
                                                                      neighbors,
                                                                      distances);
 }

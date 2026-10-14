@@ -33,6 +33,8 @@ using ivf_sq_scan_func_t = void(const uint8_t* const* data_ptrs,
                                 IdxT* const* inds_ptrs,
                                 uint32_t* bitset_ptr,
                                 IdxT bitset_len,
-                                IdxT original_nbits);
+                                IdxT original_nbits,
+                                IdxT bitmap_cols,
+                                uint32_t queries_offset);
 
 }  // namespace cuvs::neighbors::ivf_sq::detail

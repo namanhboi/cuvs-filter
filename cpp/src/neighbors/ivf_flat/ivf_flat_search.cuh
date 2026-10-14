@@ -7,7 +7,9 @@
 
 #include "../../core/nvtx.hpp"
 #include "../detail/ann_utils.cuh"
-#include "../ivf_common.cuh"                  // cuvs::neighbors::detail::ivf
+#include "../ivf_bitmap_filter.cuh"
+#include "../ivf_common.cuh"  // cuvs::neighbors::detail::ivf
+#include "../sample_filter.cuh"
 #include "ivf_flat_interleaved_scan_ext.cuh"  // interleaved_scan
 #include <cuvs/neighbors/common.hpp>          // none_sample_filter
 #include <cuvs/neighbors/ivf_flat.hpp>        // cuvs::neighbors::ivf_flat::index
@@ -362,7 +364,7 @@ inline void search_with_filtering(raft::resources const& handle,
       params,
       queries + offset_q * index.dim(),
       queries_batch,
-      offset_q,
+      offset_q + params.filter_query_offset,
       k,
       n_probes,
       max_samples,
@@ -396,6 +398,9 @@ void search_with_filtering(raft::resources const& handle,
   auto effective_metric =
     params.metric_udf.has_value() ? cuvs::distance::DistanceType::CustomUDF : index.metric();
 
+  filtering::validate_ivf_bitmap_filter(
+    sample_filter, index.size(), queries.extent(0), params.filter_query_offset);
+
   search_with_filtering(handle,
                         params,
                         index,
@@ -406,6 +411,13 @@ void search_with_filtering(raft::resources const& handle,
                         neighbors.data_handle(),
                         distances.data_handle(),
                         sample_filter);
+  filtering::normalize_ivf_bitmap_results(handle,
+                                          sample_filter,
+                                          neighbors.data_handle(),
+                                          distances.data_handle(),
+                                          queries.extent(0),
+                                          neighbors.extent(1),
+                                          params.filter_query_offset);
 }
 
 template <typename T, typename IdxT>
@@ -427,6 +439,14 @@ void search(raft::resources const& handle,
   try {
     auto& sample_filter =
       dynamic_cast<const cuvs::neighbors::filtering::bitset_filter<uint32_t, int64_t>&>(
+        sample_filter_ref);
+    return search_with_filtering(handle, params, idx, queries, neighbors, distances, sample_filter);
+  } catch (const std::bad_cast&) {
+  }
+
+  try {
+    auto& sample_filter =
+      dynamic_cast<const cuvs::neighbors::filtering::bitmap_filter<uint32_t, int64_t>&>(
         sample_filter_ref);
     return search_with_filtering(handle, params, idx, queries, neighbors, distances, sample_filter);
   } catch (const std::bad_cast&) {

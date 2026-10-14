@@ -102,6 +102,9 @@ constexpr auto get_filter_type_tag()
   if constexpr (std::is_same_v<FilterT, bitset_filter<uint32_t, int64_t>>) {
     return cuvs::neighbors::detail::tag_filter_bitset{};
   }
+  if constexpr (std::is_same_v<FilterT, bitmap_filter<uint32_t, int64_t>>) {
+    return cuvs::neighbors::detail::tag_filter_bitmap{};
+  }
 }
 
 /**
@@ -148,6 +151,7 @@ void launch_kernel(const index<T, IdxT>& index,
                    cuda::std::optional<uint32_t*> bitset_ptr,
                    cuda::std::optional<IdxT> bitset_len,
                    cuda::std::optional<IdxT> original_nbits,
+                   cuda::std::optional<IdxT> bitmap_cols,
                    uint32_t* neighbors,
                    float* distances,
                    uint32_t& grid_dim_x,
@@ -238,6 +242,7 @@ void launch_kernel(const index<T, IdxT>& index,
       bitset_ptr.value_or(nullptr),
       bitset_len.value_or(0),
       original_nbits.value_or(0),
+      bitmap_cols.value_or(0),
       neighbors,
       distances);
     queries += grid_dim_y * index.dim();
@@ -444,12 +449,19 @@ void ivfflat_interleaved_scan(const index<T, IdxT>& index,
   cuda::std::optional<uint32_t*> bitset_ptr;
   cuda::std::optional<IdxT> bitset_len;
   cuda::std::optional<IdxT> original_nbits;
+  cuda::std::optional<IdxT> bitmap_cols;
 
   if constexpr (std::is_same_v<IvfSampleFilterT,
                                cuvs::neighbors::filtering::bitset_filter<uint32_t, IdxT>>) {
     bitset_ptr     = sample_filter.view().data();
     bitset_len     = sample_filter.view().size();
     original_nbits = sample_filter.view().get_original_nbits();
+  } else if constexpr (std::is_same_v<IvfSampleFilterT,
+                                      cuvs::neighbors::filtering::bitmap_filter<uint32_t, IdxT>>) {
+    bitset_ptr     = sample_filter.view().data();
+    bitset_len     = sample_filter.view().get_n_rows();
+    original_nbits = sample_filter.view().get_original_nbits();
+    bitmap_cols    = sample_filter.view().get_n_cols();
   }
   select_interleaved_scan_kernel<T, AccT, IdxT, decltype(get_filter_type_tag<IvfSampleFilterT>())>::
     run(capacity,
@@ -469,6 +481,7 @@ void ivfflat_interleaved_scan(const index<T, IdxT>& index,
         bitset_ptr,
         bitset_len,
         original_nbits,
+        bitmap_cols,
         neighbors,
         distances,
         grid_dim_x,

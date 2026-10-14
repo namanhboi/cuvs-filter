@@ -22,6 +22,7 @@ template __device__ bool sample_filter_func<bitset_t, index_t>(
   const uint32_t sample_ix,
   bitset_t* bitset_ptr,
   index_t bitset_len,
-  index_t original_nbits);
+  index_t original_nbits,
+  index_t bitmap_cols);
 
 }  // namespace cuvs::neighbors::detail

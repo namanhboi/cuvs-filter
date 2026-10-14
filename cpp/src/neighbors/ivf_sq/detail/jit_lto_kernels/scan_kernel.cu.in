@@ -33,7 +33,9 @@ extern "C" __global__ __launch_bounds__(kSqScanThreads) void ivf_sq_scan(
   int64_t* const* inds_ptrs,
   uint32_t* bitset_ptr,
   int64_t bitset_len,
-  int64_t original_nbits)
+  int64_t original_nbits,
+  int64_t bitmap_cols,
+  uint32_t queries_offset)
 {
   ivf_sq_scan_impl<capacity>(data_ptrs,
                              list_sizes,
@@ -53,7 +55,9 @@ extern "C" __global__ __launch_bounds__(kSqScanThreads) void ivf_sq_scan(
                              inds_ptrs,
                              bitset_ptr,
                              bitset_len,
-                             original_nbits);
+                             original_nbits,
+                             bitmap_cols,
+                             queries_offset);
 }
 
 static_assert(std::is_same_v<decltype(ivf_sq_scan), ivf_sq_scan_func_t<int64_t>>);

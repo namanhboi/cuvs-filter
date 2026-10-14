@@ -87,9 +87,13 @@ void refine_device(
   // Offsets per probe for each query [n_queries] as n_probes = 1
   rmm::device_uvector<uint32_t> chunk_index(n_queries, raft::resource::get_cuda_stream(handle));
 
-  // we know that each cluster has exactly n_candidates entries
-  raft::matrix::fill(
-    handle, raft::make_device_vector_view(chunk_index.data(), n_queries), uint32_t(n_candidates));
+  // Invalid candidate IDs are omitted while filling the refinement index, so an underfilled
+  // cluster can have fewer than n_candidates entries. Scanning its allocation capacity reads
+  // uninitialized vectors and can return duplicate or unrelated IDs.
+  raft::copy(chunk_index.data(),
+             refinement_index.list_sizes().data_handle(),
+             n_queries,
+             raft::resource::get_cuda_stream(handle));
 
   uint32_t* neighbors_uint32 = nullptr;
   if constexpr (sizeof(idx_t) == sizeof(uint32_t)) {
@@ -131,6 +135,15 @@ void refine_device(
                                                       1,
                                                       k,
                                                       raft::resource::get_cuda_stream(handle));
+  // The selection queue's empty lanes can carry position zero with an infinite distance.
+  // Postprocessing that position resolves it to a real ID; mark such empty result slots invalid.
+  raft::linalg::map_offset(
+    handle,
+    raft::make_device_vector_view(indices.data_handle(), n_queries * k),
+    [neighbors        = indices.data_handle(),
+     result_distances = distances.data_handle()] __device__(matrix_idx i) {
+      return isfinite(result_distances[i]) ? neighbors[i] : std::numeric_limits<idx_t>::max();
+    });
 }
 
 }  // namespace detail

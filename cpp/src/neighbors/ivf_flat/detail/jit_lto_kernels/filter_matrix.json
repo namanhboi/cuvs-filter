@@ -1,5 +1,5 @@
 {
-  "filter_name": ["none", "bitset"],
+  "filter_name": ["none", "bitset", "bitmap"],
   "_index": [
     {
       "index_type": "int64_t",

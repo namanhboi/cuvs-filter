@@ -106,7 +106,9 @@ __device__ __forceinline__ void ivf_sq_scan_impl(const uint8_t* const* data_ptrs
                                                  const int64_t* const* inds_ptrs,
                                                  uint32_t* bitset_ptr,
                                                  int64_t bitset_len,
-                                                 int64_t original_nbits)
+                                                 int64_t original_nbits,
+                                                 int64_t bitmap_cols,
+                                                 uint32_t queries_offset)
 {
   static_assert(kIndexGroupSize == raft::WarpSize,
                 "Warp-coalesced scan requires kIndexGroupSize == WarpSize");
@@ -188,10 +190,14 @@ __device__ __forceinline__ void ivf_sq_scan_impl(const uint8_t* const* data_ptrs
     for (uint32_t group = warp_id * kIndexGroupSize; group < cluster_sz;
          group += kWarpsPerBlock * kIndexGroupSize) {
       const uint32_t row = group + lane_id;
-      const bool valid =
-        (row < cluster_sz) &&
-        sample_filter<int64_t>(
-          inds_ptrs, query_ix, cluster_id, row, bitset_ptr, bitset_len, original_nbits);
+      const bool valid   = (row < cluster_sz) && sample_filter<int64_t>(inds_ptrs,
+                                                                      queries_offset + query_ix,
+                                                                      cluster_id,
+                                                                      row,
+                                                                      bitset_ptr,
+                                                                      bitset_len,
+                                                                      original_nbits,
+                                                                      bitmap_cols);
 
       float dist      = 0.0f;
       float v_norm_sq = 0.0f;

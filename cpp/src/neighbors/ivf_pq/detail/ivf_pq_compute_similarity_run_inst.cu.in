@@ -38,6 +38,7 @@ template void cuvs::neighbors::ivf_pq::detail::compute_similarity_run<out_t, lut
   uint32_t* bitset_ptr,
   int64_t bitset_len,
   int64_t original_nbits,
+  int64_t bitmap_cols,
   lut_t* lut_scores,
   out_t* _out_scores,
   uint32_t* _out_indices);

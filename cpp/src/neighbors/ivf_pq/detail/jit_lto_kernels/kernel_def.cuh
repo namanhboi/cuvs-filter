@@ -33,6 +33,7 @@ using compute_similarity_func_t = void(uint32_t dim,
                                        uint32_t* bitset_ptr,
                                        int64_t bitset_len,
                                        int64_t original_nbits,
+                                       int64_t bitmap_cols,
                                        LutT* lut_scores,
                                        OutT* _out_scores,
                                        uint32_t* _out_indices);

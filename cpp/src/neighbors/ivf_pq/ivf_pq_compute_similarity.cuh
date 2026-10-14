@@ -49,6 +49,7 @@ void compute_similarity_run(selected<OutT, LutT> s,
                             uint32_t* bitset_ptr,
                             int64_t bitset_len,
                             int64_t original_nbits,
+                            int64_t bitmap_cols,
                             LutT* lut_scores,
                             OutT* _out_scores,
                             uint32_t* _out_indices);
@@ -114,6 +115,12 @@ auto compute_similarity_select(const cudaDeviceProp& dev_props,
   instantiate_cuvs_neighbors_ivf_pq_detail_compute_similarity_select(                       \
     ARGS(OutT),                                                                             \
     ARGS(LutT),                                                                             \
+    ARGS(cuvs::neighbors::filtering::bitmap_filter<uint32_t, int64_t>),                     \
+    cuvs::neighbors::ivf_pq::detail::tag_metric_euclidean,                                  \
+    false);                                                                                 \
+  instantiate_cuvs_neighbors_ivf_pq_detail_compute_similarity_select(                       \
+    ARGS(OutT),                                                                             \
+    ARGS(LutT),                                                                             \
     cuvs::neighbors::filtering::none_sample_filter,                                         \
     cuvs::neighbors::ivf_pq::detail::tag_metric_inner_product,                              \
     false);                                                                                 \
@@ -121,6 +128,12 @@ auto compute_similarity_select(const cudaDeviceProp& dev_props,
     ARGS(OutT),                                                                             \
     ARGS(LutT),                                                                             \
     ARGS(cuvs::neighbors::filtering::bitset_filter<uint32_t, int64_t>),                     \
+    cuvs::neighbors::ivf_pq::detail::tag_metric_inner_product,                              \
+    false);                                                                                 \
+  instantiate_cuvs_neighbors_ivf_pq_detail_compute_similarity_select(                       \
+    ARGS(OutT),                                                                             \
+    ARGS(LutT),                                                                             \
+    ARGS(cuvs::neighbors::filtering::bitmap_filter<uint32_t, int64_t>),                     \
     cuvs::neighbors::ivf_pq::detail::tag_metric_inner_product,                              \
     false);                                                                                 \
   instantiate_cuvs_neighbors_ivf_pq_detail_compute_similarity_select(                       \
@@ -133,6 +146,12 @@ auto compute_similarity_select(const cudaDeviceProp& dev_props,
     ARGS(OutT),                                                                             \
     ARGS(LutT),                                                                             \
     ARGS(cuvs::neighbors::filtering::bitset_filter<uint32_t, int64_t>),                     \
+    cuvs::neighbors::ivf_pq::detail::tag_metric_inner_product,                              \
+    true);                                                                                  \
+  instantiate_cuvs_neighbors_ivf_pq_detail_compute_similarity_select(                       \
+    ARGS(OutT),                                                                             \
+    ARGS(LutT),                                                                             \
+    ARGS(cuvs::neighbors::filtering::bitmap_filter<uint32_t, int64_t>),                     \
     cuvs::neighbors::ivf_pq::detail::tag_metric_inner_product,                              \
     true);                                                                                  \
                                                                                             \
@@ -159,6 +178,7 @@ auto compute_similarity_select(const cudaDeviceProp& dev_props,
     uint32_t* bitset_ptr,                                                                   \
     int64_t bitset_len,                                                                     \
     int64_t original_nbits,                                                                 \
+    int64_t bitmap_cols,                                                                    \
     LutT* lut_scores,                                                                       \
     OutT* _out_scores,                                                                      \
     uint32_t* _out_indices);
