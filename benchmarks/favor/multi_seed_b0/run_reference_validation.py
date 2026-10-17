@@ -3,6 +3,9 @@
 
 from __future__ import annotations
 
+if __name__ == "__main__":
+    raise SystemExit("FAVOR reference validation is retired; use benchmarks/retrieve_workshop.")
+
 import argparse
 import json
 import os

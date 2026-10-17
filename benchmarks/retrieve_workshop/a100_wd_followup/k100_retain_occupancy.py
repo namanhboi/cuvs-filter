@@ -101,7 +101,7 @@ def paired_search(template: dict, method: str, point: dict) -> dict:
     result = copy.deepcopy(template)
     for key in list(result):
         if (
-            key.startswith(("favor_diagnostics_", "navix_", "cagra_"))
+            key.startswith(("search_diagnostics_", "navix_", "cagra_"))
             or key == "benchmark_output_neighbors_file"
         ):
             result.pop(key)
@@ -113,7 +113,7 @@ def paired_search(template: dict, method: str, point: dict) -> dict:
             "itopk": point["requested_itopk"],
             "search_width": point["search_width"],
             "max_iterations": point["max_iterations"],
-            "favor_udf_passing_accumulator": method == RETAIN,
+            "passing_result_accumulator": method == RETAIN,
             "require_identity_source_indices": True,
             "bitmap_method": method,
             "k": K,

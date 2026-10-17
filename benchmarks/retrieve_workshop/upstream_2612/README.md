@@ -78,3 +78,50 @@ The header is followed by `query_rows + 1` uint64 offsets and the uint32 ID payl
 Each row is strictly increasing; empty rows have equal adjacent offsets. cuVS
 constructs resident Roaring owners with `from_ids(..., pre_sorted=true)` outside
 search timing. The original dense bitmap remains the membership reference.
+
+## CAGRA filter representations
+
+CAGRA benchmark search parameters accept `filter_representation: "bitmap"`
+(the default) or `filter_representation: "roaring"`. The dataset still names the
+original query bitmap. Roaring mode constructs one resident cuVS allowlist per
+query and retains its owners for the entire search; it does not upload a dense
+GPU bitmap. Base, Retain, and NaviX share the same query offsets and source-ID
+mapping. Passing-seed selection remains part of search timing.
+
+An optional `roaring_allowlist_file` names the `CUVSRIDS` artifact above. The
+adapter compares every saved ID row with the original bitmap before constructing
+the native allowlists. Owner construction and this verification happen outside
+search timing. Seed inspection counters count 32-node tiles for Roaring and dense
+bitmap words for the identity dense path; they are not equivalent work measures.
+
+New configurations use `passing_result_accumulator` and `search_diagnostics_*`.
+Frozen `favor_udf_passing_accumulator` and `favor_diagnostics_*` names remain
+compatibility aliases for these shared controls. They never enable FAVOR.
+FAVOR modes, penalty/sampling/sidecar controls, and termination shadows are retired.
+
+Custom bitmap/Retain/NaviX benchmark paths require uncompressed CAGRA datasets.
+IVF currently accepts dense per-query bitmaps only; requesting Roaring is an error.
+Native upstream compressed-index paths are validated separately.
+
+## Saved index conversion
+
+Convert immutable saved indexes to separate paths:
+
+```bash
+python benchmarks/retrieve_workshop/upstream_2612/convert_indexes.py cagra \
+  /old/cagra.index --output /new/cagra.index
+python benchmarks/retrieve_workshop/upstream_2612/convert_indexes.py ivf_flat \
+  /old/flat.index --output /new/flat.index
+```
+
+The converter handles graph-only CAGRA v5 to v6 and IVF-Flat v4 to v5 with int64
+IDs. It refuses embedded CAGRA datasets and unsupported versions. CAGRA graph
+and source mappings are preserved. IVF centroid, norm, logical list-size, and
+interleaved vector bytes are preserved; only padded, nonlogical list IDs are
+removed to match the new serialization convention. No clustering or graph rebuild
+is performed.
+
+Each output is reread independently and its components compared with the source.
+A `.json` manifest records component and full-file SHA-256 values. Existing outputs
+are never overwritten. Wire-format verification is followed by native cuVS loading
+and GPU correctness tests before a converted index is used for benchmark comparisons.

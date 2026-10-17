@@ -78,7 +78,7 @@ class search_diagnostic_session {
       throw std::invalid_argument("favor_diagnostics_groundtruth must be specified");
     }
 
-    auto stream            = raft::resource::get_cuda_stream(res);
+    auto stream            = raft::resource::get_cuda_stream(res).get();
     auto ground_truth_host = load_ground_truth(num_queries);
     auto selected =
       device_telemetry ? load_selected_queries(num_queries) : std::vector<std::uint32_t>{};

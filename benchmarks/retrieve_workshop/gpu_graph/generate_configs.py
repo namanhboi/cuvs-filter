@@ -121,7 +121,7 @@ def search_point(
         "itopk": itopk,
         "search_width": width,
         "max_iterations": max_iterations,
-        "favor_udf_passing_accumulator": "accumulator" in method,
+        "passing_result_accumulator": "accumulator" in method,
         # The resident bitmap and GT use source-order IDs.  Reject a remapped index rather than
         # silently comparing incompatible ID spaces.
         "require_identity_source_indices": True,

@@ -21,7 +21,7 @@ def search(method: str, itopk: int, width: int) -> dict:
         "max_iterations": 0,
     }
     if method == "default_cagra_accumulator":
-        row["favor_udf_passing_accumulator"] = True
+        row["passing_result_accumulator"] = True
     if method in ("legacy_navix", "bitmap_seeded_navix"):
         row["navix_mode"] = "adaptive_kuzu"
         row["navix_scheduler"] = "tiled"

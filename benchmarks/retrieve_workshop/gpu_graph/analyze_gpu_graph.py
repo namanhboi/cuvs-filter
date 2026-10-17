@@ -224,9 +224,11 @@ def validate_runtime_flags(
     expected_max_queries: int,
     expected_k: int = 10,
 ) -> None:
-    accumulator = round(
-        finite(record, "favor_udf_passing_accumulator", path, 0.0)
+    accumulator_key = (
+        "passing_result_accumulator" if "passing_result_accumulator" in record
+        else "favor_udf_passing_accumulator"
     )
+    accumulator = round(finite(record, accumulator_key, path, 0.0))
     cagra_seeds = round(finite(record, "cagra_bitmap_seeds", path, 0.0))
     navix_seeds = round(finite(record, "navix_bitmap_seeds", path, 0.0))
     identity_ids = round(finite(record, "require_identity_source_indices", path))

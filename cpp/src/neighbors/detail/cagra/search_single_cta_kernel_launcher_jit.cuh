@@ -819,6 +819,7 @@ void select_and_run(
   SampleFilterT sample_filter,
   cudaStream_t stream)
 {
+  RAFT_EXPECTS(ps.filter_mode == filtering_mode::DEFAULT, "FAVOR is retired");
   const SourceIndexT* source_indices_ptr =
     source_indices.has_value() ? source_indices->data_handle() : nullptr;
 
@@ -828,8 +829,9 @@ void select_and_run(
   constexpr bool bitmap_seeded   = cagra_filter_uses_bitmap_seeds<SampleFilterT>::value;
   constexpr bool passing_accumulator = cagra_filter_uses_passing_accumulator<SampleFilterT>::value;
   if constexpr (bitmap_seeded) {
-    RAFT_EXPECTS(filter_payload.filter_kind == cagra_sample_filter<SourceIndexT>::kind_bitmap,
-                 "bitmap-seeded CAGRA requires a bitmap filter payload");
+    RAFT_EXPECTS(filter_payload.filter_kind == cagra_sample_filter<SourceIndexT>::kind_bitmap ||
+                   filter_payload.filter_kind == cagra_sample_filter<SourceIndexT>::kind_roaring,
+                 "Passing-seeded CAGRA requires a bitmap or Roaring filter payload");
     RAFT_EXPECTS(
       filter_payload.navix_bitmap_seeds != 0 && filter_payload.navix_seed_ids != nullptr &&
         filter_payload.navix_seed_counts != nullptr && filter_payload.navix_seed_stride != 0,

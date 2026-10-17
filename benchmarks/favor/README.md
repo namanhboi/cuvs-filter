@@ -11,9 +11,12 @@ as experiment records. They do not describe the supported algorithm set.
 
 Use `benchmarks/retrieve_workshop` for CAGRA-Base, CAGRA-Retain, CAGRA-NaviX, and IVF.
 The shared NaviX bitmap preparation tools moved to
-`benchmarks/retrieve_workshop/navix_bitmap`.
+`benchmarks/retrieve_workshop/navix_bitmap`; shared ArXiv data preparation lives
+in `benchmarks/retrieve_workshop/data_tools`.
 
 Some frozen paper configurations use `favor_udf_passing_accumulator` and
 `favor_diagnostics_*` for shared Retain and search diagnostics. These compatibility
 names do not enable FAVOR. New configurations can use `passing_result_accumulator`
-for the retention control. Shared C++ search diagnostics have generic names.
+for the retention control and `search_diagnostics_*` for shared diagnostics. New
+experiment generators use these names; readers accept the frozen names as aliases.
+Shared C++ search diagnostics have generic names. The FAVOR example is retired too.

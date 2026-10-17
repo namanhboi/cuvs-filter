@@ -8,6 +8,7 @@
 #include <neighbors/cagra.cuh>
 #include <neighbors/cagra_benchmark.hpp>
 #include <neighbors/detail/cagra/navix_bitmap_seeds.cuh>
+#include <neighbors/detail/cagra/navix_roaring_seeds.cuh>
 
 #include <algorithm>
 
@@ -91,12 +92,15 @@ CUVS_INST_CAGRA_SEARCH_MULTI_PARTITION(data_t, uint32_t, int64_t);
 namespace cuvs::neighbors::cagra::detail {
 
 template <>
-CUVS_EXPORT std::uint64_t benchmark_count_favor_bitset_matches<data_t>(
+CUVS_EXPORT std::uint64_t benchmark_count_cagra_bitset_matches<data_t>(
   raft::resources const& res,
   cagra::index<data_t, std::uint32_t> const& index,
   cuvs::neighbors::filtering::base_filter const& sample_filter)
 {
-  RAFT_FAIL("FAVOR is retired. Use Base, Retain, or NaviX.");
+  auto const* bitset = dynamic_cast<
+    cuvs::neighbors::filtering::bitset_filter<std::uint32_t, std::int64_t> const*>(&sample_filter);
+  RAFT_EXPECTS(bitset != nullptr, "CAGRA bitset counting requires a uint32 bitset filter");
+  return count_cagra_bitset_matches(res, index, *bitset);
 }
 
 template <>
@@ -202,15 +206,23 @@ auto validate_navix_bitmap(
   std::uint32_t query_offset) -> BitmapFilterT const&
 {
   auto const* bitmap = dynamic_cast<BitmapFilterT const*>(&sample_filter);
-  RAFT_EXPECTS(bitmap != nullptr, "benchmark bitmap search requires a uint32 bitmap filter");
+  RAFT_EXPECTS(bitmap != nullptr, "benchmark query filtering requires a dense bitmap or Roaring filter");
   const auto graph_degree = index.graph().extent(1);
   RAFT_EXPECTS(graph_degree == 32 || graph_degree == 64,
                "NaviX currently requires a degree-32 or degree-64 CAGRA graph");
-  RAFT_EXPECTS(query_offset + static_cast<std::uint64_t>(queries.extent(0)) <=
-                 static_cast<std::uint64_t>(bitmap->view().get_n_rows()),
-               "benchmark bitmap does not cover the requested query range");
-  RAFT_EXPECTS(bitmap->view().get_n_cols() >= static_cast<std::int64_t>(index.size()),
-               "benchmark bitmap has fewer source columns than CAGRA nodes");
+  if constexpr (std::is_same_v<BitmapFilterT, cuvs::neighbors::filtering::roaring_bitmap_filter>) {
+    RAFT_EXPECTS(bitmap->valid(), "benchmark Roaring filter must be initialized");
+    RAFT_EXPECTS(static_cast<std::uint64_t>(query_offset) + queries.extent(0) <= bitmap->num_queries(),
+                 "benchmark Roaring filter does not cover the requested query range");
+    RAFT_EXPECTS(bitmap->dataset_rows() >= static_cast<std::uint64_t>(index.size()),
+                 "benchmark Roaring filter has fewer source rows than CAGRA nodes");
+  } else {
+    RAFT_EXPECTS(query_offset + static_cast<std::uint64_t>(queries.extent(0)) <=
+                   static_cast<std::uint64_t>(bitmap->view().get_n_rows()),
+                 "benchmark bitmap does not cover the requested query range");
+    RAFT_EXPECTS(bitmap->view().get_n_cols() >= static_cast<std::int64_t>(index.size()),
+                 "benchmark bitmap has fewer source columns than CAGRA nodes");
+  }
   return *bitmap;
 }
 
@@ -226,7 +238,9 @@ CUVS_EXPORT void benchmark_search_bitmap_with_query_offset<data_t>(
   std::uint32_t query_offset,
   bool passing_accumulator)
 {
-  using bitmap_t     = cuvs::neighbors::filtering::bitmap_filter<std::uint32_t, std::int64_t>;
+  auto run = [&]<typename bitmap_t>() {
+
+
   auto const& bitmap = validate_navix_bitmap<bitmap_t>(index, queries, sample_filter, query_offset);
   auto params_copy   = params;
   params_copy.algo   = search_algo::SINGLE_CTA;
@@ -244,6 +258,13 @@ CUVS_EXPORT void benchmark_search_bitmap_with_query_offset<data_t>(
     auto runtime    = runtime_t{bitmap, query_offset};
     search_with_filtering<data_t, std::uint32_t, runtime_t, std::int64_t>(
       res, params_copy, index, queries, neighbors, distances, runtime);
+  }
+
+  };
+  if (sample_filter.get_filter_type() == cuvs::neighbors::filtering::FilterType::Roaring) {
+    run.template operator()<cuvs::neighbors::filtering::roaring_bitmap_filter>();
+  } else {
+    run.template operator()<cuvs::neighbors::filtering::bitmap_filter<std::uint32_t, std::int64_t>>();
   }
 }
 
@@ -263,7 +284,9 @@ CUVS_EXPORT void benchmark_search_bitmap_seeded<data_t>(
   bool passing_accumulator,
   std::uint32_t seed_stride)
 {
-  using bitmap_t = cuvs::neighbors::filtering::bitmap_filter<std::uint32_t, std::int64_t>;
+  auto run = [&]<typename bitmap_t>() {
+
+
   RAFT_EXPECTS(params.algo == search_algo::SINGLE_CTA,
                "benchmark_search_bitmap_seeded requires SINGLE_CTA");
   RAFT_EXPECTS(!params.persistent,
@@ -308,6 +331,13 @@ CUVS_EXPORT void benchmark_search_bitmap_seeded<data_t>(
   } else {
     run_with_policy.template operator()<false>();
   }
+
+  };
+  if (sample_filter.get_filter_type() == cuvs::neighbors::filtering::FilterType::Roaring) {
+    run.template operator()<cuvs::neighbors::filtering::roaring_bitmap_filter>();
+  } else {
+    run.template operator()<cuvs::neighbors::filtering::bitmap_filter<std::uint32_t, std::int64_t>>();
+  }
 }
 
 template <>
@@ -322,7 +352,9 @@ CUVS_EXPORT void benchmark_search_navix_bitmap<data_t>(
   std::uint32_t query_offset,
   std::uint32_t navix_policy)
 {
-  using bitmap_t     = cuvs::neighbors::filtering::bitmap_filter<std::uint32_t, std::int64_t>;
+  auto run = [&]<typename bitmap_t>() {
+
+
   auto const& bitmap = validate_navix_bitmap<bitmap_t>(index, queries, sample_filter, query_offset);
   auto params_copy   = params;
   params_copy.algo   = search_algo::SINGLE_CTA;
@@ -334,6 +366,13 @@ CUVS_EXPORT void benchmark_search_navix_bitmap<data_t>(
   auto runtime               = runtime_t{navix_t{bitmap, navix_policy}, query_offset};
   search_with_filtering<data_t, std::uint32_t, runtime_t, std::int64_t>(
     res, params_copy, index, queries, neighbors, distances, runtime);
+
+  };
+  if (sample_filter.get_filter_type() == cuvs::neighbors::filtering::FilterType::Roaring) {
+    run.template operator()<cuvs::neighbors::filtering::roaring_bitmap_filter>();
+  } else {
+    run.template operator()<cuvs::neighbors::filtering::bitmap_filter<std::uint32_t, std::int64_t>>();
+  }
 }
 
 template <>
@@ -352,7 +391,9 @@ CUVS_EXPORT void benchmark_search_navix_bitmap_seeded<data_t>(
   std::uint32_t seed_stride,
   std::uint32_t navix_policy)
 {
-  using bitmap_t     = cuvs::neighbors::filtering::bitmap_filter<std::uint32_t, std::int64_t>;
+  auto run = [&]<typename bitmap_t>() {
+
+
   auto const& bitmap = validate_navix_bitmap<bitmap_t>(index, queries, sample_filter, query_offset);
   const auto num_queries = static_cast<std::uint32_t>(queries.extent(0));
   RAFT_EXPECTS(seed_stride > 0, "NaviX bitmap seed stride must be positive");
@@ -388,6 +429,13 @@ CUVS_EXPORT void benchmark_search_navix_bitmap_seeded<data_t>(
     runtime_t{navix_t{bitmap, navix_policy, seed_ids, seed_counts, seed_stride}, query_offset};
   search_with_filtering<data_t, std::uint32_t, runtime_t, std::int64_t>(
     res, params_copy, index, queries, neighbors, distances, runtime);
+
+  };
+  if (sample_filter.get_filter_type() == cuvs::neighbors::filtering::FilterType::Roaring) {
+    run.template operator()<cuvs::neighbors::filtering::roaring_bitmap_filter>();
+  } else {
+    run.template operator()<cuvs::neighbors::filtering::bitmap_filter<std::uint32_t, std::int64_t>>();
+  }
 }
 
 }  // namespace cuvs::neighbors::cagra::detail

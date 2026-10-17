@@ -55,12 +55,12 @@ def build(output: Path, data_root: Path, diagnostic_root: Path) -> dict:
                     # Keep the fixed sample in one capture while using the identical planner
                     # contract as the production resource kernel.
                     "max_queries": MAX_QUERIES,
-                    "favor_diagnostics_output": str(
+                    "search_diagnostics_output": str(
                         (diagnostic_root / workload / method).resolve()
                     ),
-                    "favor_diagnostics_groundtruth": str(ground_truth.resolve()),
-                    "favor_diagnostics_dataset": workload,
-                    "favor_diagnostics_variant": method,
+                    "search_diagnostics_groundtruth": str(ground_truth.resolve()),
+                    "search_diagnostics_dataset": workload,
+                    "search_diagnostics_variant": method,
                 }
             )
             diagnostic_searches.append(diagnostic)

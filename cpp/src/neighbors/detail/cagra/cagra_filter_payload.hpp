@@ -246,6 +246,7 @@ void fill_cagra_sample_filter(cagra_sample_filter<SourceIndexT>& out,
     out.filter_data = get_cagra_device_payload(make_cagra_bloom_filter_storage(filter), stream);
   } else if constexpr (is_roaring_bitmap_filter<DecayedFilter>::value) {
     out.filter_data = filter.device_payload();
+    out.filter_kind = cagra_sample_filter<SourceIndexT>::kind_roaring;
   } else if constexpr (is_udf_filter<DecayedFilter>::value) {
     out.filter_data = filter.filter_data;
     out.filter_kind = cagra_sample_filter<SourceIndexT>::kind_udf;

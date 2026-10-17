@@ -6,6 +6,7 @@
 
 #include "../common/conf.hpp"
 
+#include <cuvs/core/roaring_allowlist.hpp>
 #include <cuvs/neighbors/common.hpp>
 
 #include <raft/core/copy.cuh>
@@ -41,27 +42,50 @@ namespace cuvs::bench::detail {
 class bitmap_filter_adapter {
  public:
   explicit bitmap_filter_adapter(raft::resources const& res,
-                                 configuration::dataset_conf::bitmap_filter_conf const& conf)
-    : file_(conf.file), device_words_(open_and_validate(), raft::resource::get_cuda_stream(res))
+                                 configuration::dataset_conf::bitmap_filter_conf const& conf,
+                                 bool use_roaring           = false,
+                                 std::string allowlist_file = {})
+    : file_(conf.file),
+      allowlist_file_(std::move(allowlist_file)),
+      device_words_(0, raft::resource::get_cuda_stream(res))
   {
     static_assert(std::endian::native == std::endian::little,
                   "The benchmark bitmap format is little-endian");
-    auto stream = raft::resource::get_cuda_stream(res);
-    RAFT_CUDA_TRY(cudaMemcpyAsync(device_words_.data(),
-                                  payload_,
-                                  device_words_.size() * sizeof(std::uint32_t),
-                                  cudaMemcpyHostToDevice,
-                                  stream.get()));
-    raft::resource::sync_stream(res);
+    try {
+      RAFT_EXPECTS(use_roaring || allowlist_file_.empty(),
+                   "A sorted allowlist archive requires Roaring representation");
+      auto const words = open_and_validate();
+      if (use_roaring) {
+        build_roaring(res);
+      } else {
+        auto stream = raft::resource::get_cuda_stream(res);
+        device_words_.resize(words, stream);
+        RAFT_CUDA_TRY(cudaMemcpyAsync(device_words_.data(),
+                                      payload_,
+                                      words * sizeof(std::uint32_t),
+                                      cudaMemcpyHostToDevice,
+                                      stream.get()));
+        raft::resource::sync_stream(res);
+      }
+    } catch (...) {
+      release_mapping();
+      throw;
+    }
   }
 
   bitmap_filter_adapter(bitmap_filter_adapter const&)            = delete;
   bitmap_filter_adapter& operator=(bitmap_filter_adapter const&) = delete;
 
-  ~bitmap_filter_adapter()
+  ~bitmap_filter_adapter() { release_mapping(); }
+
+  [[nodiscard]] bool is_roaring() const { return roaring_filter_ != nullptr; }
+  [[nodiscard]] auto allowlist_file() const -> std::string const& { return allowlist_file_; }
+
+  [[nodiscard]] auto make_filter() const -> std::shared_ptr<cuvs::neighbors::filtering::base_filter>
   {
-    if (mapping_ != MAP_FAILED) { ::munmap(mapping_, mapped_bytes_); }
-    if (fd_ >= 0) { ::close(fd_); }
+    if (roaring_filter_) { return roaring_filter_; }
+    return std::make_shared<cuvs::neighbors::filtering::bitmap_filter<std::uint32_t, std::int64_t>>(
+      filter());
   }
 
   [[nodiscard]] auto base_rows() const -> std::uint32_t
@@ -81,6 +105,7 @@ class bitmap_filter_adapter {
   [[nodiscard]] auto filter() const
     -> cuvs::neighbors::filtering::bitmap_filter<std::uint32_t, std::int64_t>
   {
+    RAFT_EXPECTS(!is_roaring(), "A Roaring adapter does not contain a dense device bitmap");
     auto view = cuvs::core::bitmap_view<std::uint32_t, std::int64_t>(
       const_cast<std::uint32_t*>(device_words_.data()),
       static_cast<std::int64_t>(rows_),
@@ -97,6 +122,7 @@ class bitmap_filter_adapter {
   [[nodiscard]] auto filter_rows(std::uint32_t query_offset, std::uint32_t query_count) const
     -> cuvs::neighbors::filtering::bitmap_filter<std::uint32_t, std::int64_t>
   {
+    RAFT_EXPECTS(!is_roaring(), "Dense row slicing is unavailable for a Roaring adapter");
     RAFT_EXPECTS(query_count > 0, "A bitmap row slice must contain at least one query");
     RAFT_EXPECTS(static_cast<std::uint64_t>(query_offset) + query_count <= rows_,
                  "A bitmap row slice exceeds the resident query bitmap");
@@ -110,6 +136,96 @@ class bitmap_filter_adapter {
   }
 
  private:
+  void release_mapping() noexcept
+  {
+    if (mapping_ != MAP_FAILED) {
+      ::munmap(mapping_, mapped_bytes_);
+      mapping_ = MAP_FAILED;
+    }
+    if (fd_ >= 0) {
+      ::close(fd_);
+      fd_ = -1;
+    }
+  }
+
+  void build_roaring(raft::resources const& res)
+  {
+    std::vector<std::uint32_t> ids;
+    std::vector<std::uint32_t> archived_ids;
+    std::vector<std::uint64_t> offsets;
+    std::ifstream archive;
+    if (!allowlist_file_.empty()) {
+      archive.open(allowlist_file_, std::ios::binary | std::ios::ate);
+      RAFT_EXPECTS(archive.good(), "Cannot open sorted allowlist archive");
+      auto const file_size = archive.tellg();
+      archive.seekg(0);
+      std::array<std::byte, 40> header{};
+      archive.read(reinterpret_cast<char*>(header.data()), header.size());
+      auto read = [&]<typename T>(std::size_t offset) {
+        T value{};
+        std::memcpy(&value, header.data() + offset, sizeof(value));
+        return value;
+      };
+      auto const count      = read.template operator()<std::uint64_t>(32);
+      auto const data_start = header.size() + (rows_ + 1) * sizeof(std::uint64_t);
+      RAFT_EXPECTS(archive.good() && std::memcmp(header.data(), "CUVSRIDS", 8) == 0 &&
+                     read.template operator()<std::uint32_t>(8) == 1 &&
+                     read.template operator()<std::uint32_t>(12) == 32 &&
+                     read.template operator()<std::uint64_t>(16) == rows_ &&
+                     read.template operator()<std::uint64_t>(24) == cols_,
+                   "Sorted allowlist archive header does not match the bitmap");
+      RAFT_EXPECTS(count <= (std::numeric_limits<std::uint64_t>::max() - data_start) / 4 &&
+                     file_size >= 0 &&
+                     static_cast<std::uint64_t>(file_size) == data_start + count * 4,
+                   "Sorted allowlist archive size does not match its header");
+      offsets.resize(rows_ + 1);
+      archive.read(reinterpret_cast<char*>(offsets.data()), offsets.size() * sizeof(offsets[0]));
+      RAFT_EXPECTS(archive.good() && offsets.front() == 0 && offsets.back() == count,
+                   "Invalid sorted allowlist archive offsets");
+      for (std::size_t row = 0; row < rows_; ++row) {
+        RAFT_EXPECTS(offsets[row + 1] >= offsets[row] && offsets[row + 1] - offsets[row] <= cols_,
+                     "Invalid sorted allowlist row size");
+      }
+    }
+    std::vector<cuvs::core::roaring_allowlist_view> views;
+    roaring_owners_.reserve(rows_);
+    views.reserve(rows_);
+    // Decode one row at a time; never upload the dense matrix to the GPU.
+    for (std::uint64_t query = 0; query < rows_; ++query) {
+      ids.clear();
+      auto const begin = query * cols_;
+      auto const end   = begin + cols_;
+      for (auto word_index = begin / 32; word_index < (end + 31) / 32; ++word_index) {
+        auto word            = payload_[word_index];
+        auto const first_bit = word_index * 32;
+        if (first_bit < begin) { word &= ~std::uint32_t{0} << (begin - first_bit); }
+        if (first_bit + 32 > end) { word &= (std::uint32_t{1} << (end - first_bit)) - 1u; }
+        while (word != 0) {
+          ids.push_back(static_cast<std::uint32_t>(first_bit + std::countr_zero(word) - begin));
+          word &= word - 1;
+        }
+      }
+      if (!offsets.empty()) {
+        archived_ids.resize(offsets[query + 1] - offsets[query]);
+        archive.read(reinterpret_cast<char*>(archived_ids.data()), archived_ids.size() * 4);
+        RAFT_EXPECTS(archive.good() && archived_ids == ids,
+                     "Sorted allowlist archive membership differs from source bitmap at query %lu",
+                     query);
+        ids.swap(archived_ids);
+      }
+      roaring_owners_.push_back(cuvs::core::roaring_allowlist::from_ids(
+        res,
+        cols_,
+        raft::make_host_vector_view<const std::uint32_t, std::int64_t>(ids.data(), ids.size()),
+        true));
+      // The reusable host ID buffer must outlive its construction-stream copy.
+      raft::resource::sync_stream(res);
+      views.push_back(roaring_owners_.back().view());
+    }
+    roaring_filter_ =
+      std::make_shared<cuvs::neighbors::filtering::roaring_bitmap_filter>(res, views);
+  }
+
   static constexpr std::array<char, 8> magic_ = {'C', 'U', 'V', 'S', 'B', 'M', 'A', 'P'};
   static constexpr std::size_t header_bytes_  = 40;
 
@@ -176,6 +292,7 @@ class bitmap_filter_adapter {
   }
 
   std::string file_;
+  std::string allowlist_file_;
   int fd_{-1};
   void* mapping_{MAP_FAILED};
   std::size_t mapped_bytes_{};
@@ -183,13 +300,17 @@ class bitmap_filter_adapter {
   std::uint64_t cols_{};
   const std::uint32_t* payload_{};
   rmm::device_uvector<std::uint32_t> device_words_;
+  std::vector<cuvs::core::roaring_allowlist> roaring_owners_;
+  std::shared_ptr<cuvs::neighbors::filtering::roaring_bitmap_filter> roaring_filter_;
 };
 
 inline auto make_bitmap_filter_adapter(raft::resources const& res,
-                                       configuration::dataset_conf::bitmap_filter_conf const& conf)
+                                       configuration::dataset_conf::bitmap_filter_conf const& conf,
+                                       bool use_roaring           = false,
+                                       std::string allowlist_file = {})
   -> std::shared_ptr<bitmap_filter_adapter>
 {
-  return std::make_shared<bitmap_filter_adapter>(res, conf);
+  return std::make_shared<bitmap_filter_adapter>(res, conf, use_roaring, std::move(allowlist_file));
 }
 
 /** Runtime state is deliberately per benchmark algo copy so concurrent query offsets cannot race.

@@ -43,7 +43,7 @@ def validate_raw_results(path: Path) -> None:
     for record in payload.get("benchmarks", []):
         if record.get("run_type") != "iteration":
             continue
-        variant = label_value(str(record.get("label", "")), "favor_diagnostics_variant")
+        variant = label_value(str(record.get("label", "")), "search_diagnostics_variant")
         if variant not in expected:
             continue
         if variant in observed:
@@ -75,12 +75,12 @@ def generate(data_root: Path, output: Path, diagnostics: Path) -> None:
         row.update(
             {
                 "max_queries": MAX_QUERIES,
-                "favor_diagnostics_output": str(
+                "search_diagnostics_output": str(
                     (diagnostics / variant).resolve()
                 ),
-                "favor_diagnostics_groundtruth": str(ground_truth.resolve()),
-                "favor_diagnostics_dataset": "yfcc10m-a100",
-                "favor_diagnostics_variant": variant,
+                "search_diagnostics_groundtruth": str(ground_truth.resolve()),
+                "search_diagnostics_dataset": "yfcc10m-a100",
+                "search_diagnostics_variant": variant,
             }
         )
         searches.append(row)

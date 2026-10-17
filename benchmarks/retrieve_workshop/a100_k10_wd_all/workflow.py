@@ -671,10 +671,10 @@ def create_diagnostics(root: Path, data_root: Path, selected: Path) -> None:
         searches: list[dict[str, object]] = []
         for variant, policy, coordinate in variants:
             diagnostic = {
-                "favor_diagnostics_output": str((diagnostics / "captures" / workload / variant).resolve()),
-                "favor_diagnostics_groundtruth": str(groundtruth.resolve()),
-                "favor_diagnostics_dataset": f"{workload}-a100-k10-wd-all",
-                "favor_diagnostics_variant": variant,
+                "search_diagnostics_output": str((diagnostics / "captures" / workload / variant).resolve()),
+                "search_diagnostics_groundtruth": str(groundtruth.resolve()),
+                "search_diagnostics_dataset": f"{workload}-a100-k10-wd-all",
+                "search_diagnostics_variant": variant,
             }
             searches.append(
                 navix_search(

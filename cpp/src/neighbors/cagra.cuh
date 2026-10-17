@@ -10,7 +10,6 @@
 #include "detail/cagra/cagra_build.cuh"
 #include "detail/cagra/cagra_merge.cuh"
 #include "detail/cagra/cagra_search.cuh"
-#include "detail/cagra/filter_rate_estimator.cuh"
 #include "detail/cagra/graph_core.cuh"
 
 #include <raft/core/bitmap.cuh>
@@ -61,7 +60,7 @@ float resolve_cagra_bitmap_filtering_rate(raft::resources const& res,
 }
 
 template <typename T, typename IdxT, cuvs::neighbors::ann_dataset_view DatasetViewT>
-std::uint64_t count_favor_bitset_matches(
+std::uint64_t count_cagra_bitset_matches(
   raft::resources const& res,
   cagra::index<T, IdxT, DatasetViewT> const& index,
   cuvs::neighbors::filtering::bitset_filter<uint32_t, int64_t> const& filter)
@@ -86,24 +85,6 @@ std::uint64_t count_favor_bitset_matches(
     },
     std::uint64_t{0},
     thrust::plus<std::uint64_t>{});
-}
-
-template <typename OutputIdxT>
-void fill_empty_favor_results(
-  raft::resources const& res,
-  raft::device_matrix_view<OutputIdxT, int64_t, raft::row_major> neighbors,
-  raft::device_matrix_view<float, int64_t, raft::row_major> distances)
-{
-  auto stream = raft::resource::get_cuda_stream(res);
-  auto policy = thrust::cuda::par.on(stream.get());
-  thrust::fill(policy,
-               neighbors.data_handle(),
-               neighbors.data_handle() + neighbors.size(),
-               std::numeric_limits<OutputIdxT>::max());
-  thrust::fill(policy,
-               distances.data_handle(),
-               distances.data_handle() + distances.size(),
-               std::numeric_limits<float>::max());
 }
 
 }  // namespace detail
@@ -538,8 +519,6 @@ void search(raft::resources const& res,
     using none_filter_type    = cuvs::neighbors::filtering::none_sample_filter;
     auto& sample_filter       = dynamic_cast<const none_filter_type&>(sample_filter_ref);
     search_params params_copy = params;
-    RAFT_EXPECTS(params.filter_mode != filtering_mode::FAVOR,
-                 "FAVOR filtering requires a bitset filter");
     if (params.filtering_rate < 0.0) { params_copy.filtering_rate = 0.0; }
     auto sample_filter_copy = sample_filter;
     return search_with_filtering<T, IdxT, none_filter_type, OutputIdxT, DatasetViewT>(
@@ -562,20 +541,7 @@ void search(raft::resources const& res,
       dynamic_cast<const cuvs::neighbors::filtering::bitset_filter<uint32_t, int64_t>&>(
         sample_filter_ref);
     search_params params_copy = params;
-    if (params.filter_mode == filtering_mode::FAVOR) {
-      if (params.filtering_rate < 0.0f) {
-        const auto num_set_bits = detail::count_favor_bitset_matches(res, idx, sample_filter);
-        if (num_set_bits == 0) {
-          detail::fill_empty_favor_results(res, neighbors, distances);
-          return;
-        }
-        const auto filtering_rate =
-          static_cast<float>(idx.size() - num_set_bits) / static_cast<float>(idx.size());
-        // Extremely sparse filters on indices larger than float's exact-integer range can round
-        // to 1.0 even though at least one row passes. Preserve the nearest valid rate in that case.
-        params_copy.filtering_rate = std::min(filtering_rate, std::nextafter(1.0f, 0.0f));
-      }
-    } else if (params.filtering_rate < 0.0) {
+    if (params.filtering_rate < 0.0) {
       const auto num_set_bits = sample_filter.bitset_view_.count(res);
       auto filtering_rate = (float)(idx.dataset().n_rows() - num_set_bits) / idx.dataset().n_rows();
       const float min_filtering_rate = 0.0;
@@ -629,30 +595,6 @@ void search(raft::resources const& res,
     auto& sample_filter =
       dynamic_cast<const cuvs::neighbors::filtering::udf_filter&>(sample_filter_ref);
     search_params params_copy = params;
-    if (params.filter_mode == filtering_mode::FAVOR) {
-      RAFT_EXPECTS(params.algo == search_algo::AUTO || params.algo == search_algo::SINGLE_CTA,
-                   "FAVOR UDF filtering currently supports only SINGLE_CTA search");
-      RAFT_EXPECTS(!params.persistent, "FAVOR UDF filtering does not support persistent search");
-      RAFT_EXPECTS(params.favor_penalty == favor_penalty_mode::CAGRA_RETENTION_SAFE,
-                   "FAVOR UDF filtering requires CAGRA_RETENTION_SAFE scoring");
-      RAFT_EXPECTS(params.favor_retention_fraction == 0.0f,
-                   "FAVOR UDF filtering currently requires automatic retention");
-
-      // Phase-one FAVOR UDF policy is sampling-only.  In particular, YFCC never uploads or uses
-      // precomputed exact selectivity, and caller-provided scalar hints cannot silently change the
-      // experiment. AUTO is resolved explicitly to the sole supported traversal here.
-      params_copy.algo = search_algo::SINGLE_CTA;
-      auto estimate    = detail::estimate_favor_udf_filtering_rates(
-        res, idx, static_cast<std::uint32_t>(queries.extent(0)), sample_filter);
-      // The search plan still requires a valid scalar; each CTA replaces it with its private
-      // sampled query rate before deriving the penalty coefficient and retention fraction.
-      params_copy.filtering_rate = 0.0f;
-      auto runtime_filter =
-        detail::CagraSampleFilterWithRuntimeState<cuvs::neighbors::filtering::udf_filter, true>{
-          sample_filter, estimate.filtering_rates.data()};
-      return search_with_filtering<T, IdxT, decltype(runtime_filter), OutputIdxT>(
-        res, params_copy, idx, queries, neighbors, distances, runtime_filter);
-    }
 
     if (params.filtering_rate < 0.0) {
       const float min_filtering_rate = 0.0f;

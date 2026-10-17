@@ -5,12 +5,10 @@
 #pragma once
 
 #include "../../../../src/neighbors/cagra_benchmark.hpp"
-#include "../../../../src/neighbors/detail/cagra/favor_multi_seed_benchmark.cuh"
 #include "../../../../src/neighbors/detail/cagra/utils.hpp"
 #include "../common/ann_types.hpp"
 #include "../common/cuda_huge_page_resource.hpp"
 #include "cuvs_ann_bench_utils.h"
-#include "favor_retry_diagnostic_session.h"
 #include "filtered_dataset_adapter.h"
 #include "search_diagnostic_session.h"
 #include <rmm/mr/pinned_host_memory_resource.hpp>
@@ -76,9 +74,9 @@ inline void maybe_log_cagra_persistent_concurrency_hint(bool persistent_search)
 }
 
 template <typename IndexT>
-RAFT_KERNEL favor_fill_empty_results_kernel(IndexT* neighbors,
-                                            float* distances,
-                                            std::size_t n_elements)
+RAFT_KERNEL fill_empty_filter_results_kernel(IndexT* neighbors,
+                                             float* distances,
+                                             std::size_t n_elements)
 {
   auto element = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
   if (element >= n_elements) { return; }
@@ -96,15 +94,9 @@ inline void fill_empty_filter_results(const raft::resources& res,
   auto const grid_size =
     static_cast<unsigned int>(raft::ceildiv(n_elements, std::size_t{block_size}));
   auto stream = raft::resource::get_cuda_stream(res);
-  favor_fill_empty_results_kernel<<<grid_size, block_size, 0, stream.get()>>>(
+  fill_empty_filter_results_kernel<<<grid_size, block_size, 0, stream.get()>>>(
     neighbors, distances, n_elements);
   RAFT_CUDA_TRY(cudaPeekAtLastError());
-}
-
-inline bool favor_adaptive_termination_enabled() noexcept
-{
-  auto const* value = std::getenv("CUVS_FAVOR_EXPERIMENTAL_ADAPTIVE_TERMINATION");
-  return value != nullptr && value[0] == '1' && value[1] == '\0';
 }
 
 /** Whether the GPU can dereference this pointer: device, managed or mapped host memory. */
@@ -187,22 +179,17 @@ class cuvs_cagra : public algo<T>, public algo_gpu {
 
   struct search_param : public search_param_base {
     cuvs::neighbors::cagra::search_params p;
-    std::optional<std::string> favor_delta_d_file;
-    cuvs::neighbors::cagra::favor_delta_d_params favor_delta_d_params;
-    detail::search_diagnostic_config favor_diagnostics;
-    detail::favor_retry_diagnostic_config favor_retry_diagnostics;
-    /** Benchmark-only independent B0 FAVOR starts. Empty preserves normal CAGRA behavior. */
-    std::vector<std::uint64_t> favor_seed_masks;
-    /** Include query-local UDF sampling in every timed search (end-to-end) or reuse setup rates. */
-    bool favor_udf_include_sampling = true;
+    detail::search_diagnostic_config diagnostics;
     /** Benchmark-only output-policy control; false reproduces the pre-accumulator result queue. */
-    bool favor_udf_passing_accumulator        = true;
-    bool favor_udf_passing_accumulator_is_set = false;
-    std::uint32_t favor_udf_sample_offset{};
+    bool passing_result_accumulator        = true;
+    bool passing_result_accumulator_is_set = false;
     /** Benchmark-only NaviX traversal policy. Empty preserves the normal cuVS path. */
     std::optional<std::uint32_t> navix_policy;
     /** Replace NaviX's in-kernel seed discovery with passing bitmap nodes. */
     bool navix_bitmap_seeds = false;
+    /** Build resident Roaring allowlists instead of uploading the dense query bitmap. */
+    bool roaring_bitmap_filter = false;
+    std::string roaring_allowlist_file;
     /** Give default CAGRA a deterministic prefix of passing bitmap seeds. */
     bool cagra_bitmap_seeds = false;
     /** Paper-control assertion: internal graph IDs must also be externally reported source IDs. */
@@ -359,11 +346,7 @@ class cuvs_cagra : public algo<T>, public algo_gpu {
   std::shared_ptr<detail::udf_filter_adapter> udf_filter_adapter_;
   std::shared_ptr<detail::udf_filter_runtime> udf_filter_runtime_;
   std::shared_ptr<detail::bitmap_filter_adapter> bitmap_filter_adapter_;
-  std::shared_ptr<rmm::device_uvector<float>> favor_udf_sampled_rates_;
-  std::shared_ptr<rmm::device_uvector<std::uint32_t>> favor_udf_sampled_passing_counts_;
-  bool favor_udf_include_sampling_{true};
-  bool favor_udf_passing_accumulator_{true};
-  std::uint32_t favor_udf_sample_offset_{};
+  bool passing_result_accumulator_{true};
   std::optional<std::uint32_t> navix_policy_;
   bool navix_bitmap_seeds_{};
   bool cagra_bitmap_seeds_{};
@@ -377,8 +360,6 @@ class cuvs_cagra : public algo<T>, public algo_gpu {
   mutable std::uint32_t bitmap_query_offset_{};
   bool filter_empty_{false};
   std::shared_ptr<detail::search_diagnostic_session> search_diagnostic_session_;
-  std::shared_ptr<detail::favor_retry_diagnostic_session> favor_retry_diagnostic_session_;
-  std::vector<std::uint64_t> favor_seed_masks_;
   std::vector<std::shared_ptr<index_type>> sub_indices_;
   std::vector<std::shared_ptr<host_index_type>> sub_host_indices_;
   std::shared_ptr<std::vector<raft::device_matrix<T, int64_t, raft::row_major>>>
@@ -556,20 +537,27 @@ template <typename T, typename IdxT>
 void cuvs_cagra<T, IdxT>::set_search_param(const search_param_base& param,
                                            const void* filter_bitset)
 {
+  auto sp = dynamic_cast<const search_param&>(param);
+  RAFT_EXPECTS(sp.p.filter_mode == cuvs::neighbors::cagra::filtering_mode::DEFAULT,
+               "FAVOR is retired. Use CAGRA-Base, CAGRA-Retain, or CAGRA-NaviX.");
   const auto& dataset_conf = configuration::singleton().get_dataset_conf();
+  RAFT_EXPECTS(sp.roaring_bitmap_filter || sp.roaring_allowlist_file.empty(),
+               "roaring_allowlist_file requires filter_representation=roaring");
+  RAFT_EXPECTS(!sp.roaring_bitmap_filter || dataset_conf.bitmap_filter.has_value(),
+               "Roaring representation requires a per-query bitmap dataset");
   if (dataset_conf.bitmap_filter.has_value()) {
     RAFT_EXPECTS(filter_bitset == nullptr,
                  "A query-dependent bitmap cannot be combined with a bitset filter");
-    if (!bitmap_filter_adapter_) {
-      bitmap_filter_adapter_ =
-        detail::make_bitmap_filter_adapter(handle_, *dataset_conf.bitmap_filter);
+    if (!bitmap_filter_adapter_ ||
+        bitmap_filter_adapter_->is_roaring() != sp.roaring_bitmap_filter ||
+        bitmap_filter_adapter_->allowlist_file() != sp.roaring_allowlist_file) {
+      bitmap_filter_adapter_ = detail::make_bitmap_filter_adapter(
+        handle_, *dataset_conf.bitmap_filter, sp.roaring_bitmap_filter, sp.roaring_allowlist_file);
     }
     RAFT_EXPECTS(index_ != nullptr, "The CAGRA index must be loaded before bitmap metadata");
     RAFT_EXPECTS(bitmap_filter_adapter_->base_rows() == index_->size(),
                  "Query bitmap column count does not match the CAGRA index");
-    filter_ =
-      std::make_shared<cuvs::neighbors::filtering::bitmap_filter<std::uint32_t, std::int64_t>>(
-        bitmap_filter_adapter_->filter());
+    filter_ = bitmap_filter_adapter_->make_filter();
     filter_bitset_.reset();
     udf_filter_runtime_.reset();
     udf_filter_adapter_.reset();
@@ -604,10 +592,6 @@ void cuvs_cagra<T, IdxT>::set_search_param(const search_param_base& param,
     filter_bitset_.reset();
     filter_ = make_cuvs_filter(nullptr, index_ ? index_->size() : 0);
   }
-  auto sp = dynamic_cast<const search_param&>(param);
-  RAFT_EXPECTS(sp.p.filter_mode == cuvs::neighbors::cagra::filtering_mode::DEFAULT,
-               "FAVOR is retired. Use CAGRA-Base, CAGRA-Retain, or CAGRA-NaviX.");
-
   if (sp.require_identity_source_indices) {
     RAFT_EXPECTS(index_ != nullptr, "identity source-ID validation requires a loaded CAGRA index");
     RAFT_EXPECTS(
@@ -633,53 +617,25 @@ void cuvs_cagra<T, IdxT>::set_search_param(const search_param_base& param,
   dynamic_batching_conservative_dispatch_ = sp.dynamic_batching_conservative_dispatch;
   search_params_                          = sp.p;
   refine_ratio_                           = sp.refine_ratio;
-  favor_seed_masks_                       = sp.favor_seed_masks;
-  if (search_params_.filter_mode == cuvs::neighbors::cagra::filtering_mode::DEFAULT) {
-    favor_udf_include_sampling_ = false;
-    favor_udf_passing_accumulator_ =
-      sp.favor_udf_passing_accumulator_is_set ? sp.favor_udf_passing_accumulator : false;
-  } else {
-    favor_udf_include_sampling_    = sp.favor_udf_include_sampling;
-    favor_udf_passing_accumulator_ = sp.favor_udf_passing_accumulator;
-  }
-  favor_udf_sample_offset_ = sp.favor_udf_sample_offset;
-  navix_policy_            = sp.navix_policy;
-  navix_bitmap_seeds_      = sp.navix_bitmap_seeds;
-  cagra_bitmap_seeds_      = sp.cagra_bitmap_seeds;
-  navix_seed_k_            = sp.navix_seed_k;
-  navix_seed_cap_          = sp.navix_seed_cap;
-  cagra_seed_cap_          = sp.cagra_seed_cap;
-  filter_empty_            = false;
-  favor_udf_sampled_rates_.reset();
-  favor_udf_sampled_passing_counts_.reset();
+  passing_result_accumulator_ =
+    sp.passing_result_accumulator_is_set ? sp.passing_result_accumulator : false;
+
+  RAFT_EXPECTS(!index_params_.compression.has_value() ||
+                 (!bitmap_filter_adapter_ && !sp.navix_policy && !passing_result_accumulator_),
+               "Custom per-query bitmap, Retain, and NaviX benchmark paths require an uncompressed "
+               "CAGRA dataset");
+
+  navix_policy_       = sp.navix_policy;
+  navix_bitmap_seeds_ = sp.navix_bitmap_seeds;
+  cagra_bitmap_seeds_ = sp.cagra_bitmap_seeds;
+  navix_seed_k_       = sp.navix_seed_k;
+  navix_seed_cap_     = sp.navix_seed_cap;
+  cagra_seed_cap_     = sp.cagra_seed_cap;
+  filter_empty_       = false;
   navix_seed_ids_.reset();
   navix_seed_counts_.reset();
   navix_seed_inspected_units_.reset();
-  const bool is_favor_filtering_mode =
-    search_params_.filter_mode == cuvs::neighbors::cagra::filtering_mode::FAVOR;
 
-  const bool needs_udf_filter_rates = udf_filter_runtime_ && is_favor_filtering_mode;
-  if (needs_udf_filter_rates) {
-    RAFT_EXPECTS(search_params_.filter_mode == cuvs::neighbors::cagra::filtering_mode::FAVOR,
-                 "benchmark UDF sampled-rate path supports FAVOR mode");
-    auto stream              = raft::resource::get_cuda_stream(handle_);
-    const auto query_rows    = udf_filter_adapter_->query_rows();
-    favor_udf_sampled_rates_ = std::make_shared<rmm::device_uvector<float>>(query_rows, stream);
-    favor_udf_sampled_passing_counts_ =
-      std::make_shared<rmm::device_uvector<std::uint32_t>>(query_rows, stream);
-    if (!favor_udf_include_sampling_) {
-      udf_filter_runtime_->set_query_offset(0);
-      cuvs::neighbors::cagra::detail::benchmark_estimate_favor_udf_filtering_rates<T>(
-        handle_,
-        *index_,
-        query_rows,
-        *filter_,
-        favor_udf_sampled_rates_->data(),
-        favor_udf_sampled_passing_counts_->data(),
-        favor_udf_sample_offset_);
-      raft::resource::sync_stream(handle_);
-    }
-  }
   if (navix_policy_) {
     RAFT_EXPECTS(udf_filter_runtime_ != nullptr || bitmap_filter_adapter_ != nullptr,
                  "The benchmark-only NaviX path requires a query-dependent UDF or bitmap");
@@ -696,12 +652,9 @@ void cuvs_cagra<T, IdxT>::set_search_param(const search_param_base& param,
                  "The benchmark-only NaviX path does not support refinement");
     RAFT_EXPECTS(index_->graph().extent(1) == 32 || index_->graph().extent(1) == 64,
                  "The benchmark-only NaviX path requires graph_degree=32 or 64");
-    RAFT_EXPECTS(!favor_udf_passing_accumulator_,
+    RAFT_EXPECTS(!passing_result_accumulator_,
                  "NaviX owns the passing frontier and cannot use the result accumulator");
-    RAFT_EXPECTS(!sp.favor_retry_diagnostics.enabled(),
-                 "The benchmark-only NaviX path does not support FAVOR retry diagnostics");
-    RAFT_EXPECTS(favor_seed_masks_.empty(),
-                 "The benchmark-only NaviX path does not support FAVOR retry seeds");
+
   } else {
     RAFT_EXPECTS(!navix_bitmap_seeds_, "navix_bitmap_seeds requires navix_mode");
   }
@@ -750,105 +703,29 @@ void cuvs_cagra<T, IdxT>::set_search_param(const search_param_base& param,
   }
   if (filter_bitset_ != nullptr && search_params_.filtering_rate < 0.0f) {
     const auto num_set_bits =
-      cuvs::neighbors::cagra::detail::benchmark_count_favor_bitset_matches<T>(
+      cuvs::neighbors::cagra::detail::benchmark_count_cagra_bitset_matches<T>(
         handle_, *index_, *filter_);
     filter_empty_ = num_set_bits == 0;
     if (!filter_empty_) {
-      const auto filtering_rate = static_cast<float>(index_->data().n_rows() - num_set_bits) /
-                                  static_cast<float>(index_->data().n_rows());
+      const auto filtering_rate =
+        static_cast<float>(index_->size() - num_set_bits) / static_cast<float>(index_->size());
       search_params_.filtering_rate = std::min(filtering_rate, std::nextafter(1.0f, 0.0f));
     }
   }
-  if (!favor_seed_masks_.empty()) {
-    RAFT_EXPECTS(favor_seed_masks_.size() <= 3,
-                 "favor_seed_masks supports between one and three benchmark rounds");
-    RAFT_EXPECTS(filter_bitset_ != nullptr, "favor_seed_masks requires a benchmark bitset filter");
-    RAFT_EXPECTS(search_params_.filter_mode == cuvs::neighbors::cagra::filtering_mode::FAVOR,
-                 "favor_seed_masks requires filter_mode=favor");
+
+  if (sp.diagnostics.enabled()) {
     RAFT_EXPECTS(search_params_.algo == cuvs::neighbors::cagra::search_algo::SINGLE_CTA,
-                 "favor_seed_masks supports only algo=single_cta");
-    RAFT_EXPECTS(search_params_.max_iterations == 0,
-                 "favor_seed_masks is a B0 experiment and requires max_iterations=0");
-    RAFT_EXPECTS(search_params_.favor_penalty ==
-                     cuvs::neighbors::cagra::favor_penalty_mode::CAGRA_RETENTION_SAFE &&
-                   search_params_.favor_retention_fraction == 0.0f,
-                 "favor_seed_masks requires automatic CAGRA retention-safe FAVOR");
-    RAFT_EXPECTS(!search_params_.persistent, "favor_seed_masks does not support persistent search");
-    RAFT_EXPECTS(!sp.dynamic_batching, "favor_seed_masks does not support dynamic batching");
-    RAFT_EXPECTS(sp.refine_ratio == 1.0f, "favor_seed_masks does not support refinement");
-    RAFT_EXPECTS(!sp.favor_diagnostics.enabled(),
-                 "favor_seed_masks does not support FAVOR trace diagnostics");
-    RAFT_EXPECTS(index_params_.num_dataset_splits <= 1 ||
-                   index_params_.merge_type == CagraMergeType::kPhysical,
-                 "favor_seed_masks supports only physical CAGRA indices");
-    RAFT_EXPECTS(
-      !detail::favor_adaptive_termination_enabled(),
-      "favor_seed_masks requires CUVS_FAVOR_EXPERIMENTAL_ADAPTIVE_TERMINATION to be disabled");
-    for (std::size_t i = 0; i < favor_seed_masks_.size(); ++i) {
-      for (std::size_t j = i + 1; j < favor_seed_masks_.size(); ++j) {
-        RAFT_EXPECTS(favor_seed_masks_[i] != favor_seed_masks_[j],
-                     "favor_seed_masks entries must be unique");
-      }
-    }
-  }
-  if (sp.favor_diagnostics.enabled()) {
-    RAFT_EXPECTS(search_params_.algo == cuvs::neighbors::cagra::search_algo::SINGLE_CTA,
-                 "FAVOR diagnostics support only SINGLE_CTA");
-    RAFT_EXPECTS(!search_params_.persistent, "FAVOR diagnostics do not support persistent search");
-    RAFT_EXPECTS(!sp.dynamic_batching, "FAVOR diagnostics do not support dynamic batching");
-    if (sp.favor_diagnostics.termination_shadow_enabled()) {
-      RAFT_EXPECTS(filter_bitset_ != nullptr,
-                   "FAVOR termination shadow requires a benchmark bitset filter");
-      RAFT_EXPECTS(search_params_.filter_mode == cuvs::neighbors::cagra::filtering_mode::FAVOR,
-                   "FAVOR termination shadow requires filter_mode=favor");
-      RAFT_EXPECTS(search_params_.max_iterations != 0,
-                   "FAVOR termination shadow requires an explicit deep max_iterations cap");
-      RAFT_EXPECTS(search_params_.favor_penalty ==
-                       cuvs::neighbors::cagra::favor_penalty_mode::CAGRA_RETENTION_SAFE &&
-                     search_params_.favor_retention_fraction == 0.0f,
-                   "FAVOR termination shadow requires automatic CAGRA retention-safe FAVOR");
-      RAFT_EXPECTS(sp.refine_ratio == 1.0f, "FAVOR termination shadow does not support refinement");
-      RAFT_EXPECTS(favor_seed_masks_.empty(),
-                   "FAVOR termination shadow does not support favor_seed_masks");
-      RAFT_EXPECTS(!detail::favor_adaptive_termination_enabled(),
-                   "FAVOR termination shadow requires adaptive termination to be disabled");
-    }
+                 "Search diagnostics support only SINGLE_CTA");
+    RAFT_EXPECTS(!search_params_.persistent, "Search diagnostics do not support persistent search");
+    RAFT_EXPECTS(!sp.dynamic_batching, "Search diagnostics do not support dynamic batching");
+    RAFT_EXPECTS(!sp.diagnostics.termination_shadow_enabled(),
+                 "FAVOR termination shadows are retired");
     search_diagnostic_session_ =
-      std::make_shared<detail::search_diagnostic_session>(sp.favor_diagnostics);
+      std::make_shared<detail::search_diagnostic_session>(sp.diagnostics);
   } else {
     search_diagnostic_session_.reset();
   }
-  if (sp.favor_retry_diagnostics.enabled()) {
-    RAFT_EXPECTS(filter_bitset_ != nullptr,
-                 "FAVOR retry diagnostics require a benchmark bitset filter");
-    RAFT_EXPECTS(search_params_.filter_mode == cuvs::neighbors::cagra::filtering_mode::FAVOR,
-                 "FAVOR retry diagnostics require filter_mode=favor");
-    RAFT_EXPECTS(search_params_.algo == cuvs::neighbors::cagra::search_algo::SINGLE_CTA,
-                 "FAVOR retry diagnostics support only algo=single_cta");
-    RAFT_EXPECTS(search_params_.max_iterations == 0,
-                 "FAVOR retry diagnostics require automatic max_iterations in the base config");
-    RAFT_EXPECTS(search_params_.favor_penalty ==
-                     cuvs::neighbors::cagra::favor_penalty_mode::CAGRA_RETENTION_SAFE &&
-                   search_params_.favor_retention_fraction == 0.0f,
-                 "FAVOR retry diagnostics require automatic CAGRA retention-safe FAVOR");
-    RAFT_EXPECTS(!search_params_.persistent,
-                 "FAVOR retry diagnostics do not support persistent search");
-    RAFT_EXPECTS(!sp.dynamic_batching, "FAVOR retry diagnostics do not support dynamic batching");
-    RAFT_EXPECTS(sp.refine_ratio == 1.0f, "FAVOR retry diagnostics do not support refinement");
-    RAFT_EXPECTS(favor_seed_masks_.empty(),
-                 "FAVOR retry diagnostics do not support favor_seed_masks");
-    RAFT_EXPECTS(!sp.favor_diagnostics.enabled(),
-                 "FAVOR retry diagnostics do not support FAVOR trace diagnostics");
-    RAFT_EXPECTS(index_params_.num_dataset_splits <= 1 ||
-                   index_params_.merge_type == CagraMergeType::kPhysical,
-                 "FAVOR retry diagnostics support only physical CAGRA indices");
-    RAFT_EXPECTS(!detail::favor_adaptive_termination_enabled(),
-                 "FAVOR retry diagnostics require adaptive termination to be disabled");
-    favor_retry_diagnostic_session_ =
-      std::make_shared<detail::favor_retry_diagnostic_session>(sp.favor_retry_diagnostics);
-  } else {
-    favor_retry_diagnostic_session_.reset();
-  }
+
   if (sp.graph_mem != graph_mem_) {
     // Move graph to correct memory space
     graph_mem_ = sp.graph_mem;
@@ -901,15 +778,6 @@ void cuvs_cagra<T, IdxT>::set_search_param(const search_param_base& param,
 
     need_dataset_update_         = false;
     needs_dynamic_batcher_update = true;
-  }
-
-  // Deserialized CAGRA graph files do not contain the dense dataset. Load and validate the FAVOR
-  // sidecar only after the benchmark's search dataset and any relocated graph have been attached.
-  if (search_params_.filter_mode == cuvs::neighbors::cagra::filtering_mode::FAVOR &&
-      sp.favor_delta_d_file.has_value()) {
-    RAFT_EXPECTS(index_ != nullptr, "The CAGRA index must be loaded before FAVOR delta-d");
-    search_params_.favor_delta_d = cuvs::neighbors::cagra::load_favor_delta_d(
-      handle_, sp.favor_delta_d_file.value(), sp.favor_delta_d_params, *index_);
   }
 
   if (index_params_.compression.has_value() && !vpq_index_) {
@@ -1052,21 +920,9 @@ std::unique_ptr<algo<T>> cuvs_cagra<T, IdxT>::copy()
     result->udf_filter_runtime_ = udf_filter_adapter_->make_runtime(result->handle_);
     result->filter_             = std::make_shared<cuvs::neighbors::filtering::udf_filter>(
       result->udf_filter_runtime_->filter());
-    if (result->favor_udf_include_sampling_ && favor_udf_sampled_rates_) {
-      // Timed sampling writes one rate/count per query.  Give every benchmark copy independent
-      // output buffers so concurrent workers cannot overwrite each other's query slices.
-      auto stream           = raft::resource::get_cuda_stream(result->handle_);
-      const auto query_rows = udf_filter_adapter_->query_rows();
-      result->favor_udf_sampled_rates_ =
-        std::make_shared<rmm::device_uvector<float>>(query_rows, stream);
-      result->favor_udf_sampled_passing_counts_ =
-        std::make_shared<rmm::device_uvector<std::uint32_t>>(query_rows, stream);
-    }
   }
   if (bitmap_filter_adapter_) {
-    result->filter_ =
-      std::make_shared<cuvs::neighbors::filtering::bitmap_filter<std::uint32_t, std::int64_t>>(
-        bitmap_filter_adapter_->filter());
+    result->filter_ = bitmap_filter_adapter_->make_filter();
     if (navix_bitmap_seeds_ || cagra_bitmap_seeds_) {
       auto stream            = raft::resource::get_cuda_stream(result->handle_);
       const auto query_rows  = static_cast<std::size_t>(bitmap_filter_adapter_->query_rows());
@@ -1180,7 +1036,7 @@ void cuvs_cagra<T, IdxT>::search_base(
           navix_seed_ids_->data(),
           navix_seed_counts_->data(),
           navix_seed_inspected_units_->data(),
-          favor_udf_passing_accumulator_,
+          passing_result_accumulator_,
           cagra_seed_cap_);
         return;
       }
@@ -1193,7 +1049,7 @@ void cuvs_cagra<T, IdxT>::search_base(
         distances_view,
         *filter_,
         bitmap_query_offset_,
-        favor_udf_passing_accumulator_);
+        passing_result_accumulator_);
     };
     if (search_diagnostic_session_) {
       RAFT_EXPECTS(!cagra_bitmap_seeds_,
@@ -1217,42 +1073,11 @@ void cuvs_cagra<T, IdxT>::search_base(
     return;
   }
 
-  const bool run_udf_accumulator_path =
-    udf_filter_runtime_ &&
-    (search_params_.filter_mode == cuvs::neighbors::cagra::filtering_mode::FAVOR ||
-     favor_udf_passing_accumulator_);
+  const bool run_udf_accumulator_path = udf_filter_runtime_ && passing_result_accumulator_;
 
   if (run_udf_accumulator_path) {
-    float* sampled_rates = (favor_udf_sampled_rates_ && favor_udf_sampled_rates_->size() > 0)
-                             ? favor_udf_sampled_rates_->data() + udf_query_offset_
-                             : nullptr;
+    const float* sampled_rates      = nullptr;
     auto run_udf_accumulated_search = [&]() {
-      if (favor_udf_include_sampling_) {
-        cuvs::neighbors::cagra::detail::benchmark_estimate_favor_udf_filtering_rates<T>(
-          handle_,
-          *index_,
-          static_cast<std::uint32_t>(batch_size),
-          *filter_,
-          sampled_rates,
-          favor_udf_sampled_passing_counts_
-            ? favor_udf_sampled_passing_counts_->data() + udf_query_offset_
-            : nullptr,
-          favor_udf_sample_offset_);
-      }
-      if (search_params_.filter_mode == cuvs::neighbors::cagra::filtering_mode::FAVOR) {
-        cuvs::neighbors::cagra::detail::benchmark_search_udf_with_result_accumulator<T>(
-          handle_,
-          search_params_,
-          *index_,
-          queries_view,
-          neighbors_view,
-          distances_view,
-          *filter_,
-          sampled_rates,
-          favor_udf_passing_accumulator_);
-        return;
-      }
-
       cuvs::neighbors::cagra::detail::benchmark_search_udf_with_result_accumulator<T>(
         handle_,
         search_params_,
@@ -1262,7 +1087,7 @@ void cuvs_cagra<T, IdxT>::search_base(
         distances_view,
         *filter_,
         sampled_rates,
-        favor_udf_passing_accumulator_);
+        passing_result_accumulator_);
     };
     if (search_diagnostic_session_) {
       search_diagnostic_session_->capture(handle_,
@@ -1280,116 +1105,6 @@ void cuvs_cagra<T, IdxT>::search_base(
                                           run_udf_accumulated_search);
     } else {
       run_udf_accumulated_search();
-    }
-    return;
-  }
-
-  if (favor_retry_diagnostic_session_) {
-    const auto filtering_rate = search_params_.filtering_rate;
-    auto run_retry_round =
-      [&](std::uint32_t max_iterations,
-          std::uint64_t rand_xor_mask,
-          cuvs::neighbors::cagra::detail::search_diagnostics::context* diagnostic_context,
-          const std::uint32_t* seeds,
-          std::uint32_t seed_count,
-          std::int64_t* round_neighbors,
-          float* round_distances) {
-        auto params_copy           = search_params_;
-        params_copy.filtering_rate = filtering_rate;
-        params_copy.max_iterations = max_iterations;
-        params_copy.rand_xor_mask  = rand_xor_mask;
-        auto round_neighbors_view =
-          raft::make_device_matrix_view<std::int64_t, std::int64_t>(round_neighbors, batch_size, k);
-        auto round_distances_view =
-          raft::make_device_matrix_view<float, std::int64_t>(round_distances, batch_size, k);
-        cuvs::neighbors::cagra::detail::search_diagnostics::scoped_context context_scope{
-          diagnostic_context};
-        cuvs::neighbors::cagra::detail::search_diagnostics::scoped_seeds seed_scope{seeds,
-                                                                                    seed_count};
-        cuvs::neighbors::cagra::detail::benchmark_search_favor_with_known_filtering_rate<T>(
-          handle_,
-          params_copy,
-          *index_,
-          queries_view,
-          round_neighbors_view,
-          round_distances_view,
-          *filter_);
-      };
-    favor_retry_diagnostic_session_->capture(
-      handle_,
-      static_cast<std::uint32_t>(batch_size),
-      static_cast<std::uint32_t>(k),
-      static_cast<std::uint32_t>(index_->graph().extent(1)),
-      static_cast<std::uint32_t>(search_params_.search_width),
-      static_cast<std::int64_t>(index_->size()),
-      static_cast<std::uint32_t>(search_params_.itopk_size),
-      filtering_rate,
-      neighbors,
-      distances,
-      run_retry_round);
-    return;
-  }
-
-  if (!favor_seed_masks_.empty()) {
-    auto params_copy = search_params_;
-
-    if (favor_seed_masks_.size() == 1) {
-      params_copy.rand_xor_mask = favor_seed_masks_.front();
-      cuvs::neighbors::cagra::detail::benchmark_search_favor_with_known_filtering_rate<T>(
-        handle_, params_copy, *index_, queries_view, neighbors_view, distances_view, *filter_);
-      return;
-    }
-
-    auto const n_queries       = static_cast<std::size_t>(batch_size);
-    auto const result_width    = static_cast<std::size_t>(k);
-    auto const n_rounds        = favor_seed_masks_.size();
-    auto const round_elements  = n_queries * result_width * n_rounds;
-    auto const output_elements = n_queries * result_width;
-    auto const outputs_on_device =
-      raft::get_device_for_address(neighbors) >= 0 && raft::get_device_for_address(distances) >= 0;
-    auto const workspace_size =
-      round_elements * (sizeof(algo_base::index_type) + sizeof(float)) +
-      (outputs_on_device ? 0 : output_elements * (sizeof(algo_base::index_type) + sizeof(float)));
-    auto& workspace        = get_tmp_buffer_from_global_pool(workspace_size);
-    auto* workspace_ptr    = reinterpret_cast<std::uint8_t*>(workspace.data(MemoryType::kDevice));
-    auto* round_neighbors  = reinterpret_cast<algo_base::index_type*>(workspace_ptr);
-    auto* merged_neighbors = neighbors;
-    auto* neighbor_storage_end = round_neighbors + round_elements;
-    if (!outputs_on_device) { merged_neighbors = neighbor_storage_end; }
-    auto* round_distances =
-      reinterpret_cast<float*>(neighbor_storage_end + (outputs_on_device ? 0 : output_elements));
-
-    for (std::size_t round = 0; round < n_rounds; ++round) {
-      params_copy.rand_xor_mask = favor_seed_masks_[round];
-      auto round_neighbors_view =
-        raft::make_device_matrix_view<algo_base::index_type, std::int64_t>(
-          round_neighbors + round * output_elements, batch_size, k);
-      auto round_distances_view = raft::make_device_matrix_view<float, std::int64_t>(
-        round_distances + round * output_elements, batch_size, k);
-      cuvs::neighbors::cagra::detail::benchmark_search_favor_with_known_filtering_rate<T>(
-        handle_,
-        params_copy,
-        *index_,
-        queries_view,
-        round_neighbors_view,
-        round_distances_view,
-        *filter_);
-    }
-
-    auto* merged_distances = distances;
-    if (!outputs_on_device) { merged_distances = round_distances + round_elements; }
-    cuvs::neighbors::cagra::detail::merge_favor_multi_seed_results(handle_,
-                                                                   round_neighbors,
-                                                                   round_distances,
-                                                                   merged_neighbors,
-                                                                   merged_distances,
-                                                                   n_queries,
-                                                                   result_width,
-                                                                   n_rounds);
-    if (!outputs_on_device) {
-      auto stream = raft::resource::get_cuda_stream(handle_);
-      raft::copy(neighbors, merged_neighbors, output_elements, stream);
-      raft::copy(distances, merged_distances, output_elements, stream);
     }
     return;
   }

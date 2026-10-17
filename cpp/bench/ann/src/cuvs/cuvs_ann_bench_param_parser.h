@@ -57,6 +57,15 @@ extern template class cuvs::bench::cuvs_ivf_sq<half>;
 #include "cuvs_mg_cagra_wrapper.h"
 #endif
 
+inline void require_dense_ivf_bitmap(const nlohmann::json& conf)
+{
+  if (conf.value("filter_representation", std::string{"bitmap"}) != "bitmap" ||
+      conf.contains("roaring_allowlist_file")) {
+    THROW(
+      "IVF per-query filtering currently requires a dense bitmap; Roaring is supported by CAGRA");
+  }
+}
+
 template <typename ParamT>
 void parse_dynamic_batching_params(const nlohmann::json& conf, ParamT& param)
 {
@@ -93,6 +102,7 @@ template <typename T, typename IdxT>
 void parse_search_param(const nlohmann::json& conf,
                         typename cuvs::bench::cuvs_ivf_flat<T, IdxT>::search_param& param)
 {
+  require_dense_ivf_bitmap(conf);
   param.ivf_flat_params.n_probes = conf.at("nprobe");
 }
 #endif
@@ -117,6 +127,7 @@ template <typename T>
 void parse_search_param(const nlohmann::json& conf,
                         typename cuvs::bench::cuvs_ivf_sq<T>::search_param& param)
 {
+  require_dense_ivf_bitmap(conf);
   param.ivf_sq_params.n_probes = conf.at("nprobe");
 }
 #endif
@@ -152,6 +163,7 @@ template <typename T, typename IdxT>
 void parse_search_param(const nlohmann::json& conf,
                         typename cuvs::bench::cuvs_ivf_pq<T, IdxT>::search_param& param)
 {
+  require_dense_ivf_bitmap(conf);
   if (conf.contains("nprobe")) { param.pq_param.n_probes = conf.at("nprobe"); }
   if (conf.contains("internalDistanceDtype")) {
     std::string type = conf.at("internalDistanceDtype");
@@ -504,8 +516,8 @@ void parse_search_param(const nlohmann::json& conf,
 {
   // Historic paper configurations use FAVOR-era names for shared Retain/diagnostic controls.
   if (conf.contains("passing_result_accumulator")) {
-    param.favor_udf_passing_accumulator        = conf.at("passing_result_accumulator");
-    param.favor_udf_passing_accumulator_is_set = true;
+    param.passing_result_accumulator        = conf.at("passing_result_accumulator");
+    param.passing_result_accumulator_is_set = true;
     if (conf.contains("favor_udf_passing_accumulator") &&
         conf.at("favor_udf_passing_accumulator") != conf.at("passing_result_accumulator")) {
       THROW("Conflicting passing-result accumulator settings");
@@ -535,47 +547,15 @@ void parse_search_param(const nlohmann::json& conf,
     std::string mode = conf.at("filter_mode");
     if (mode == "default") {
       param.p.filter_mode = cuvs::neighbors::cagra::filtering_mode::DEFAULT;
-    } else if (mode == "favor") {
-      param.p.filter_mode = cuvs::neighbors::cagra::filtering_mode::FAVOR;
     } else {
       THROW("Invalid CAGRA filter_mode: %s", mode.c_str());
     }
   }
-  if (conf.contains("favor_delta_d")) { param.p.favor_delta_d = conf.at("favor_delta_d"); }
-  if (conf.contains("favor_penalty_mode")) {
-    std::string mode = conf.at("favor_penalty_mode");
-    if (mode == "reference") {
-      param.p.favor_penalty = cuvs::neighbors::cagra::favor_penalty_mode::REFERENCE;
-    } else if (mode == "cagra_query_local") {
-      param.p.favor_penalty = cuvs::neighbors::cagra::favor_penalty_mode::CAGRA_QUERY_LOCAL;
-    } else if (mode == "cagra_retention_safe") {
-      param.p.favor_penalty = cuvs::neighbors::cagra::favor_penalty_mode::CAGRA_RETENTION_SAFE;
-    } else {
-      THROW("Invalid CAGRA FAVOR penalty mode: %s", mode.c_str());
-    }
-  }
-  if (conf.contains("favor_penalty_lambda")) {
-    param.p.favor_penalty_lambda = conf.at("favor_penalty_lambda");
-  }
-  if (conf.contains("favor_retention_fraction")) {
-    param.p.favor_retention_fraction = conf.at("favor_retention_fraction");
-  }
-  if (conf.contains("favor_seed_masks")) {
-    if (!conf.at("favor_seed_masks").is_array() || conf.at("favor_seed_masks").empty()) {
-      THROW("favor_seed_masks must be a non-empty JSON array");
-    }
-    param.favor_seed_masks = conf.at("favor_seed_masks").get<std::vector<std::uint64_t>>();
-  }
-  if (conf.contains("favor_udf_include_sampling")) {
-    param.favor_udf_include_sampling = conf.at("favor_udf_include_sampling");
-  }
   if (conf.contains("favor_udf_passing_accumulator")) {
-    param.favor_udf_passing_accumulator        = conf.at("favor_udf_passing_accumulator");
-    param.favor_udf_passing_accumulator_is_set = true;
+    param.passing_result_accumulator        = conf.at("favor_udf_passing_accumulator");
+    param.passing_result_accumulator_is_set = true;
   }
-  if (conf.contains("favor_udf_sample_offset")) {
-    param.favor_udf_sample_offset = conf.at("favor_udf_sample_offset");
-  }
+
   if (conf.contains("navix_mode")) {
     const std::string mode = conf.at("navix_mode");
     if (mode == "adaptive_kuzu") {
@@ -610,9 +590,15 @@ void parse_search_param(const nlohmann::json& conf,
   if (conf.contains("require_identity_source_indices")) {
     param.require_identity_source_indices = conf.at("require_identity_source_indices");
   }
-  param.navix_seed_k   = conf.value("k", 10u);
-  param.navix_seed_cap = conf.value("navix_seed_cap", param.navix_seed_k);
-  param.cagra_seed_cap = conf.value("cagra_seed_cap", param.navix_seed_k);
+  auto const representation = conf.value("filter_representation", std::string{"bitmap"});
+  if (representation != "bitmap" && representation != "roaring") {
+    THROW("filter_representation must be bitmap or roaring");
+  }
+  param.roaring_bitmap_filter  = representation == "roaring";
+  param.roaring_allowlist_file = conf.value("roaring_allowlist_file", std::string{});
+  param.navix_seed_k           = conf.value("k", 10u);
+  param.navix_seed_cap         = conf.value("navix_seed_cap", param.navix_seed_k);
+  param.cagra_seed_cap         = conf.value("cagra_seed_cap", param.navix_seed_k);
   if (conf.contains("navix_seed_cap") && !param.navix_bitmap_seeds) {
     THROW("navix_seed_cap requires navix_bitmap_seeds");
   }
@@ -621,62 +607,47 @@ void parse_search_param(const nlohmann::json& conf,
   }
   if (param.navix_seed_cap == 0) { THROW("navix_seed_cap must be positive"); }
   if (param.cagra_seed_cap == 0) { THROW("cagra_seed_cap must be positive"); }
-  if (conf.contains("favor_delta_d_file")) {
-    param.favor_delta_d_file = conf.at("favor_delta_d_file").get<std::string>();
-  }
-  if (conf.contains("favor_delta_d_alpha")) {
-    param.favor_delta_d_params.alpha = conf.at("favor_delta_d_alpha");
-  }
-  if (conf.contains("favor_delta_d_beta")) {
-    param.favor_delta_d_params.beta = conf.at("favor_delta_d_beta");
-  }
-  if (conf.contains("favor_delta_d_bfs_depth")) {
-    param.favor_delta_d_params.bfs_depth = conf.at("favor_delta_d_bfs_depth");
+
+  if (conf.contains("search_diagnostics_output")) {
+    if (conf.contains("favor_diagnostics_output") || conf.contains("navix_diagnostics_output")) {
+      THROW("Specify only one search diagnostics output");
+    }
+    param.diagnostics.output_directory = conf.at("search_diagnostics_output").get<std::string>();
+    param.diagnostics.ground_truth_file =
+      conf.value("search_diagnostics_groundtruth", std::string{});
+    param.diagnostics.selected_queries_file =
+      conf.value("search_diagnostics_selected_queries", std::string{});
+    param.diagnostics.dataset = conf.value("search_diagnostics_dataset", std::string{});
+    param.diagnostics.variant = conf.value("search_diagnostics_variant", std::string{});
+    param.diagnostics.max_trace_iterations =
+      conf.value("search_diagnostics_max_trace_iterations", 0u);
   }
   if (conf.contains("favor_diagnostics_output")) {
-    param.favor_diagnostics.output_directory =
-      conf.at("favor_diagnostics_output").get<std::string>();
-    param.favor_diagnostics.ground_truth_file =
+    param.diagnostics.output_directory = conf.at("favor_diagnostics_output").get<std::string>();
+    param.diagnostics.ground_truth_file =
       conf.value("favor_diagnostics_groundtruth", std::string{});
-    param.favor_diagnostics.selected_queries_file =
+    param.diagnostics.selected_queries_file =
       conf.value("favor_diagnostics_selected_queries", std::string{});
-    param.favor_diagnostics.dataset = conf.value("favor_diagnostics_dataset", std::string{});
-    param.favor_diagnostics.variant = conf.value("favor_diagnostics_variant", std::string{});
-    param.favor_diagnostics.max_trace_iterations =
+    param.diagnostics.dataset = conf.value("favor_diagnostics_dataset", std::string{});
+    param.diagnostics.variant = conf.value("favor_diagnostics_variant", std::string{});
+    param.diagnostics.max_trace_iterations =
       conf.value("favor_diagnostics_max_trace_iterations", 0u);
-    param.favor_diagnostics.termination_record_start_iteration =
-      conf.value("favor_termination_shadow_record_start_iteration", 0u);
-    param.favor_diagnostics.termination_start_iteration =
-      conf.value("favor_termination_shadow_start_iteration", 0u);
-    param.favor_diagnostics.termination_parent_interval =
-      conf.value("favor_termination_shadow_parent_interval", 0u);
   }
   if (conf.contains("navix_diagnostics_output")) {
     if (conf.contains("favor_diagnostics_output")) {
       THROW("navix_diagnostics_output cannot be combined with favor_diagnostics_output");
     }
-    param.favor_diagnostics.output_directory =
-      conf.at("navix_diagnostics_output").get<std::string>();
-    param.favor_diagnostics.ground_truth_file =
+    param.diagnostics.output_directory = conf.at("navix_diagnostics_output").get<std::string>();
+    param.diagnostics.ground_truth_file =
       conf.value("navix_diagnostics_groundtruth", std::string{});
-    param.favor_diagnostics.selected_queries_file =
+    param.diagnostics.selected_queries_file =
       conf.value("navix_diagnostics_selected_queries", std::string{});
-    param.favor_diagnostics.dataset = conf.value("navix_diagnostics_dataset", std::string{});
-    param.favor_diagnostics.variant = conf.value("navix_diagnostics_variant", std::string{});
-    param.favor_diagnostics.max_trace_iterations =
+    param.diagnostics.dataset = conf.value("navix_diagnostics_dataset", std::string{});
+    param.diagnostics.variant = conf.value("navix_diagnostics_variant", std::string{});
+    param.diagnostics.max_trace_iterations =
       conf.value("navix_diagnostics_max_trace_iterations", 0u);
   }
-  if (conf.contains("favor_retry_diagnostics_output")) {
-    param.favor_retry_diagnostics.output_directory =
-      conf.at("favor_retry_diagnostics_output").get<std::string>();
-    param.favor_retry_diagnostics.ground_truth_file =
-      conf.value("favor_retry_diagnostics_groundtruth", std::string{});
-    param.favor_retry_diagnostics.dataset =
-      conf.value("favor_retry_diagnostics_dataset", std::string{});
-    param.favor_retry_diagnostics.strategy = conf.value("favor_retry_strategy", std::string{});
-    param.favor_retry_diagnostics.rounds   = conf.value("favor_retry_rounds", 0u);
-    param.favor_retry_diagnostics.b0       = conf.value("favor_retry_b0", 0u);
-  }
+
   if (conf.contains("persistent")) { param.p.persistent = conf.at("persistent"); }
   if (conf.contains("persistent_lifetime")) {
     param.p.persistent_lifetime = conf.at("persistent_lifetime");

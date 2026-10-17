@@ -184,7 +184,7 @@ def write_synthetic_raw(result_root: Path, group: str) -> None:
                         "itopk": point["itopk"],
                         "search_width": point["search_width"],
                         "max_iterations": point["max_iterations"],
-                        "favor_udf_passing_accumulator": float(
+                        "passing_result_accumulator": float(
                             "accumulator" in method
                         ),
                         "cagra_bitmap_seeds": float(method.endswith("_seeded")),
