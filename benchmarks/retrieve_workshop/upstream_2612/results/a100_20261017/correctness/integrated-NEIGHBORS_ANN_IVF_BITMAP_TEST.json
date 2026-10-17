@@ -1,0 +1,231 @@
+{
+  "tests": 14,
+  "failures": 0,
+  "disabled": 0,
+  "errors": 0,
+  "timestamp": "2026-10-17T10:47:25Z",
+  "time": "27.398s",
+  "name": "AllTests",
+  "testsuites": [
+    {
+      "name": "IvfBitmapRefinement",
+      "tests": 3,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-10-17T10:47:25Z",
+      "time": "5.385s",
+      "testsuite": [
+        {
+          "name": "UnderfilledGpuCandidatePools",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_ivf_bitmap_filter.cu",
+          "line": 41,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:47:25Z",
+          "time": "0.563s",
+          "classname": "IvfBitmapRefinement"
+        },
+        {
+          "name": "LargeFloatPqPoolsWithUnderfilledProbes",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_ivf_bitmap_filter.cu",
+          "line": 330,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:47:25Z",
+          "time": "2.968s",
+          "classname": "IvfBitmapRefinement"
+        },
+        {
+          "name": "LargeUint8PqPoolsWithUnderfilledProbes",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_ivf_bitmap_filter.cu",
+          "line": 335,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:47:28Z",
+          "time": "1.853s",
+          "classname": "IvfBitmapRefinement"
+        }
+      ]
+    },
+    {
+      "name": "IvfBitmapFilterDevice",
+      "tests": 1,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-10-17T10:47:30Z",
+      "time": "0s",
+      "testsuite": [
+        {
+          "name": "MapsSourceIdsAndCanonicalizesMissingResults",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_ivf_bitmap_filter.cu",
+          "line": 352,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:47:30Z",
+          "time": "0s",
+          "classname": "IvfBitmapFilterDevice"
+        }
+      ]
+    },
+    {
+      "name": "IvfBitmapFilterTest\/0",
+      "tests": 3,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-10-17T10:47:30Z",
+      "time": "10.432s",
+      "testsuite": [
+        {
+          "name": "MatchesPerQueryBitsetsAndPreservesOffsets",
+          "type_param": "cuvs::neighbors::(anonymous namespace)::FlatBackend",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_ivf_bitmap_filter.cu",
+          "line": 463,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:47:30Z",
+          "time": "10.086s",
+          "classname": "IvfBitmapFilterTest\/0"
+        },
+        {
+          "name": "QueryRowsSurviveKernelGridAndInternalBatchBoundaries",
+          "type_param": "cuvs::neighbors::(anonymous namespace)::FlatBackend",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_ivf_bitmap_filter.cu",
+          "line": 573,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:47:40Z",
+          "time": "0.337s",
+          "classname": "IvfBitmapFilterTest\/0"
+        },
+        {
+          "name": "DynamicBatchingRejectsBitmapFilters",
+          "type_param": "cuvs::neighbors::(anonymous namespace)::FlatBackend",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_ivf_bitmap_filter.cu",
+          "line": 603,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:47:41Z",
+          "time": "0.007s",
+          "classname": "IvfBitmapFilterTest\/0"
+        }
+      ]
+    },
+    {
+      "name": "IvfBitmapFilterTest\/1",
+      "tests": 3,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-10-17T10:47:41Z",
+      "time": "3.255s",
+      "testsuite": [
+        {
+          "name": "MatchesPerQueryBitsetsAndPreservesOffsets",
+          "type_param": "cuvs::neighbors::(anonymous namespace)::PqBackend",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_ivf_bitmap_filter.cu",
+          "line": 463,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:47:41Z",
+          "time": "2.202s",
+          "classname": "IvfBitmapFilterTest\/1"
+        },
+        {
+          "name": "QueryRowsSurviveKernelGridAndInternalBatchBoundaries",
+          "type_param": "cuvs::neighbors::(anonymous namespace)::PqBackend",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_ivf_bitmap_filter.cu",
+          "line": 573,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:47:43Z",
+          "time": "1.033s",
+          "classname": "IvfBitmapFilterTest\/1"
+        },
+        {
+          "name": "DynamicBatchingRejectsBitmapFilters",
+          "type_param": "cuvs::neighbors::(anonymous namespace)::PqBackend",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_ivf_bitmap_filter.cu",
+          "line": 603,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:47:44Z",
+          "time": "0.019s",
+          "classname": "IvfBitmapFilterTest\/1"
+        }
+      ]
+    },
+    {
+      "name": "IvfBitmapFilterTest\/2",
+      "tests": 3,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-10-17T10:47:44Z",
+      "time": "8.324s",
+      "testsuite": [
+        {
+          "name": "MatchesPerQueryBitsetsAndPreservesOffsets",
+          "type_param": "cuvs::neighbors::(anonymous namespace)::SqBackend",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_ivf_bitmap_filter.cu",
+          "line": 463,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:47:44Z",
+          "time": "8.258s",
+          "classname": "IvfBitmapFilterTest\/2"
+        },
+        {
+          "name": "QueryRowsSurviveKernelGridAndInternalBatchBoundaries",
+          "type_param": "cuvs::neighbors::(anonymous namespace)::SqBackend",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_ivf_bitmap_filter.cu",
+          "line": 573,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:47:52Z",
+          "time": "0.065s",
+          "classname": "IvfBitmapFilterTest\/2"
+        },
+        {
+          "name": "DynamicBatchingRejectsBitmapFilters",
+          "type_param": "cuvs::neighbors::(anonymous namespace)::SqBackend",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_ivf_bitmap_filter.cu",
+          "line": 603,
+          "status": "RUN",
+          "result": "SKIPPED",
+          "timestamp": "2026-10-17T10:47:52Z",
+          "time": "0s",
+          "classname": "IvfBitmapFilterTest\/2",
+          "skipped": [
+            {
+              "message": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_ivf_bitmap_filter.cu:606\nIVF-SQ has no dynamic batching wrapper\n"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "IvfBitmapFilterValidation",
+      "tests": 1,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-10-17T10:47:52Z",
+      "time": "0s",
+      "testsuite": [
+        {
+          "name": "RejectsWrongDimensionsAndOutOfRangeOffsets",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_ivf_bitmap_filter.cu",
+          "line": 628,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:47:52Z",
+          "time": "0s",
+          "classname": "IvfBitmapFilterValidation"
+        }
+      ]
+    }
+  ]
+}

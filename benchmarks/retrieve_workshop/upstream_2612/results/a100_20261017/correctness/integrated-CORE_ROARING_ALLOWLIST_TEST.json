@@ -1,0 +1,93 @@
+{
+  "tests": 6,
+  "failures": 0,
+  "disabled": 0,
+  "errors": 0,
+  "timestamp": "2026-10-17T10:44:25Z",
+  "time": "0.123s",
+  "name": "AllTests",
+  "testsuites": [
+    {
+      "name": "RoaringAllowlist",
+      "tests": 5,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-10-17T10:44:25Z",
+      "time": "0.122s",
+      "testsuite": [
+        {
+          "name": "BuildsArrayBitmapAndMultipleContainers",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/roaring_allowlist.cu",
+          "line": 101,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:44:25Z",
+          "time": "0.121s",
+          "classname": "RoaringAllowlist"
+        },
+        {
+          "name": "SupportsPresortedHostAndDeviceInputs",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/roaring_allowlist.cu",
+          "line": 126,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:44:25Z",
+          "time": "0s",
+          "classname": "RoaringAllowlist"
+        },
+        {
+          "name": "HandlesEmptyAndFullUint32Domain",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/roaring_allowlist.cu",
+          "line": 139,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:44:25Z",
+          "time": "0s",
+          "classname": "RoaringAllowlist"
+        },
+        {
+          "name": "ViewIsZeroCopyAndSurvivesOwnerMove",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/roaring_allowlist.cu",
+          "line": 157,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:44:25Z",
+          "time": "0s",
+          "classname": "RoaringAllowlist"
+        },
+        {
+          "name": "StreamOrderedConstructionSupportsEventHandoff",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/roaring_allowlist.cu",
+          "line": 172,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:44:25Z",
+          "time": "0s",
+          "classname": "RoaringAllowlist"
+        }
+      ]
+    },
+    {
+      "name": "RoaringFilter",
+      "tests": 1,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-10-17T10:44:25Z",
+      "time": "0s",
+      "testsuite": [
+        {
+          "name": "ReusesViewsUpdatesMappingsAndRejectsInvalidInputs",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/roaring_allowlist.cu",
+          "line": 191,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:44:25Z",
+          "time": "0s",
+          "classname": "RoaringFilter"
+        }
+      ]
+    }
+  ]
+}

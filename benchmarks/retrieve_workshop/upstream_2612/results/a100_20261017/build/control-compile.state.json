@@ -1,0 +1,29 @@
+{
+  "started_at": "2026-10-17T06:23:34.903588+00:00",
+  "pid": 189605,
+  "steps": [
+    {
+      "command": [
+        "micromamba",
+        "run",
+        "-p",
+        "/data/cuvs-upstream-envs/cuvs-2612",
+        "cmake",
+        "--build",
+        "cpp/build",
+        "--parallel",
+        "6",
+        "--target",
+        "NEIGHBORS_ANN_CAGRA_FILTER_UDF_TEST",
+        "CORE_ROARING_ALLOWLIST_TEST",
+        "NEIGHBORS_ANN_CAGRA_BBQ_UINT32_TEST"
+      ],
+      "cwd": "/data/cuvs-upstream-control",
+      "log": "/data/cuvs-upstream-validation/control-build.log",
+      "status": "passed",
+      "returncode": 0
+    }
+  ],
+  "status": "passed",
+  "finished_at": "2026-10-17T06:59:35.408778+00:00"
+}

@@ -1,0 +1,10 @@
+{
+  "invalid_uint32": 4294967295,
+  "visited_bit": 2147483648,
+  "masked_invalid": 2147483647,
+  "upstream_marks_invalid_slot_as_valid": 1,
+  "legacy_helper_unchanged_from_old_main": true,
+  "legacy_helper_sha256": "fc60b17f817bf38fb6a0a9d10342ea8a3a07622b467d1d6c571dc1581ef9238f",
+  "legacy_fix_commit": "1bba08d8eac06ce760009df76f6f0957be4d5e97",
+  "pinned_upstream": "3721d31fb98ba927417f42fbe3f93ab9ff15ed8e"
+}

@@ -1,0 +1,29 @@
+{
+  "signature": {
+    "config_sha256": "5d549064b0a42091d6f7008c020f3dcec55eab664133b6c262cacaf0b79e3213",
+    "binary_sha256": "307fb47372137a56d40001edf2fbfabc6b8e455d551e884bbafdd3bc04df2df5",
+    "library_sha256": "dd1387b3033b4127ea94f6706a7b20a59650e5142f4a88abfdd7e099d2ef41e6",
+    "manifest_sha256": "e06bec7e40ab7f495614a00d517a1b8ea864c2b339b17a59538dafd85756cd93"
+  },
+  "command": [
+    "micromamba",
+    "run",
+    "-p",
+    "/data/cuvs-upstream-envs/cuvs-2612",
+    "/data/cuvs-upstream-integration/cpp/build/bench/ann/CUVS_CAGRA_ANN_BENCH",
+    "--search",
+    "--mode=throughput",
+    "--threads=1",
+    "--data_prefix=/data/retrieve_data",
+    "--index_prefix=/data/retrieve_data",
+    "--benchmark_repetitions=3",
+    "--benchmark_min_time=0.10s",
+    "--benchmark_min_warmup_time=0.10",
+    "--benchmark_enable_random_interleaving=true",
+    "--benchmark_report_aggregates_only=false",
+    "--benchmark_out_format=json",
+    "--benchmark_out=/data/cuvs-upstream-validation/benchmarks/raw/integrated/synthetic_low_0p003_random_k10/cuvs_cagra.json",
+    "/data/cuvs-upstream-validation/benchmarks/configs/integrated/synthetic_low_0p003_random_k10/cuvs_cagra.json"
+  ],
+  "raw_sha256": "7dd0d4cd8f4e90e1546e78cc6d7634ced12ee1e7ba5e5c94e5d74e3dcc822dcc"
+}

@@ -24,8 +24,8 @@ following upstream `main` during validation would change the experiment.
 
 The original checkout, environment, binaries, indexes, and paper results remain
 available for comparison. Integration and unmodified upstream use separate
-worktrees and build directories. Generated indexes, build products, and benchmark
-results are external artifacts, not Git source files.
+worktrees and build directories. Generated indexes, build products, and large raw
+arrays remain external artifacts. Compact validation records are committed for review.
 
 Push only to `git@github.com:namanhboi/cuvs-filter.git`. NVIDIA's repository is a
 read-only source. Publish the integration branch and validation evidence for
@@ -172,5 +172,13 @@ comparison tables are recorded. Completed benchmark files are reused only when
 their configuration, binary, library, and manifest signatures still match.
 Passed native correctness suites are reused only when their executable, library,
 arguments, and saved result checksum match; failed or changed suites run again.
+Execution is grouped by saved index to reuse the host file cache, with the actual
+order recorded separately; frozen configurations and seeds remain unchanged.
 Threshold flags remain explicit and require investigation; this runner never
 pushes, modifies saved paper results, or updates `main`.
+
+The completed representative replay and the explanations for remaining strict
+equality flags are in [VALIDATION.md](VALIDATION.md) and the
+[archived assessment](results/a100_20261017/ASSESSMENT.md). The native comparison
+preserves older fork compaction fixes that are absent from pinned upstream;
+native upstream equality is therefore reported separately from fork compatibility.

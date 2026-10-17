@@ -1,0 +1,82 @@
+{
+  "dataset": {
+    "name": "retrieve-r-throughput-q00000-02048",
+    "base_file": "/data/retrieve_data/arxiv-for-fanns-large/base.fbin",
+    "query_file": "/data/retrieve_data/navix_bitmap/arxiv-large/r/throughput_10000/shard_00000_02048/query.bin",
+    "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap/arxiv-large/r/throughput_10000/shard_00000_02048/groundtruth.ibin",
+    "distance": "euclidean",
+    "dtype": "float",
+    "filter": {
+      "kind": "bitmap",
+      "file": "/data/retrieve_data/navix_bitmap/arxiv-large/r/throughput_10000/shard_00000_02048/filter.bitmap"
+    }
+  },
+  "search_basic_param": {
+    "batch_size": 2048,
+    "k": 10
+  },
+  "index": [
+    {
+      "name": "cagra-g64-ig128",
+      "algo": "cuvs_cagra",
+      "file": "/data/cuvs-upstream-validation/indices/arxiv_cagra.index",
+      "build_param": {
+        "graph_build_algo": "NN_DESCENT",
+        "graph_degree": 64,
+        "intermediate_graph_degree": 128
+      },
+      "search_params": [
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "max_queries": 2048,
+          "itopk": 146,
+          "search_width": 2,
+          "max_iterations": 0,
+          "require_identity_source_indices": true,
+          "bitmap_method": "default_cagra",
+          "validation_case_id": "r__k10__default_cagra",
+          "rand_xor_mask": 1213332,
+          "hashmap_max_fill_rate": 0.5,
+          "passing_result_accumulator": false,
+          "filter_representation": "roaring"
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "max_queries": 2048,
+          "itopk": 68,
+          "search_width": 2,
+          "max_iterations": 0,
+          "require_identity_source_indices": true,
+          "bitmap_method": "default_cagra_accumulator",
+          "validation_case_id": "r__k10__default_cagra_accumulator",
+          "rand_xor_mask": 1213332,
+          "hashmap_max_fill_rate": 0.5,
+          "passing_result_accumulator": true,
+          "filter_representation": "roaring"
+        },
+        {
+          "algo": "single_cta",
+          "filter_mode": "default",
+          "max_queries": 2048,
+          "itopk": 29,
+          "search_width": 1,
+          "max_iterations": 0,
+          "require_identity_source_indices": true,
+          "bitmap_method": "navix_reference",
+          "navix_mode": "adaptive_kuzu",
+          "navix_scheduler": "tiled",
+          "navix_bitmap_seeds": true,
+          "navix_kernel_variant": "reference",
+          "navix_seed_cap": 64,
+          "validation_case_id": "r__k10__navix_reference",
+          "rand_xor_mask": 1213332,
+          "hashmap_max_fill_rate": 0.5,
+          "passing_result_accumulator": false,
+          "filter_representation": "roaring"
+        }
+      ]
+    }
+  ]
+}

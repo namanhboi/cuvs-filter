@@ -1,0 +1,32 @@
+{
+  "duplicate_results": 0,
+  "filter_api": "public_udf_dense_bitmap",
+  "filter_violations": 0,
+  "k": 10,
+  "legacy_sentinel_slots": 0,
+  "matching": 15954,
+  "n_queries": 2048,
+  "n_rows": 2735264,
+  "recall": 0.77900390625,
+  "repetitions": [
+    {
+      "iterations": 1,
+      "qps": 417.6198802198442,
+      "repetition": 0,
+      "seconds": 4.903981101
+    },
+    {
+      "iterations": 1,
+      "qps": 418.44260152978603,
+      "repetition": 1,
+      "seconds": 4.894339134
+    },
+    {
+      "iterations": 1,
+      "qps": 417.5141499729741,
+      "repetition": 2,
+      "seconds": 4.905222973
+    }
+  ],
+  "valid_gt": 20480
+}

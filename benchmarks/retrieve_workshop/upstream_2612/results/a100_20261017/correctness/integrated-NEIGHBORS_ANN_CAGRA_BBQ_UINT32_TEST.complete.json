@@ -1,0 +1,17 @@
+{
+  "signature": {
+    "command": [
+      "micromamba",
+      "run",
+      "-p",
+      "/data/cuvs-upstream-envs/cuvs-2612",
+      "timeout",
+      "1800",
+      "/data/cuvs-upstream-integration/cpp/build/gtests/NEIGHBORS_ANN_CAGRA_BBQ_UINT32_TEST",
+      "--gtest_output=json:/data/cuvs-upstream-validation/benchmarks/correctness/integrated-NEIGHBORS_ANN_CAGRA_BBQ_UINT32_TEST.json"
+    ],
+    "executable_sha256": "eaad769dcdee4fc695773bb733e233f3a9d161c560dfdc51458fc9fe071ce756",
+    "library_sha256": "dd1387b3033b4127ea94f6706a7b20a59650e5142f4a88abfdd7e099d2ef41e6"
+  },
+  "output_sha256": "3cb20d93f2aea6f8ba89a7538fb068b9bdde5e0a95417f2e9004486486966c85"
+}

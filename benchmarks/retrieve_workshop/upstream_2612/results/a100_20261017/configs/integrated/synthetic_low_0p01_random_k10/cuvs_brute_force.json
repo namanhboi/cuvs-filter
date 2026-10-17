@@ -1,0 +1,34 @@
+{
+  "dataset": {
+    "base_file": "/data/retrieve_data/arxiv-for-fanns-large/base.fbin",
+    "distance": "euclidean",
+    "dtype": "float",
+    "filter": {
+      "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p01_random/shard_00000_02048/filter.bitmap",
+      "kind": "bitmap"
+    },
+    "groundtruth_neighbors_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p01_random/shard_00000_02048/groundtruth.ibin",
+    "name": "selectivity-synthetic_low_0p01_random-exact-control",
+    "query_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p01_random/shard_00000_02048/query.bin"
+  },
+  "index": [
+    {
+      "algo": "cuvs_brute_force",
+      "build_param": {},
+      "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/state/cuvs_brute_force.index",
+      "name": "cuvs-exact-bitmap",
+      "search_params": [
+        {
+          "exact_control": "bitmap_count_csr_search",
+          "native_l2_cutoff_validation": true,
+          "resident_bitmap": true,
+          "validation_case_id": "synthetic_low_0p01_random__k10__exact"
+        }
+      ]
+    }
+  ],
+  "search_basic_param": {
+    "batch_size": 2048,
+    "k": 10
+  }
+}

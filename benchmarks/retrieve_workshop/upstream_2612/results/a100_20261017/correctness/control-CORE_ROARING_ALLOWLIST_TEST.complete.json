@@ -1,0 +1,17 @@
+{
+  "signature": {
+    "command": [
+      "micromamba",
+      "run",
+      "-p",
+      "/data/cuvs-upstream-envs/cuvs-2612",
+      "timeout",
+      "1800",
+      "/data/cuvs-upstream-control/cpp/build/gtests/CORE_ROARING_ALLOWLIST_TEST",
+      "--gtest_output=json:/data/cuvs-upstream-validation/benchmarks/correctness/control-CORE_ROARING_ALLOWLIST_TEST.json"
+    ],
+    "executable_sha256": "99a29386bcb3115f2df564239cacd1f217905ae77f597430b0eaa7b9bb38cd09",
+    "library_sha256": "fff00667d1a1291f06a683a9c140c66539a7b6bb896a6141f5a3a38f214baac8"
+  },
+  "output_sha256": "69b9eb49a1ad439d011dc6032bcdfae4be55d8631cdd7d58725eba83977a8503"
+}

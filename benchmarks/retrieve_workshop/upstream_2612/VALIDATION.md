@@ -1,7 +1,9 @@
-# Integration checkpoint, 2026-10-17
+# Integration validation, 2026-10-17
 
-This is a correctness checkpoint, not a completed performance report. Neither `main`
-nor the original paper results have been changed. NVIDIA's repository is read-only.
+The agreed representative validation is complete. The integration is published
+for review separately from `main`; original paper results are unchanged. NVIDIA's
+repository is read-only. See [the assessment](results/a100_20261017/ASSESSMENT.md)
+for measurements, investigations, and remaining limitations.
 
 Completed checks:
 
@@ -16,7 +18,7 @@ Completed checks:
   result readers accept both spellings.
 - CPU workflow tests: paper pipeline 7, GPU graph pipeline 8, selectivity follow-up
   7, k=100 Retain occupancy pipeline 5, bitmap/index conversion 11, replay contract
-  10: all 48 passed.
+  13: all 51 passed.
 - Changed Python sources pass syntax checks and Ruff apart from the existing
   E402/E741 conventions in legacy workflow files.
 - Focused CUDA compilation passed for the CAGRA wrapper, CAGRA bitmap/Roaring GPU
@@ -24,8 +26,8 @@ Completed checks:
   the Roaring search bridge and single-CTA launcher instantiations.
 - All five real sparse query bitmaps were converted losslessly to separate
   sorted-ID artifacts; 2,048 membership rows were independently checked per bitmap.
-- Six saved-index copies passed independent component verification: two CAGRA
-  graphs and four IVF-Flat indexes. Native loading is still a separate pending gate.
+- Six saved-index copies passed independent component verification and native
+  cuVS loading: two CAGRA graphs and four IVF-Flat indexes.
 - All frozen benchmark inputs have recorded SHA-256 values. The 57 selected cases
   are grouped into 75 benchmark processes, plus 13 public-API control comparisons.
 - Flat, SQ, PQ, and exact benchmark adapters and their frontends compiled. The exact
@@ -61,11 +63,34 @@ retirement rejection, empty/underfilled rows, remapped IDs, query offsets,
 mixed-container passing seeds, k=100 outputs, and native multi-partition search
 passed. The separate 20-case GPU seed check above is not included in this table.
 
-Still required:
+Representative benchmark findings:
 
-- Load independently verified converted index copies with native cuVS.
-- Run and assess the agreed representative benchmarks against reruns of the old
-  binaries and the pinned upstream control. No new performance conclusion is claimed.
+- All 75 benchmark processes and 26 native public-API executions completed,
+  each with three timed repetitions. All 57 previous-fork versus integration
+  comparisons are within the agreed thresholds: QPS ratios 0.983–1.013 and maximum
+  absolute recall change 0.000009775. Benchmark output invariant checks passed.
+- All 13 native integration recall values exactly equal the previous fork's
+  corresponding benchmark recall. They exceed pinned upstream by 0.000391–0.082437.
+  The inherited final-result compaction fixes explain the direction of this
+  difference; their helper is unchanged from the previous fork. This is a source
+  investigation, not an end-to-end ablation. Native QPS ratios are 0.944–1.127.
+- Raw native results contain a small number of duplicates in both checkouts;
+  recall counts each ground-truth ID once. The benchmark adapter deduplicates.
+  Raw arrays and native difference flags remain available for review.
+- Dense/Roaring recall matches except YFCC NaviX k=100, whose median difference
+  is four ground-truth hits (0.000019551). Repetition ranges overlap across the
+  previous fork, integrated dense, and Roaring. The strict equality flag remains.
+- Roaring is an optional representation and is slower on most measured cases;
+  NaviX Roaring/dense QPS ratios range from 0.413 to 0.964. Dense remains the default.
+
+The automated `ready_for_review` field remains false because it requires exact
+native equality and no representation flags. The assessment documents these
+findings without changing the raw flags. This is a review checkpoint, not automatic
+approval to update `main`.
+
+Settings were frozen and replayed on the first 2,048 queries. These are compatibility
+measurements, not a newly tuned matched-recall method ranking. Full sweeps, tuning,
+and IVF Roaring support remain deferred.
 
 Detached build states and logs live under `/data/cuvs-upstream-validation` on the
 validation host. Large datasets, copied indexes, allowlist artifacts, and build

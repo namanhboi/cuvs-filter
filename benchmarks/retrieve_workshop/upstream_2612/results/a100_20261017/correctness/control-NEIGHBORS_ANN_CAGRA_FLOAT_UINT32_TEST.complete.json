@@ -1,0 +1,18 @@
+{
+  "signature": {
+    "command": [
+      "micromamba",
+      "run",
+      "-p",
+      "/data/cuvs-upstream-envs/cuvs-2612",
+      "timeout",
+      "1800",
+      "/data/cuvs-upstream-control/cpp/build/gtests/NEIGHBORS_ANN_CAGRA_FLOAT_UINT32_TEST",
+      "--gtest_output=json:/data/cuvs-upstream-validation/benchmarks/correctness/control-NEIGHBORS_ANN_CAGRA_FLOAT_UINT32_TEST.json",
+      "--gtest_filter=*MultiPartition*"
+    ],
+    "executable_sha256": "2d1cac7dc8b3b68ff1a3e5e360530f7310b88b94c706cb26b6c01865bd3b05c7",
+    "library_sha256": "fff00667d1a1291f06a683a9c140c66539a7b6bb896a6141f5a3a38f214baac8"
+  },
+  "output_sha256": "f465fbeb0d7784bf56f3123a9456d94fd40274b88f2273eca7fbb48f9f6f0cf0"
+}

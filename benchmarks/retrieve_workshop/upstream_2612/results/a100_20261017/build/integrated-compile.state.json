@@ -1,0 +1,106 @@
+{
+  "started_at": "2026-10-17T10:41:18.965868+00:00",
+  "pid": 516871,
+  "steps": [
+    {
+      "command": [
+        "/home/ubuntu/.local/bin/micromamba",
+        "run",
+        "-p",
+        "/data/cuvs-upstream-envs/cuvs-2612",
+        "cmake",
+        "--build",
+        "cpp/build",
+        "--parallel",
+        "6",
+        "--target",
+        "CUVS_CAGRA_ANN_BENCH",
+        "CUVS_IVF_FLAT_ANN_BENCH",
+        "CUVS_BRUTE_FORCE_ANN_BENCH",
+        "NEIGHBORS_ANN_CAGRA_FILTER_BITMAP_TEST",
+        "NEIGHBORS_ANN_IVF_BITMAP_TEST",
+        "CORE_ROARING_ALLOWLIST_TEST",
+        "NEIGHBORS_ANN_CAGRA_FILTER_UDF_TEST",
+        "NEIGHBORS_ANN_CAGRA_BBQ_UINT32_TEST"
+      ],
+      "cwd": "/data/cuvs-upstream-integration",
+      "log": "/data/cuvs-upstream-validation/integrated-build.log",
+      "status": "passed",
+      "returncode": 0
+    },
+    {
+      "command": [
+        "/home/ubuntu/.local/bin/micromamba",
+        "run",
+        "-p",
+        "/data/cuvs-upstream-envs/cuvs-2612",
+        "flock",
+        "/data/cuvs-upstream-validation/gpu.lock",
+        "timeout",
+        "1800",
+        "/data/cuvs-upstream-integration/cpp/build/gtests/CORE_ROARING_ALLOWLIST_TEST",
+        "--gtest_output=json:/data/cuvs-upstream-validation/integrated-CORE_ROARING_ALLOWLIST_TEST.json"
+      ],
+      "cwd": "/data/cuvs-upstream-integration",
+      "log": "/data/cuvs-upstream-validation/integrated-CORE_ROARING_ALLOWLIST_TEST.log",
+      "status": "passed",
+      "returncode": 0
+    },
+    {
+      "command": [
+        "/home/ubuntu/.local/bin/micromamba",
+        "run",
+        "-p",
+        "/data/cuvs-upstream-envs/cuvs-2612",
+        "flock",
+        "/data/cuvs-upstream-validation/gpu.lock",
+        "timeout",
+        "1800",
+        "/data/cuvs-upstream-integration/cpp/build/gtests/NEIGHBORS_ANN_CAGRA_FILTER_BITMAP_TEST",
+        "--gtest_output=json:/data/cuvs-upstream-validation/integrated-NEIGHBORS_ANN_CAGRA_FILTER_BITMAP_TEST.json"
+      ],
+      "cwd": "/data/cuvs-upstream-integration",
+      "log": "/data/cuvs-upstream-validation/integrated-NEIGHBORS_ANN_CAGRA_FILTER_BITMAP_TEST.log",
+      "status": "passed",
+      "returncode": 0
+    },
+    {
+      "command": [
+        "/home/ubuntu/.local/bin/micromamba",
+        "run",
+        "-p",
+        "/data/cuvs-upstream-envs/cuvs-2612",
+        "flock",
+        "/data/cuvs-upstream-validation/gpu.lock",
+        "timeout",
+        "1800",
+        "/data/cuvs-upstream-integration/cpp/build/gtests/NEIGHBORS_ANN_CAGRA_FILTER_UDF_TEST",
+        "--gtest_output=json:/data/cuvs-upstream-validation/integrated-NEIGHBORS_ANN_CAGRA_FILTER_UDF_TEST.json"
+      ],
+      "cwd": "/data/cuvs-upstream-integration",
+      "log": "/data/cuvs-upstream-validation/integrated-NEIGHBORS_ANN_CAGRA_FILTER_UDF_TEST.log",
+      "status": "passed",
+      "returncode": 0
+    },
+    {
+      "command": [
+        "/home/ubuntu/.local/bin/micromamba",
+        "run",
+        "-p",
+        "/data/cuvs-upstream-envs/cuvs-2612",
+        "flock",
+        "/data/cuvs-upstream-validation/gpu.lock",
+        "timeout",
+        "1800",
+        "/data/cuvs-upstream-integration/cpp/build/gtests/NEIGHBORS_ANN_IVF_BITMAP_TEST",
+        "--gtest_output=json:/data/cuvs-upstream-validation/integrated-NEIGHBORS_ANN_IVF_BITMAP_TEST.json"
+      ],
+      "cwd": "/data/cuvs-upstream-integration",
+      "log": "/data/cuvs-upstream-validation/integrated-NEIGHBORS_ANN_IVF_BITMAP_TEST.log",
+      "status": "passed",
+      "returncode": 0
+    }
+  ],
+  "status": "passed",
+  "finished_at": "2026-10-17T10:47:52.917684+00:00"
+}

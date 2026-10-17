@@ -1,0 +1,27 @@
+{
+  "kind": "cagra",
+  "source": "/data/retrieve_data/arxiv-for-fanns-large/cagra_g64_ig128.index",
+  "output": "/data/cuvs-upstream-validation/indices/arxiv_cagra.index",
+  "source_version": 5,
+  "target_version": 6,
+  "source_sha256": "b97aa456b5cb6353044e3756c94e6a446cfb4dd73811ac6018b15147bc2800a4",
+  "output_sha256": "ce4b6b809ccbc41313505acd636766e3a3fc2749fa5c2116c9ab07ed8e26073f",
+  "summary": {
+    "dtype": "<f4",
+    "rows": 2735264,
+    "stored_dim": 0,
+    "degree": 64,
+    "metric": 0
+  },
+  "components": {
+    "graph": {
+      "dtype": "<u4",
+      "shape": [
+        2735264,
+        64
+      ],
+      "sha256": "1b68bd8c174ffdaa09dedb3470f542ae77648e3826dd28f7e1a3e941518f435e"
+    }
+  },
+  "verified_components": true
+}

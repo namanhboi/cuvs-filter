@@ -1,0 +1,23 @@
+{
+  "steps": [
+    {
+      "command": [
+        "micromamba",
+        "run",
+        "-p",
+        "/data/cuvs-upstream-envs/cuvs-2612",
+        "cmake",
+        "--build",
+        "cpp/build",
+        "--parallel",
+        "6",
+        "--target",
+        "NEIGHBORS_ANN_CAGRA_FILTER_UDF_TEST",
+        "CORE_ROARING_ALLOWLIST_TEST",
+        "NEIGHBORS_ANN_CAGRA_BBQ_UINT32_TEST"
+      ],
+      "cwd": "/data/cuvs-upstream-control",
+      "log": "/data/cuvs-upstream-validation/control-build.log"
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "case": "yfcc__k10__default_cagra",
+  "upstream_commit": "3721d31fb98ba927417f42fbe3f93ab9ff15ed8e",
+  "observed_empty_slots": 4769,
+  "observed_empty_id": 2147483647,
+  "observed_empty_distance": "+Infinity",
+  "filter_violations": 0,
+  "raw_outputs": {
+    ".ids": {
+      "sha256": "58f49b3fe48842b92d6625ac8790d5d5c100620469b972847e74974a9203a686",
+      "archived": "/data/cuvs-upstream-validation/benchmarks/native_attempts/1792237777543582588/control/yfcc__k10__default_cagra.ids"
+    },
+    ".distances": {
+      "sha256": "79b2e58ff4b079c24b8700d2b3d22306832a2e9ffb645034784c246e41e95e6c",
+      "archived": "/data/cuvs-upstream-validation/benchmarks/native_attempts/1792237777543582588/control/yfcc__k10__default_cagra.distances"
+    },
+    ".log": {
+      "sha256": "71b436ca91353da6013a372bb6b366eef1fa1b90e6fffc4c5a314a45803f92cf",
+      "archived": "/data/cuvs-upstream-validation/benchmarks/native_attempts/1792237777543582588/control/yfcc__k10__default_cagra.log"
+    }
+  },
+  "assessment": "Pinned upstream emits a visited-bit-cleared uint32 empty ID widened to int64, paired with positive infinity. Integration canonicalizes to int64 max and FLT_MAX. Normalize only these known empty-slot pairs in valid-neighbor comparisons, retain raw arrays, and reject unknown IDs, finite valid-looking distances, negative infinity, or NaN."
+}

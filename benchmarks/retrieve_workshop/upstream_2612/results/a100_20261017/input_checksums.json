@@ -1,0 +1,207 @@
+{
+  "/data/retrieve_data/yfcc-10M/base.10M.u8bin": {
+    "bytes": 1920000008,
+    "mtime_ns": 1787481271180690214,
+    "sha256": "589030afcbcc44a50ff798cec935f0980815a02eb7075b224d4f7c12febe96bf"
+  },
+  "/data/retrieve_data/navix_bitmap/yfcc/throughput_10000/shard_00000_02048/query.bin": {
+    "bytes": 393224,
+    "mtime_ns": 1787487603836570548,
+    "sha256": "5676e2cb6ee2913f67900ead6f03dcf1891cc9b3a2f862f12dd638acee1d4531"
+  },
+  "/data/retrieve_data/navix_bitmap/yfcc/throughput_10000/shard_00000_02048/groundtruth.ibin": {
+    "bytes": 81928,
+    "mtime_ns": 1787487603836570548,
+    "sha256": "7df955ee66df1418b2705fb960fcb17bd872f4da8cb818604d160328da6065ac"
+  },
+  "/data/retrieve_data/navix_bitmap/yfcc/throughput_10000/shard_00000_02048/filter.bitmap": {
+    "bytes": 2560000040,
+    "mtime_ns": 1787487587428466777,
+    "sha256": "cc9ed621876febe5e7581100e01e73a5ae34678d99e2372b30b289e4a947bc53"
+  },
+  "/data/retrieve_data/arxiv-for-fanns-large/base.fbin": {
+    "bytes": 44814565384,
+    "mtime_ns": 1787487941666825320,
+    "sha256": "9decf25df3136945aa9992fb26dbb6891c9899bf9061c66b0051aa90d11c3e73"
+  },
+  "/data/retrieve_data/navix_bitmap/arxiv-large/em/throughput_10000/shard_00000_02048/query.bin": {
+    "bytes": 33554440,
+    "mtime_ns": 1787487973947049952,
+    "sha256": "a48746478f051d2e0e1975c959bd2f5191ab62f38383a7c445ad2ba13e352f91"
+  },
+  "/data/retrieve_data/navix_bitmap/arxiv-large/em/throughput_10000/shard_00000_02048/groundtruth.ibin": {
+    "bytes": 81928,
+    "mtime_ns": 1787487973963050063,
+    "sha256": "881bbbde28c5764a83645a200aac5414d8a70e0bcdbc4581f410d27c26dbcb0d"
+  },
+  "/data/retrieve_data/navix_bitmap/arxiv-large/em/throughput_10000/shard_00000_02048/filter.bitmap": {
+    "bytes": 700227624,
+    "mtime_ns": 1787487972223037920,
+    "sha256": "a06ddf85a245a4d36c532d6d1416132fc36a4f3d4affe71d163121dc61448cf7"
+  },
+  "/data/retrieve_data/navix_bitmap/arxiv-large/emis/throughput_10000/shard_00000_02048/query.bin": {
+    "bytes": 33554440,
+    "mtime_ns": 1787487985919133566,
+    "sha256": "a48746478f051d2e0e1975c959bd2f5191ab62f38383a7c445ad2ba13e352f91"
+  },
+  "/data/retrieve_data/navix_bitmap/arxiv-large/emis/throughput_10000/shard_00000_02048/groundtruth.ibin": {
+    "bytes": 81928,
+    "mtime_ns": 1787487985935133678,
+    "sha256": "6f9299521a1a14b8ffca1a919e6ea0ef3501ee03231a72afaa8c1faba8e1542b"
+  },
+  "/data/retrieve_data/navix_bitmap/arxiv-large/emis/throughput_10000/shard_00000_02048/filter.bitmap": {
+    "bytes": 700227624,
+    "mtime_ns": 1787487983031113387,
+    "sha256": "16f120854d17487d5ea2ea4a2e8e95394e451ec260f9b91e22e5f6aa230ea215"
+  },
+  "/data/retrieve_data/navix_bitmap/arxiv-large/r/throughput_10000/shard_00000_02048/query.bin": {
+    "bytes": 33554440,
+    "mtime_ns": 1787487999219226644,
+    "sha256": "a48746478f051d2e0e1975c959bd2f5191ab62f38383a7c445ad2ba13e352f91"
+  },
+  "/data/retrieve_data/navix_bitmap/arxiv-large/r/throughput_10000/shard_00000_02048/groundtruth.ibin": {
+    "bytes": 81928,
+    "mtime_ns": 1787487999235226756,
+    "sha256": "be240be02b4c99ee20c520a483df332a5d170995301130ddbfc68601cd5bed93"
+  },
+  "/data/retrieve_data/navix_bitmap/arxiv-large/r/throughput_10000/shard_00000_02048/filter.bitmap": {
+    "bytes": 700227624,
+    "mtime_ns": 1787487994635194540,
+    "sha256": "1b2140152ccc3690fc1e37edba86bffb263d2233a91846da2fa7150d691342c7"
+  },
+  "/data/retrieve_data/navix_bitmap_k100/yfcc/throughput_10000/shard_00_00000_02048/query.bin": {
+    "bytes": 393224,
+    "mtime_ns": 1787487603836570548,
+    "sha256": "5676e2cb6ee2913f67900ead6f03dcf1891cc9b3a2f862f12dd638acee1d4531"
+  },
+  "/data/retrieve_data/navix_bitmap_k100/yfcc/throughput_10000/shard_00_00000_02048/groundtruth.ibin": {
+    "bytes": 819208,
+    "mtime_ns": 1787694965160743458,
+    "sha256": "64162109f02d5112fc20011fe6935e682ab2772c42a4ee2f6fed3321ddf3e8b0"
+  },
+  "/data/retrieve_data/navix_bitmap_k100/yfcc/throughput_10000/shard_00_00000_02048/filter.bitmap": {
+    "bytes": 2560000040,
+    "mtime_ns": 1787487587428466777,
+    "sha256": "cc9ed621876febe5e7581100e01e73a5ae34678d99e2372b30b289e4a947bc53"
+  },
+  "/data/retrieve_data/navix_bitmap_k100/arxiv-large/em/throughput_10000/shard_00_00000_02048/query.bin": {
+    "bytes": 33554440,
+    "mtime_ns": 1787487973947049952,
+    "sha256": "a48746478f051d2e0e1975c959bd2f5191ab62f38383a7c445ad2ba13e352f91"
+  },
+  "/data/retrieve_data/navix_bitmap_k100/arxiv-large/em/throughput_10000/shard_00_00000_02048/groundtruth.ibin": {
+    "bytes": 819208,
+    "mtime_ns": 1787694966336796219,
+    "sha256": "b6f4c671cdce9ee33c2de3bb7db04048a55945b58357001ce54af2b21f81fb22"
+  },
+  "/data/retrieve_data/navix_bitmap_k100/arxiv-large/em/throughput_10000/shard_00_00000_02048/filter.bitmap": {
+    "bytes": 700227624,
+    "mtime_ns": 1787487972223037920,
+    "sha256": "a06ddf85a245a4d36c532d6d1416132fc36a4f3d4affe71d163121dc61448cf7"
+  },
+  "/data/retrieve_data/navix_bitmap_k100/arxiv-large/emis/throughput_10000/shard_00_00000_02048/query.bin": {
+    "bytes": 33554440,
+    "mtime_ns": 1787487985919133566,
+    "sha256": "a48746478f051d2e0e1975c959bd2f5191ab62f38383a7c445ad2ba13e352f91"
+  },
+  "/data/retrieve_data/navix_bitmap_k100/arxiv-large/emis/throughput_10000/shard_00_00000_02048/groundtruth.ibin": {
+    "bytes": 819208,
+    "mtime_ns": 1787694967260837696,
+    "sha256": "43742de0744bcac962f0b25d843fd9a7af4bc5dc7073aa4c47971c8df9e8bda1"
+  },
+  "/data/retrieve_data/navix_bitmap_k100/arxiv-large/emis/throughput_10000/shard_00_00000_02048/filter.bitmap": {
+    "bytes": 700227624,
+    "mtime_ns": 1787487983031113387,
+    "sha256": "16f120854d17487d5ea2ea4a2e8e95394e451ec260f9b91e22e5f6aa230ea215"
+  },
+  "/data/retrieve_data/navix_bitmap_k100/arxiv-large/r/throughput_10000/shard_00_00000_02048/query.bin": {
+    "bytes": 33554440,
+    "mtime_ns": 1787487999219226644,
+    "sha256": "a48746478f051d2e0e1975c959bd2f5191ab62f38383a7c445ad2ba13e352f91"
+  },
+  "/data/retrieve_data/navix_bitmap_k100/arxiv-large/r/throughput_10000/shard_00_00000_02048/groundtruth.ibin": {
+    "bytes": 819208,
+    "mtime_ns": 1787694968164878296,
+    "sha256": "b62f11c5d884adc4623644de5bcd2ce48b8ee5e0373ece4e0f540a3cd9820e8a"
+  },
+  "/data/retrieve_data/navix_bitmap_k100/arxiv-large/r/throughput_10000/shard_00_00000_02048/filter.bitmap": {
+    "bytes": 700227624,
+    "mtime_ns": 1787487994635194540,
+    "sha256": "1b2140152ccc3690fc1e37edba86bffb263d2233a91846da2fa7150d691342c7"
+  },
+  "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0001_random/shard_00000_02048/query.bin": {
+    "bytes": 33554440,
+    "mtime_ns": 1790579723543008387,
+    "sha256": "a48746478f051d2e0e1975c959bd2f5191ab62f38383a7c445ad2ba13e352f91"
+  },
+  "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0001_random/shard_00000_02048/groundtruth.ibin": {
+    "bytes": 81928,
+    "mtime_ns": 1790579750551023779,
+    "sha256": "e556b9788a8da6c8ebd77d2870198add72127be7c14b43df324b6ff45a99609d"
+  },
+  "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0001_random/shard_00000_02048/filter.bitmap": {
+    "bytes": 700227624,
+    "mtime_ns": 1790579719667006256,
+    "sha256": "27c84bf07e4432aa86107e92f12c902aea92d259a483eaf265a9605915c41796"
+  },
+  "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0003_random/shard_00000_02048/query.bin": {
+    "bytes": 33554440,
+    "mtime_ns": 1790579727959010845,
+    "sha256": "a48746478f051d2e0e1975c959bd2f5191ab62f38383a7c445ad2ba13e352f91"
+  },
+  "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0003_random/shard_00000_02048/groundtruth.ibin": {
+    "bytes": 81928,
+    "mtime_ns": 1790579757603027947,
+    "sha256": "60ddb6ff1a96cfc601aba6539de247af32821243f6f196053559f7dbb65213c5"
+  },
+  "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0003_random/shard_00000_02048/filter.bitmap": {
+    "bytes": 700227624,
+    "mtime_ns": 1790579724571008956,
+    "sha256": "50bc0d266ce5b073399b9e01a3e2785c1a7c2ba66f26e646754e4ea01b6b2f3e"
+  },
+  "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p001_random/shard_00000_02048/query.bin": {
+    "bytes": 33554440,
+    "mtime_ns": 1790579732835013582,
+    "sha256": "a48746478f051d2e0e1975c959bd2f5191ab62f38383a7c445ad2ba13e352f91"
+  },
+  "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p001_random/shard_00000_02048/groundtruth.ibin": {
+    "bytes": 81928,
+    "mtime_ns": 1790579764567032124,
+    "sha256": "0ae4b857f5955d196a42cae3dbe5523b73d50cfba2b26a4c5da67d3bac207ef5"
+  },
+  "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p001_random/shard_00000_02048/filter.bitmap": {
+    "bytes": 700227624,
+    "mtime_ns": 1790579729007011432,
+    "sha256": "156b919578ae256eec3b2bd2006233d5d9dc7546de074d31b4f87f6d719c3007"
+  },
+  "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p003_random/shard_00000_02048/query.bin": {
+    "bytes": 33554440,
+    "mtime_ns": 1790579738235016650,
+    "sha256": "a48746478f051d2e0e1975c959bd2f5191ab62f38383a7c445ad2ba13e352f91"
+  },
+  "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p003_random/shard_00000_02048/groundtruth.ibin": {
+    "bytes": 81928,
+    "mtime_ns": 1790579771631036425,
+    "sha256": "ea42207038aa2201ec69e4436b3e6469f697acae6bdae95609454c9a7d86c285"
+  },
+  "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p003_random/shard_00000_02048/filter.bitmap": {
+    "bytes": 700227624,
+    "mtime_ns": 1790579734175014340,
+    "sha256": "13d4d826ee7f01fd547cc581e0f255005e793e08d696636586c65414880d832a"
+  },
+  "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p01_random/shard_00000_02048/query.bin": {
+    "bytes": 33554440,
+    "mtime_ns": 1790579744179020065,
+    "sha256": "a48746478f051d2e0e1975c959bd2f5191ab62f38383a7c445ad2ba13e352f91"
+  },
+  "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p01_random/shard_00000_02048/groundtruth.ibin": {
+    "bytes": 81928,
+    "mtime_ns": 1790579779503041284,
+    "sha256": "8adf19eeb143467f59a75bca7481066407d0498fb344ec6fa5801a9b4daabd98"
+  },
+  "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p01_random/shard_00000_02048/filter.bitmap": {
+    "bytes": 700227624,
+    "mtime_ns": 1790579740671018045,
+    "sha256": "e68e638d24477a5c85b7eb686dff3ca664f6762d10d9008730dcdd7f5d38c931"
+  }
+}
