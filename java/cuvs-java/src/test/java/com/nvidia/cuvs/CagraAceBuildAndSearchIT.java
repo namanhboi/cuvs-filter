@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2025-2026, NVIDIA CORPORATION.
+ * SPDX-FileCopyrightText: Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
 package com.nvidia.cuvs;
@@ -16,6 +16,7 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -34,11 +35,21 @@ public class CagraAceBuildAndSearchIT extends CuVSTestCase {
 
   private static final Logger log = LoggerFactory.getLogger(CagraAceBuildAndSearchIT.class);
 
+  private Path buildDir;
+
   @Before
   public void setup() {
-    assumeTrue("not supported on " + System.getProperty("os.name"), isLinuxAmd64());
+    assumeTrue("not supported on " + System.getProperty("os.name"), isLinuxSupportedArch());
     initializeRandom();
     log.trace("Random context initialized for test.");
+  }
+
+  @After
+  public void cleanupBuildDir() {
+    if (buildDir != null) {
+      deleteRecursively(buildDir);
+      buildDir = null;
+    }
   }
 
   private static List<Map<Integer, Float>> getExpectedResults() {
@@ -99,10 +110,14 @@ public class CagraAceBuildAndSearchIT extends CuVSTestCase {
 
       // Build the index with ACE
       try (CagraIndex index =
-          CagraIndex.newBuilder(resources)
-              .withDataset(dataset)
-              .withIndexParams(indexParams)
-              .build()) {
+              CagraIndex.newBuilder(resources)
+                  .withDataset(dataset)
+                  .withIndexParams(indexParams)
+                  .build();
+          var hostVectors = CuVSMatrix.ofArray(dataset);
+          var deviceVectors = hostVectors.toDevice(resources);
+          var indexDataset = index.makePaddedDataset(deviceVectors)) {
+        index.updateDataset(indexDataset);
 
         // Verify index was built
         assertNotNull("Index should not be null", index);
@@ -141,7 +156,7 @@ public class CagraAceBuildAndSearchIT extends CuVSTestCase {
 
     try (CuVSResources resources = CheckedCuVSResources.create()) {
       // Configure ACE parameters for disk-based mode
-      Path buildDir = Path.of("/tmp/java_ace_test");
+      buildDir = Files.createTempDirectory("java_ace_test");
       CuVSAceParams aceParams =
           new CuVSAceParams.Builder()
               .withNpartitions(2)
@@ -187,7 +202,10 @@ public class CagraAceBuildAndSearchIT extends CuVSTestCase {
         // Convert CAGRA index to HNSW using fromCagra
         // This automatically handles disk-based indices
         HnswIndexParams hnswIndexParams =
-            new HnswIndexParams.Builder().withVectorDimension(2).withHierarchy(HnswHierarchy.GPU).build();
+            new HnswIndexParams.Builder()
+                .withVectorDimension(2)
+                .withHierarchy(HnswHierarchy.GPU)
+                .build();
 
         try (var hnswIndexSerialized = HnswIndex.fromCagra(hnswIndexParams, index)) {
           var hnswIndexSerializedPath = buildDir.resolve("hnsw_index.bin");
@@ -219,9 +237,6 @@ public class CagraAceBuildAndSearchIT extends CuVSTestCase {
             hnswIndex.close();
           }
         }
-
-        // Clean up the default build directory
-        deleteRecursively(buildDir);
       }
     }
   }

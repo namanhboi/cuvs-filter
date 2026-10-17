@@ -51,7 +51,7 @@ class bitmap_filter_adapter {
                                   payload_,
                                   device_words_.size() * sizeof(std::uint32_t),
                                   cudaMemcpyHostToDevice,
-                                  stream));
+                                  stream.get()));
     raft::resource::sync_stream(res);
   }
 
@@ -415,8 +415,8 @@ class spmat_contains_all_runtime final : public udf_filter_runtime {
                                                     storage_->base.rows,
                                                     storage_->queries.rows,
                                                     query_offset};
-    RAFT_CUDA_TRY(
-      cudaMemcpyAsync(context_.data(), &context, sizeof(context), cudaMemcpyHostToDevice, stream_));
+    RAFT_CUDA_TRY(cudaMemcpyAsync(
+      context_.data(), &context, sizeof(context), cudaMemcpyHostToDevice, stream_.get()));
   }
 
   [[nodiscard]] auto filter() const -> cuvs::neighbors::filtering::udf_filter override
@@ -430,7 +430,7 @@ class spmat_contains_all_runtime final : public udf_filter_runtime {
 
  private:
   std::shared_ptr<const spmat_contains_all_storage> storage_;
-  rmm::cuda_stream_view stream_;
+  cuda::stream_ref stream_;
   rmm::device_uvector<spmat_contains_all_device_context> context_;
 };
 
@@ -600,8 +600,8 @@ class arxiv_range_runtime final : public udf_filter_runtime {
                                              storage_->base.rows,
                                              storage_->queries.rows,
                                              query_offset};
-    RAFT_CUDA_TRY(
-      cudaMemcpyAsync(context_.data(), &context, sizeof(context), cudaMemcpyHostToDevice, stream_));
+    RAFT_CUDA_TRY(cudaMemcpyAsync(
+      context_.data(), &context, sizeof(context), cudaMemcpyHostToDevice, stream_.get()));
   }
 
   [[nodiscard]] auto filter() const -> cuvs::neighbors::filtering::udf_filter override
@@ -615,7 +615,7 @@ class arxiv_range_runtime final : public udf_filter_runtime {
 
  private:
   std::shared_ptr<const arxiv_range_storage> storage_;
-  rmm::cuda_stream_view stream_;
+  cuda::stream_ref stream_;
   rmm::device_uvector<arxiv_range_device_context> context_;
 };
 

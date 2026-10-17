@@ -164,15 +164,15 @@ void select_navix_bitmap_seeds(raft::resources const& res,
     static_cast<std::int64_t>(view.get_n_cols()),
     static_cast<std::int64_t>(view.get_original_nbits())};
   auto stream = raft::resource::get_cuda_stream(res);
-  navix_select_bitmap_seeds_kernel<<<num_queries, 32, 0, stream>>>(bitmap,
-                                                                   source_indices,
-                                                                   query_offset,
-                                                                   num_queries,
-                                                                   graph_size,
-                                                                   seed_stride,
-                                                                   seed_ids,
-                                                                   seed_counts,
-                                                                   inspected_units);
+  navix_select_bitmap_seeds_kernel<<<num_queries, 32, 0, stream.get()>>>(bitmap,
+                                                                         source_indices,
+                                                                         query_offset,
+                                                                         num_queries,
+                                                                         graph_size,
+                                                                         seed_stride,
+                                                                         seed_ids,
+                                                                         seed_counts,
+                                                                         inspected_units);
   RAFT_CUDA_TRY(cudaPeekAtLastError());
 }
 

@@ -19,7 +19,7 @@
 #include <raft/random/rng.cuh>
 #include <raft/util/integer_utils.hpp>
 
-#include <rmm/cuda_stream_view.hpp>
+#include <cuda/stream_ref>
 #include <rmm/device_uvector.hpp>
 
 #include <gtest/gtest.h>

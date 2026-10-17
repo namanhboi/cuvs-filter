@@ -1,4 +1,4 @@
-# <div align="left"><img src="https://rapids.ai/assets/images/rapids_logo.png" width="90px"/>&nbsp;cuVS: Vector Search and Clustering on the GPU</div>
+# cuVS: Vector Search and Clustering on the GPU
 
 
 ## Contents
@@ -12,14 +12,13 @@
 
 ## Useful Resources
 
-- [Documentation](https://docs.rapids.ai/api/cuvs/nightly/): Library documentation.
-- [Build and Install Guide](https://docs.rapids.ai/api/cuvs/nightly/build): Instructions for installing and building cuVS.
-- [Getting Started Guide](https://docs.rapids.ai/api/cuvs/nightly/getting_started): Guide to getting started with cuVS.
-- [Code Examples](https://github.com/rapidsai/cuvs/tree/HEAD/examples): Self-contained Code Examples.
-- [API Reference Documentation](https://docs.rapids.ai/api/cuvs/nightly/api_docs): API Documentation.
-- [RAPIDS Community](https://rapids.ai/community.html): Get help, contribute, and collaborate.
-- [GitHub repository](https://github.com/rapidsai/cuvs): Download the cuVS source code.
-- [Issue tracker](https://github.com/rapidsai/cuvs/issues): Report issues or request features.
+- [Documentation](https://docs.nvidia.com/cuvs): Library documentation.
+- [Build and Install Guide](https://docs.nvidia.com/cuvs/installation): Instructions for installing and building cuVS.
+- [Getting Started Guide](https://docs.nvidia.com/cuvs/getting-started): Guide to getting started with cuVS.
+- [Code Examples](https://github.com/NVIDIA/cuvs/tree/HEAD/examples): Self-contained Code Examples.
+- [API Reference Documentation](https://docs.nvidia.com/cuvs/api_reference): API Documentation.
+- [GitHub repository](https://github.com/NVIDIA/cuvs): Download the cuVS source code.
+- [Issue tracker](https://github.com/NVIDIA/cuvs/issues): Report issues or request features.
 
 ## What is cuVS?
 
@@ -69,7 +68,7 @@ In addition to the items above, cuVS shoulders the burden of keeping non-trivial
 
 ## cuVS Technology Stack
 
-cuVS is built on top of the RAPIDS RAFT library of high performance machine learning primitives and provides all the necessary routines for vector search and clustering on the GPU.
+cuVS is built on top of the NVIDIA RAFT library of high performance machine learning primitives and provides all the necessary routines for vector search and clustering on the GPU.
 
 ![cuVS is built on top of low-level CUDA libraries and provides many important routines that enable vector search and clustering on the GPU](img/tech_stack.png "cuVS Technology Stack")
 
@@ -82,7 +81,11 @@ cuVS comes with pre-built packages that can be installed through [conda](https:/
 > [!NOTE]
 > If compiled binary size is a concern, please note that the cuVS builds for CUDA 13 are roughly half the size of CUDA 12 builds. This is a result of improved compression rates in the newer supported CUDA drivers. We will be adopting the newer drivers for CUDA 12 builds in Spring of 2026, which will ultimately bring them down to roughly the size of the CUDA 13 builds. In the meantime, the NVIDIA cuVS team is continuing to shave down the binary sizes for all supported CUDA versions. If binary size is an issue for you, please consider linking to cuVS statically either by building from source or using pre-built `libcuvs-static` conda package.
 
-Please see the [Build and Install Guide](https://docs.rapids.ai/api/cuvs/nightly/build/) for more information on installing the available cuVS packages and building from source.
+Please see the [Build and Install Guide](https://docs.nvidia.com/cuvs/installation) for more information on installing the available cuVS packages and building from source.
+
+### Standalone C library (Docker)
+
+To build the standalone C library tarball (`libcuvs_c.tar.gz`) for use in your own C/C++ projects, see **[Building the standalone C library with Docker](https://docs.nvidia.com/cuvs/installation#build-the-standalone-c-library-with-docker)**.
 
 ## Getting Started
 
@@ -114,7 +117,7 @@ cagra::index_params index_params;
 auto index = cagra::build(res, index_params, dataset);
 ```
 
-For more code examples of the C++ APIs, including drop-in Cmake project templates, please refer to the [C++ examples](https://github.com/rapidsai/cuvs/tree/HEAD/examples) directory in the codebase.
+For more code examples of the C++ APIs, including drop-in Cmake project templates, please refer to the [C++ examples](https://github.com/NVIDIA/cuvs/tree/HEAD/examples) directory in the codebase.
 
 ### C API
 
@@ -132,81 +135,69 @@ cuvsResourcesCreate(&res);
 cuvsCagraIndexParamsCreate(&index_params);
 cuvsCagraIndexCreate(&index);
 
-cuvsCagraBuild(res, index_params, dataset, index);
+cuvsDataset_t dataset_view;
+cuvsDatasetMakeStandardView(res, dataset, &dataset_view);
 
+cuvsCagraBuild(res, index_params, dataset_view, index);
+
+cuvsDatasetDestroy(dataset_view);
 cuvsCagraIndexDestroy(index);
 cuvsCagraIndexParamsDestroy(index_params);
 cuvsResourcesDestroy(res);
 ```
 
-For more code examples of the C APIs, including drop-in Cmake project templates, please refer to the [C examples](https://github.com/rapidsai/cuvs/tree/main/examples/c)
+For more code examples of the C APIs, including drop-in Cmake project templates, please refer to the [C examples](https://github.com/NVIDIA/cuvs/tree/main/examples/c)
 
 ### Rust API
 
-```rust
-use cuvs::cagra::{Index, IndexParams, SearchParams};
-use cuvs::{ManagedTensor, Resources, Result};
+```rust,no_run
+use cuvs::distance::DistanceType;
+use cuvs::neighbors::cagra::{Index, IndexParams, SearchParams};
+use cuvs::{AsDlTensor, AsDlTensorMut, DLPackError, DLTensorView, DLTensorViewMut, Resources};
 
-use ndarray::s;
-use ndarray_rand::rand_distr::Uniform;
-use ndarray_rand::RandomExt;
+// cuVS is agnostic about where your vectors live: `build` and `search` accept
+// any type implementing `AsDlTensor` (inputs) / `AsDlTensorMut` (outputs). Wrap
+// your own GPU buffer by implementing these traits. See `rust/cuvs/examples`
+// for a complete, runnable CUDA-backed implementation.
+struct GpuTensor;
+impl AsDlTensor for GpuTensor {
+    fn as_dl_tensor(&self) -> Result<DLTensorView<'_>, DLPackError> {
+        unimplemented!("wrap your device buffer; see rust/cuvs/examples")
+    }
+}
+impl AsDlTensorMut for GpuTensor {
+    fn as_dl_tensor_mut(&mut self) -> Result<DLTensorViewMut<'_>, DLPackError> {
+        unimplemented!("wrap your device buffer; see rust/cuvs/examples")
+    }
+}
 
-/// Example showing how to index and search data with CAGRA
-fn cagra_example() -> Result<()> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let res = Resources::new()?;
 
-    // Create a new random dataset to index
-    let n_datapoints = 65536;
-    let n_features = 512;
-    let dataset =
-        ndarray::Array::<f32, _>::random((n_datapoints, n_features), Uniform::new(0., 1.0));
+    // Build a CAGRA index over your dataset.
+    let dataset = GpuTensor;
+    let index_params = IndexParams::builder()
+        .metric(DistanceType::L2Expanded)
+        .graph_degree(64)
+        .build()?;
+    let index = Index::build(&res, &index_params, &dataset)?;
 
-    // build the cagra index
-    let build_params = IndexParams::new()?;
-    let index = Index::build(&res, &build_params, &dataset)?;
-    println!(
-        "Indexed {}x{} datapoints into cagra index",
-        n_datapoints, n_features
-    );
+    // Search for the k nearest neighbors of each query, writing the results into
+    // the neighbor and distance device buffers.
+    let queries = GpuTensor;
+    let (mut neighbors, mut distances) = (GpuTensor, GpuTensor);
+    let search_params = SearchParams::builder().itopk_size(64).build()?;
+    index.search(&res, &search_params, &queries, &mut neighbors, &mut distances)?;
 
-    // use the first 4 points from the dataset as queries : will test that we get them back
-    // as their own nearest neighbor
-    let n_queries = 4;
-    let queries = dataset.slice(s![0..n_queries, ..]);
-
-    let k = 10;
-
-    // CAGRA search API requires queries and outputs to be on device memory
-    // copy query data over, and allocate new device memory for the distances/ neighbors
-    // outputs
-    let queries = ManagedTensor::from(&queries).to_device(&res)?;
-    let mut neighbors_host = ndarray::Array::<u32, _>::zeros((n_queries, k));
-    let neighbors = ManagedTensor::from(&neighbors_host).to_device(&res)?;
-
-    let mut distances_host = ndarray::Array::<f32, _>::zeros((n_queries, k));
-    let distances = ManagedTensor::from(&distances_host).to_device(&res)?;
-
-    let search_params = SearchParams::new()?;
-
-    index.search(&res, &search_params, &queries, &neighbors, &distances)?;
-
-    // Copy back to host memory
-    distances.to_host(&res, &mut distances_host)?;
-    neighbors.to_host(&res, &mut neighbors_host)?;
-
-    // nearest neighbors should be themselves, since queries are from the
-    // dataset
-    println!("Neighbors {:?}", neighbors_host);
-    println!("Distances {:?}", distances_host);
     Ok(())
 }
 ```
 
-For more code examples of the Rust APIs, including a drop-in project templates, please refer to the [Rust examples](https://github.com/rapidsai/cuvs/tree/main/examples/rust).
+For more code examples of the Rust APIs, including a drop-in project templates, please refer to the [Rust examples](https://github.com/NVIDIA/cuvs/tree/main/examples/rust).
 
 ## Contributing
 
-If you are interested in contributing to the cuVS library, please read our [Contributing guidelines](docs/source/contributing.md). Refer to the [Developer Guide](docs/source/developer_guide.md) for details on the developer guidelines, workflows, and principles.
+If you are interested in contributing to the cuVS library, please read our [Contributing guidelines](fern/pages/contributing.md). Refer to the [Developer Guide](fern/pages/developer_guide.md) for details on the developer guidelines, workflows, and principles.
 
 ## References
 

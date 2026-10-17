@@ -1,5 +1,5 @@
 {
-  "filter_name": ["none", "bitset", "bitmap"],
+  "filter_name": ["none", "bitset", "bitmap", "bloom_filter", "roaring"],
   "_bitset": [
     {
       "bitset_type": "uint32_t",

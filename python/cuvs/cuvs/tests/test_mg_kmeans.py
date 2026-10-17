@@ -110,7 +110,7 @@ def test_mg_kmeans_fit_options(dtype, init_method, weighted):
         tol=1e-10,
         n_init=3 if init_method == "Random" else 1,
         init_size=X.shape[0],
-        streaming_batch_size=37,
+        device_buffer_samples=37,
     )
     centroids = initial_centroids.copy() if init_method == "Array" else None
 
@@ -218,3 +218,10 @@ def test_mg_kmeans_input_validation():
             sample_weights=cp.ones(X.shape[0], dtype=cp.float32),
             resources=resources,
         )
+
+
+def test_mg_stream_pool_setter():
+    device_ids = [0, 1] if has_gpus(2) else [0]
+    resources = MultiGpuResources(device_ids=device_ids)
+    resources.set_stream_pool(2)
+    resources.sync()

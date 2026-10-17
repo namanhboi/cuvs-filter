@@ -131,11 +131,11 @@ uint64_t device_fingerprint(raft::resources const& res,
 {
   auto stream = raft::resource::get_cuda_stream(res);
   rmm::device_uvector<uint64_t> result(1, stream);
-  RAFT_CUDA_TRY(cudaMemsetAsync(result.data(), 0, sizeof(uint64_t), stream));
+  RAFT_CUDA_TRY(cudaMemsetAsync(result.data(), 0, sizeof(uint64_t), stream.get()));
   auto count  = rows * columns;
   auto blocks = static_cast<unsigned>(std::min<uint64_t>((count + 255) / 256, 1024));
   if (blocks != 0) {
-    fingerprint_strided_kernel<<<blocks, 256, 0, stream>>>(
+    fingerprint_strided_kernel<<<blocks, 256, 0, stream.get()>>>(
       data, rows, columns, stride, result.data());
     RAFT_CUDA_TRY(cudaPeekAtLastError());
   }
@@ -150,8 +150,10 @@ void validate_persistence_index(cagra::index<T, uint32_t> const& index)
 {
   RAFT_EXPECTS(!index.dataset_fd().has_value() && !index.graph_fd().has_value(),
                "FAVOR delta-d sidecar requires an in-memory index, not a disk-backed index");
-  auto dataset = index.dataset();
-  auto graph   = index.graph();
+  auto binding = index.dataset();
+  auto dataset = raft::make_device_strided_matrix_view<const T, int64_t>(
+    binding.view().data_handle(), binding.n_rows(), binding.dim(), binding.stride());
+  auto graph = index.graph();
   RAFT_EXPECTS(dataset.data_handle() != nullptr && dataset.extent(0) > 0 && dataset.extent(1) > 0,
                "FAVOR delta-d sidecar requires an attached dense device dataset");
   RAFT_EXPECTS(graph.data_handle() != nullptr && graph.extent(0) > 0 && graph.extent(1) > 0,
@@ -177,8 +179,10 @@ auto make_sidecar(raft::resources const& res,
   validate_persistence_index(index);
   validate_persistence_params(params, index.size());
   RAFT_EXPECTS(std::isfinite(delta_d), "FAVOR delta-d sidecar value must be finite");
-  auto dataset = index.dataset();
-  auto graph   = index.graph();
+  auto binding = index.dataset();
+  auto dataset = raft::make_device_strided_matrix_view<const T, int64_t>(
+    binding.view().data_handle(), binding.n_rows(), binding.dim(), binding.stride());
+  auto graph = index.graph();
   favor_delta_d_sidecar sidecar{};
   std::memcpy(sidecar.magic, sidecar_magic.data(), sidecar_magic.size());
   sidecar.file_version        = sidecar_file_version;
@@ -452,8 +456,10 @@ float compute_favor_delta_d_impl(raft::resources const& res,
   RAFT_EXPECTS(!index.dataset_fd().has_value() && !index.graph_fd().has_value(),
                "FAVOR delta-d does not support disk-backed indices");
 
-  auto dataset = index.dataset();
-  auto graph   = index.graph();
+  auto binding = index.dataset();
+  auto dataset = raft::make_device_strided_matrix_view<const T, int64_t>(
+    binding.view().data_handle(), binding.n_rows(), binding.dim(), binding.stride());
+  auto graph = index.graph();
   RAFT_EXPECTS(dataset.data_handle() != nullptr && dataset.extent(0) > 0 && dataset.extent(1) > 0,
                "FAVOR delta-d requires an attached dense device dataset");
   RAFT_EXPECTS(graph.data_handle() != nullptr && graph.extent(0) > 0 && graph.extent(1) > 0,
@@ -500,7 +506,7 @@ float compute_favor_delta_d_impl(raft::resources const& res,
                                        cudaFuncAttributeMaxDynamicSharedMemorySize,
                                        static_cast<int>(shared_bytes)));
   }
-  favor_delta_d_kernel<<<dataset.extent(0), block_size, shared_bytes, stream>>>(
+  favor_delta_d_kernel<<<dataset.extent(0), block_size, shared_bytes, stream.get()>>>(
     dataset.data_handle(),
     dataset.stride(0),
     dataset.extent(0),

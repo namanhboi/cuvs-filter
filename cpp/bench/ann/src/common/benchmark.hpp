@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2023-2026, NVIDIA CORPORATION.
+ * SPDX-FileCopyrightText: Copyright (c) 2023-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
 #pragma once
@@ -875,452 +875,483 @@ void bench_search(::benchmark::State& state,
                         local_native_l2_strict_prefix_errors.end(),
                         0);
 
-      out_offset += n_queries;
-      batch_offset = (batch_offset + queries_stride) % query_set_size;
-    }
-    double actual_recall   = static_cast<double>(match_count) / static_cast<double>(total_count);
-    double valid_gt_recall = valid_total_count == 0 ? 0.0
-                                                    : static_cast<double>(valid_match_count) /
-                                                        static_cast<double>(valid_total_count);
-    /* NOTE: recall in the throughput mode & filtering
+      // Avoid CPU oversubscription when parallelizing recall calculation
+      int num_workers = static_cast<int>(std::thread::hardware_concurrency()) /
+                        benchmark_n_threads;  // includes main
+      if (num_workers < 1) { num_workers = 1; }
+      // No benefit from more workers than rows
+      num_workers                  = std::min(num_workers, std::max(1, static_cast<int>(rows)));
+      const int num_helper_threads = num_workers - 1;
 
-    When filtering is enabled, `total_count` may vary between individual threads, but we still take
-    the simple average across in-thread recalls. Strictly speaking, this is incorrect, but it's good
-    enough under assumption that the filtering is more-or-less uniform.
-    */
-    state.counters.insert({"Recall", {actual_recall, benchmark::Counter::kAvgThreads}});
-    state.counters.insert({"ValidGTRecall", {valid_gt_recall, benchmark::Counter::kAvgThreads}});
-    state.counters.insert({"ValidGTFraction",
-                           {static_cast<double>(valid_total_count) / static_cast<double>(rows * k),
-                            benchmark::Counter::kAvgThreads}});
-    state.counters.insert(
-      {"UnderfilledQueries",
-       {static_cast<double>(underfilled_query_count) / static_cast<double>(rows),
-        benchmark::Counter::kAvgThreads}});
-    state.counters.insert(
-      {"MissingResultSlots",
-       {static_cast<double>(missing_result_count) / static_cast<double>(rows * k),
-        benchmark::Counter::kAvgThreads}});
-    state.counters.insert(
-      {"DuplicateOutputQueries",
-       {static_cast<double>(duplicate_output_queries) / static_cast<double>(rows),
-        benchmark::Counter::kAvgThreads}});
-    state.counters.insert({"OutputSetSemanticsVersion", {1.0, benchmark::Counter::kAvgThreads}});
-    if (validate_native_l2_cutoff) {
-      const double native_l2_cutoff_recall = native_l2_cutoff_total == 0
-                                               ? 1.0
-                                               : static_cast<double>(native_l2_cutoff_matches) /
-                                                   static_cast<double>(native_l2_cutoff_total);
+      std::vector<std::thread> recall_workers;
+      recall_workers.reserve(num_helper_threads);
+      std::vector<std::size_t> local_match_count(num_workers, 0);
+      std::vector<std::size_t> local_total_count(num_workers, 0);
+
+      auto recall_range = [&](size_t start, size_t end, int tid) {
+        for (size_t i_out_idx = start; i_out_idx < end; ++i_out_idx) {
+          auto* candidates       = neighbors_host + i_out_idx * k;
+          auto [matching, total] = gt_maps->count_matches(orig_query_idx(i_out_idx), candidates, k);
+          local_match_count[tid] += matching;
+          local_total_count[tid] += total;
+        }
+      };
+
+      const size_t chunk_size = rows / static_cast<size_t>(num_workers);
+      const size_t remainder  = rows % static_cast<size_t>(num_workers);
+      size_t start            = 0;
+      for (int tid = 0; tid < num_helper_threads; ++tid) {
+        size_t end = start + chunk_size + (static_cast<size_t>(tid) < remainder ? 1 : 0);
+        recall_workers.emplace_back(recall_range, start, end, tid);
+        start = end;
+      }
+      double actual_recall   = static_cast<double>(match_count) / static_cast<double>(total_count);
+      double valid_gt_recall = valid_total_count == 0 ? 0.0
+                                                      : static_cast<double>(valid_match_count) /
+                                                          static_cast<double>(valid_total_count);
+      /* NOTE: recall in the throughput mode & filtering
+
+      When filtering is enabled, `total_count` may vary between individual threads, but we still
+      take the simple average across in-thread recalls. Strictly speaking, this is incorrect, but
+      it's good enough under assumption that the filtering is more-or-less uniform.
+      */
+      state.counters.insert({"Recall", {actual_recall, benchmark::Counter::kAvgThreads}});
+      state.counters.insert({"ValidGTRecall", {valid_gt_recall, benchmark::Counter::kAvgThreads}});
       state.counters.insert(
-        {"NativeL2CutoffRecall", {native_l2_cutoff_recall, benchmark::Counter::kAvgThreads}});
-      state.counters.insert(
-        {"NativeL2CutoffErrors",
-         {static_cast<double>(native_l2_cutoff_errors) / static_cast<double>(rows * k),
+        {"ValidGTFraction",
+         {static_cast<double>(valid_total_count) / static_cast<double>(rows * k),
           benchmark::Counter::kAvgThreads}});
       state.counters.insert(
-        {"NativeL2StrictPrefixErrors",
-         {static_cast<double>(native_l2_strict_prefix_errors) / static_cast<double>(rows * k),
-          benchmark::Counter::kAvgThreads}});
-      state.counters.insert({"NativeL2CutoffValidated", {1.0, benchmark::Counter::kAvgThreads}});
-    }
-    if (validate_filter) {
-      state.counters.insert(
-        {"FilterViolations",
-         {static_cast<double>(filter_violation_count) / static_cast<double>(rows * k),
+        {"UnderfilledQueries",
+         {static_cast<double>(underfilled_query_count) / static_cast<double>(rows),
           benchmark::Counter::kAvgThreads}});
       state.counters.insert(
-        {"InvalidSentinelErrors",
-         {static_cast<double>(invalid_sentinel_errors) / static_cast<double>(rows * k),
+        {"MissingResultSlots",
+         {static_cast<double>(missing_result_count) / static_cast<double>(rows * k),
           benchmark::Counter::kAvgThreads}});
       state.counters.insert(
-        {"SentinelOrderErrors",
-         {static_cast<double>(sentinel_order_errors) / static_cast<double>(rows * k),
+        {"DuplicateOutputQueries",
+         {static_cast<double>(duplicate_output_queries) / static_cast<double>(rows),
           benchmark::Counter::kAvgThreads}});
-      state.counters.insert(
-        {"InvalidSentinelDistanceErrors",
-         {static_cast<double>(invalid_sentinel_distance_errors) / static_cast<double>(rows * k),
-          benchmark::Counter::kAvgThreads}});
-      // Invalid-ID ordering is part of the common filtered-output contract.  Invalid-slot
-      // distances are only canonicalized by methods that promise that stronger contract; their
-      // analyzers must reject a nonzero diagnostic counter.
-      if (filter_violation_count != 0 || invalid_sentinel_errors != 0 ||
-          sentinel_order_errors != 0) {
-        state.SkipWithError("Filtered search produced " + std::to_string(filter_violation_count) +
-                            " predicate violations and " + std::to_string(invalid_sentinel_errors) +
-                            " invalid sentinels, " + std::to_string(sentinel_order_errors) +
-                            " sentinel-order errors (and reported " +
-                            std::to_string(invalid_sentinel_distance_errors) +
-                            " invalid-sentinel distance errors)");
+      state.counters.insert({"OutputSetSemanticsVersion", {1.0, benchmark::Counter::kAvgThreads}});
+      if (validate_native_l2_cutoff) {
+        const double native_l2_cutoff_recall = native_l2_cutoff_total == 0
+                                                 ? 1.0
+                                                 : static_cast<double>(native_l2_cutoff_matches) /
+                                                     static_cast<double>(native_l2_cutoff_total);
+        state.counters.insert(
+          {"NativeL2CutoffRecall", {native_l2_cutoff_recall, benchmark::Counter::kAvgThreads}});
+        state.counters.insert(
+          {"NativeL2CutoffErrors",
+           {static_cast<double>(native_l2_cutoff_errors) / static_cast<double>(rows * k),
+            benchmark::Counter::kAvgThreads}});
+        state.counters.insert(
+          {"NativeL2StrictPrefixErrors",
+           {static_cast<double>(native_l2_strict_prefix_errors) / static_cast<double>(rows * k),
+            benchmark::Counter::kAvgThreads}});
+        state.counters.insert({"NativeL2CutoffValidated", {1.0, benchmark::Counter::kAvgThreads}});
+      }
+      if (validate_filter) {
+        state.counters.insert(
+          {"FilterViolations",
+           {static_cast<double>(filter_violation_count) / static_cast<double>(rows * k),
+            benchmark::Counter::kAvgThreads}});
+        state.counters.insert(
+          {"InvalidSentinelErrors",
+           {static_cast<double>(invalid_sentinel_errors) / static_cast<double>(rows * k),
+            benchmark::Counter::kAvgThreads}});
+        state.counters.insert(
+          {"SentinelOrderErrors",
+           {static_cast<double>(sentinel_order_errors) / static_cast<double>(rows * k),
+            benchmark::Counter::kAvgThreads}});
+        state.counters.insert(
+          {"InvalidSentinelDistanceErrors",
+           {static_cast<double>(invalid_sentinel_distance_errors) / static_cast<double>(rows * k),
+            benchmark::Counter::kAvgThreads}});
+        // Invalid-ID ordering is part of the common filtered-output contract.  Invalid-slot
+        // distances are only canonicalized by methods that promise that stronger contract; their
+        // analyzers must reject a nonzero diagnostic counter.
+        if (filter_violation_count != 0 || invalid_sentinel_errors != 0 ||
+            sentinel_order_errors != 0) {
+          state.SkipWithError("Filtered search produced " + std::to_string(filter_violation_count) +
+                              " predicate violations and " +
+                              std::to_string(invalid_sentinel_errors) + " invalid sentinels, " +
+                              std::to_string(sentinel_order_errors) +
+                              " sentinel-order errors (and reported " +
+                              std::to_string(invalid_sentinel_distance_errors) +
+                              " invalid-sentinel distance errors)");
+        }
       }
     }
   }
-}
 
-inline void printf_usage()
-{
-  ::benchmark::PrintDefaultHelp();
-  fprintf(
-    stdout,
-    "          [--build|--search] \n"
-    "          [--force]\n"
-    "          [--data_prefix=<prefix>]\n"
-    "          [--index_prefix=<prefix>]\n"
-    "          [--override_kv=<key:value1:value2:...:valueN>]\n"
-    "          [--mode=<latency|throughput>\n"
-    "          [--threads=min[:max]]\n"
-    "          [--no-lap-sync]\n"
-    "          <conf>.json\n"
-    "\n"
-    "Note the non-standard benchmark parameters:\n"
-    "  --build: build mode, will build index\n"
-    "  --search: search mode, will search using the built index\n"
-    "            one and only one of --build and --search should be specified\n"
-    "  --force: force overwriting existing index files\n"
-    "  --data_prefix=<prefix>:"
-    " prepend <prefix> to dataset file paths specified in the <conf>.json (default = "
-    "'data/').\n"
-    "  --index_prefix=<prefix>:"
-    " prepend <prefix> to index file paths specified in the <conf>.json (default = "
-    "'index/').\n"
-    "  --override_kv=<key:value1:value2:...:valueN>:"
-    " override a build/search key one or more times multiplying the number of configurations;"
-    " you can use this parameter multiple times to get the Cartesian product of benchmark"
-    " configs.\n"
-    "  --mode=<latency|throughput>"
-    " run the benchmarks in latency (accumulate times spent in each batch) or "
-    " throughput (pipeline batches and measure end-to-end) mode\n"
-    "  --threads=min[:max] specify the number threads to use for throughput benchmark."
-    " Power of 2 values between 'min' and 'max' will be used. If only 'min' is specified,"
-    " then a single test is run with 'min' threads. By default min=1, max=<num hyper"
-    " threads>.\n"
-    "  --no-lap-sync disable CUDA event synchronization between benchmark iterations. If a GPU"
-    " algorithm has no sync with CPU, this can make the GPU processing significantly lag behind the"
-    " CPU scheduling. Then this also hides the scheduling latencies and thus improves the measured"
-    " throughput (QPS). Note there's a sync at the end of the benchmark loop in any case.\n");
-}
-
-template <typename T>
-void register_build(std::shared_ptr<const dataset<T>> dataset,
-                    std::vector<configuration::index>& indices,
-                    bool force_overwrite,
-                    bool no_lap_sync)
-{
-  for (auto& index : indices) {
-    auto suf      = static_cast<std::string>(index.build_param["override_suffix"]);
-    auto file_suf = suf;
-    index.build_param.erase("override_suffix");
-    std::replace(file_suf.begin(), file_suf.end(), '/', '-');
-    index.file += file_suf;
-    auto* b = ::benchmark::RegisterBenchmark(
-      index.name + suf, bench_build<T>, dataset, index, force_overwrite, no_lap_sync);
-    b->Unit(benchmark::kSecond);
-    b->MeasureProcessCPUTime();
-    b->UseRealTime();
+  inline void printf_usage()
+  {
+    ::benchmark::PrintDefaultHelp();
+    fprintf(
+      stdout,
+      "          [--build|--search] \n"
+      "          [--force]\n"
+      "          [--data_prefix=<prefix>]\n"
+      "          [--index_prefix=<prefix>]\n"
+      "          [--override_kv=<key:value1:value2:...:valueN>]\n"
+      "          [--mode=<latency|throughput>\n"
+      "          [--threads=min[:max]]\n"
+      "          [--no-lap-sync]\n"
+      "          <conf>.json\n"
+      "\n"
+      "Note the non-standard benchmark parameters:\n"
+      "  --build: build mode, will build index\n"
+      "  --search: search mode, will search using the built index\n"
+      "            one and only one of --build and --search should be specified\n"
+      "  --force: force overwriting existing index files\n"
+      "  --data_prefix=<prefix>:"
+      " prepend <prefix> to dataset file paths specified in the <conf>.json (default = "
+      "'data/').\n"
+      "  --index_prefix=<prefix>:"
+      " prepend <prefix> to index file paths specified in the <conf>.json (default = "
+      "'index/').\n"
+      "  --override_kv=<key:value1:value2:...:valueN>:"
+      " override a build/search key one or more times multiplying the number of configurations;"
+      " you can use this parameter multiple times to get the Cartesian product of benchmark"
+      " configs.\n"
+      "  --mode=<latency|throughput>"
+      " run the benchmarks in latency (accumulate times spent in each batch) or "
+      " throughput (pipeline batches and measure end-to-end) mode\n"
+      "  --threads=min[:max] specify the number threads to use for throughput benchmark."
+      " Power of 2 values between 'min' and 'max' will be used. If only 'min' is specified,"
+      " then a single test is run with 'min' threads. By default min=1, max=<num hyper"
+      " threads>.\n"
+      "  --no-lap-sync disable CUDA event synchronization between benchmark iterations. If a GPU"
+      " algorithm has no sync with CPU, this can make the GPU processing significantly lag behind "
+      "the"
+      " CPU scheduling. Then this also hides the scheduling latencies and thus improves the "
+      "measured"
+      " throughput (QPS). Note there's a sync at the end of the benchmark loop in any case.\n");
   }
-}
 
-template <typename T>
-void register_search(std::shared_ptr<const dataset<T>> dataset,
-                     std::vector<configuration::index>& indices,
-                     Mode metric_objective,
-                     const std::vector<int>& threads,
-                     bool no_lap_sync)
-{
-  for (auto& index : indices) {
-    for (std::size_t i = 0; i < index.search_params.size(); i++) {
-      auto suf = static_cast<std::string>(index.search_params[i]["override_suffix"]);
-      index.search_params[i].erase("override_suffix");
-
+  template <typename T>
+  void register_build(std::shared_ptr<const dataset<T>> dataset,
+                      std::vector<configuration::index> & indices,
+                      bool force_overwrite,
+                      bool no_lap_sync)
+  {
+    for (auto& index : indices) {
+      auto suf      = static_cast<std::string>(index.build_param["override_suffix"]);
+      auto file_suf = suf;
+      index.build_param.erase("override_suffix");
+      std::replace(file_suf.begin(), file_suf.end(), '/', '-');
+      index.file += file_suf;
       auto* b = ::benchmark::RegisterBenchmark(
-                  index.name + suf, bench_search<T>, index, i, dataset, no_lap_sync)
-                  ->Unit(benchmark::kMillisecond)
-                  /**
-                   * The following are important for getting accuracy QPS measurements on both CPU
-                   * and GPU These make sure that
-                   *   - `end_to_end` ~ (`Time` * `Iterations`)
-                   *   - `items_per_second` ~ (`total_queries` / `end_to_end`)
-                   *   - Throughput = `items_per_second`
-                   */
-                  ->MeasureProcessCPUTime()
-                  ->UseRealTime();
-
-      const bool latency_trace =
-        index.search_params[i].contains(detail::kLatencyTraceFile) &&
-        !index.search_params[i].at(detail::kLatencyTraceFile).get<std::string>().empty();
-      if (latency_trace) {
-        // Exactly one serialized API call per query. This avoids Google Benchmark dynamically
-        // choosing a cumulative runtime and gives every query exactly one sample per trace pass.
-        b->Iterations(dataset->query_set_size());
-      }
-
-      if (metric_objective == Mode::kThroughput) { b->ThreadRange(threads[0], threads[1]); }
+        index.name + suf, bench_build<T>, dataset, index, force_overwrite, no_lap_sync);
+      b->Unit(benchmark::kSecond);
+      b->MeasureProcessCPUTime();
+      b->UseRealTime();
     }
   }
-}
 
-template <typename T>
-void dispatch_benchmark(std::string cmdline,
-                        configuration& conf,
-                        bool force_overwrite,
-                        bool build_mode,
-                        bool search_mode,
-                        kv_series override_kv,
-                        Mode metric_objective,
-                        const std::vector<int>& threads,
-                        bool no_lap_sync)
-{
-  ::benchmark::AddCustomContext("command_line", cmdline);
-  for (auto [key, value] : host_info()) {
-    ::benchmark::AddCustomContext(key, value);
+  template <typename T>
+  void register_search(std::shared_ptr<const dataset<T>> dataset,
+                       std::vector<configuration::index> & indices,
+                       Mode metric_objective,
+                       const std::vector<int>& threads,
+                       bool no_lap_sync)
+  {
+    for (auto& index : indices) {
+      for (std::size_t i = 0; i < index.search_params.size(); i++) {
+        auto suf = static_cast<std::string>(index.search_params[i]["override_suffix"]);
+        index.search_params[i].erase("override_suffix");
+
+        auto* b = ::benchmark::RegisterBenchmark(
+                    index.name + suf, bench_search<T>, index, i, dataset, no_lap_sync)
+                    ->Unit(benchmark::kMillisecond)
+                    /**
+                     * The following are important for getting accuracy QPS measurements on both CPU
+                     * and GPU These make sure that
+                     *   - `end_to_end` ~ (`Time` * `Iterations`)
+                     *   - `items_per_second` ~ (`total_queries` / `end_to_end`)
+                     *   - Throughput = `items_per_second`
+                     */
+                    ->MeasureProcessCPUTime()
+                    ->UseRealTime();
+
+        const bool latency_trace =
+          index.search_params[i].contains(detail::kLatencyTraceFile) &&
+          !index.search_params[i].at(detail::kLatencyTraceFile).get<std::string>().empty();
+        if (latency_trace) {
+          // Exactly one serialized API call per query. This avoids Google Benchmark dynamically
+          // choosing a cumulative runtime and gives every query exactly one sample per trace pass.
+          b->Iterations(dataset->query_set_size());
+        }
+
+        if (metric_objective == Mode::kThroughput) { b->ThreadRange(threads[0], threads[1]); }
+      }
+    }
   }
-  if (cudart.found()) {
-    for (auto [key, value] : cuda_info()) {
+
+  template <typename T>
+  void dispatch_benchmark(std::string cmdline,
+                          configuration & conf,
+                          bool force_overwrite,
+                          bool build_mode,
+                          bool search_mode,
+                          kv_series override_kv,
+                          Mode metric_objective,
+                          const std::vector<int>& threads,
+                          bool no_lap_sync)
+  {
+    ::benchmark::AddCustomContext("command_line", cmdline);
+    for (auto [key, value] : host_info()) {
       ::benchmark::AddCustomContext(key, value);
     }
-  }
-  auto& dataset_conf = conf.get_dataset_conf();
-  auto base_file     = dataset_conf.base_file;
-  auto query_file    = dataset_conf.query_file;
-  auto gt_file       = dataset_conf.groundtruth_neighbors_file;
-  auto dataset       = std::make_shared<bench::dataset<T>>(
-    dataset_conf.name,
-    base_file,
-    dataset_conf.subset_first_row,
-    dataset_conf.subset_size,
-    query_file,
-    dataset_conf.distance,
-    gt_file,
-    search_mode ? dataset_conf.filtering_rate : std::nullopt,
-    search_mode ? dataset_conf.filter_bitset_file : std::nullopt);
-  ::benchmark::AddCustomContext("dataset", dataset_conf.name);
-  ::benchmark::AddCustomContext("distance", dataset_conf.distance);
-  std::vector<configuration::index>& indices = conf.get_indices();
-  if (build_mode) {
-    if (file_exists(base_file)) {
-      log_info("Using the dataset file '%s'", base_file.c_str());
-      ::benchmark::AddCustomContext("n_records", std::to_string(dataset->base_set_size()));
-      ::benchmark::AddCustomContext("dim", std::to_string(dataset->dim()));
-    } else {
-      log_warn("dataset file '%s' does not exist; benchmarking index building is impossible.",
-               base_file.c_str());
-    }
-    std::vector<configuration::index> more_indices{};
-    for (auto& index : indices) {
-      for (auto param : apply_overrides(index.build_param, override_kv)) {
-        auto modified_index        = index;
-        modified_index.build_param = param;
-        more_indices.push_back(modified_index);
+    if (cudart.found()) {
+      for (auto [key, value] : cuda_info()) {
+        ::benchmark::AddCustomContext(key, value);
       }
     }
-    std::swap(more_indices, indices);  // update the config in case algorithms need to access it
-    register_build<T>(dataset, indices, force_overwrite, no_lap_sync);
-  } else if (search_mode) {
-    if (file_exists(query_file)) {
-      log_info("Using the query file '%s'", query_file.c_str());
-      ::benchmark::AddCustomContext("max_n_queries", std::to_string(dataset->query_set_size()));
-      ::benchmark::AddCustomContext("dim", std::to_string(dataset->dim()));
-      if (gt_file.has_value()) {
-        if (file_exists(*gt_file)) {
-          log_info("Using the ground truth file '%s'", gt_file->c_str());
-          ::benchmark::AddCustomContext("max_k", std::to_string(dataset->max_k()));
+    auto& dataset_conf = conf.get_dataset_conf();
+    auto base_file     = dataset_conf.base_file;
+    auto query_file    = dataset_conf.query_file;
+    auto gt_file       = dataset_conf.groundtruth_neighbors_file;
+    auto dataset       = std::make_shared<bench::dataset<T>>(
+      dataset_conf.name,
+      base_file,
+      dataset_conf.subset_first_row,
+      dataset_conf.subset_size,
+      query_file,
+      dataset_conf.distance,
+      gt_file,
+      search_mode ? dataset_conf.filtering_rate : std::nullopt,
+      search_mode ? dataset_conf.filter_bitset_file : std::nullopt);
+    ::benchmark::AddCustomContext("dataset", dataset_conf.name);
+    ::benchmark::AddCustomContext("distance", dataset_conf.distance);
+    std::vector<configuration::index>& indices = conf.get_indices();
+    if (build_mode) {
+      if (file_exists(base_file)) {
+        log_info("Using the dataset file '%s'", base_file.c_str());
+        ::benchmark::AddCustomContext("n_records", std::to_string(dataset->base_set_size()));
+        ::benchmark::AddCustomContext("dim", std::to_string(dataset->dim()));
+      } else {
+        log_warn("dataset file '%s' does not exist; benchmarking index building is impossible.",
+                 base_file.c_str());
+      }
+      std::vector<configuration::index> more_indices{};
+      for (auto& index : indices) {
+        for (auto param : apply_overrides(index.build_param, override_kv)) {
+          auto modified_index        = index;
+          modified_index.build_param = param;
+          more_indices.push_back(modified_index);
+        }
+      }
+      std::swap(more_indices, indices);  // update the config in case algorithms need to access it
+      register_build<T>(dataset, indices, force_overwrite, no_lap_sync);
+    } else if (search_mode) {
+      if (file_exists(query_file)) {
+        log_info("Using the query file '%s'", query_file.c_str());
+        ::benchmark::AddCustomContext("max_n_queries", std::to_string(dataset->query_set_size()));
+        ::benchmark::AddCustomContext("dim", std::to_string(dataset->dim()));
+        if (gt_file.has_value()) {
+          if (file_exists(*gt_file)) {
+            log_info("Using the ground truth file '%s'", gt_file->c_str());
+            ::benchmark::AddCustomContext("max_k", std::to_string(dataset->max_k()));
+          } else {
+            log_warn("Ground truth file '%s' does not exist; the recall won't be reported.",
+                     gt_file->c_str());
+          }
         } else {
-          log_warn("Ground truth file '%s' does not exist; the recall won't be reported.",
-                   gt_file->c_str());
+          log_warn(
+            "Ground truth file is not provided; the recall won't be reported. NB: use "
+            "the 'groundtruth_neighbors_file' alongside the 'query_file' key to specify the "
+            "path to "
+            "the ground truth in your conf.json.");
         }
       } else {
-        log_warn(
-          "Ground truth file is not provided; the recall won't be reported. NB: use "
-          "the 'groundtruth_neighbors_file' alongside the 'query_file' key to specify the "
-          "path to "
-          "the ground truth in your conf.json.");
+        log_warn("Query file '%s' does not exist; benchmarking search is impossible.",
+                 query_file.c_str());
       }
+      for (auto& index : indices) {
+        index.search_params = apply_overrides(index.search_params, override_kv);
+      }
+      register_search<T>(dataset, indices, metric_objective, threads, no_lap_sync);
+    }
+  }
+
+  inline auto parse_bool_flag(const char* arg, const char* pat, bool& result) -> bool
+  {
+    if (strcmp(arg, pat) == 0) {
+      result = true;
+      return true;
+    }
+    return false;
+  }
+
+  inline auto parse_string_flag(const char* arg, const char* pat, std::string& result) -> bool
+  {
+    auto n = strlen(pat);
+    if (strncmp(pat, arg, strlen(pat)) == 0) {
+      result = arg + n + 1;
+      return true;
+    }
+    return false;
+  }
+
+  inline auto run_main(int argc, char** argv) -> int
+  {
+    bool force_overwrite        = false;
+    bool build_mode             = false;
+    bool search_mode            = false;
+    bool no_lap_sync            = false;
+    std::string data_prefix     = "data";
+    std::string index_prefix    = "index";
+    std::string new_override_kv = "";
+    std::string mode            = "latency";
+    std::string threads_arg_txt = "";
+    std::vector<int> threads    = {1, -1};  // min_thread, max_thread
+    kv_series override_kv{};
+
+    char arg0_default[] = "benchmark";  // NOLINT
+    char* args_default  = arg0_default;
+    if (!argv) {
+      argc = 1;
+      argv = &args_default;
+    }
+    if (argc == 1) {
+      printf_usage();
+      return -1;
+    }
+    // Save command line for reproducibility.
+    std::string cmdline(argv[0]);
+    for (int i = 1; i < argc; i++) {
+      cmdline += " " + std::string(argv[i]);
+    }
+
+    char* conf_path = argv[--argc];
+    std::ifstream conf_stream(conf_path);
+
+    for (int i = 1; i < argc; i++) {
+      if (parse_bool_flag(argv[i], "--force", force_overwrite) ||
+          parse_bool_flag(argv[i], "--build", build_mode) ||
+          parse_bool_flag(argv[i], "--search", search_mode) ||
+          parse_bool_flag(argv[i], "--no-lap-sync", no_lap_sync) ||
+          parse_string_flag(argv[i], "--data_prefix", data_prefix) ||
+          parse_string_flag(argv[i], "--index_prefix", index_prefix) ||
+          parse_string_flag(argv[i], "--mode", mode) ||
+          parse_string_flag(argv[i], "--override_kv", new_override_kv) ||
+          parse_string_flag(argv[i], "--threads", threads_arg_txt)) {
+        if (!threads_arg_txt.empty()) {
+          auto threads_arg = split(threads_arg_txt, ':');
+          threads[0]       = std::stoi(threads_arg[0]);
+          if (threads_arg.size() > 1) {
+            threads[1] = std::stoi(threads_arg[1]);
+          } else {
+            threads[1] = threads[0];
+          }
+          threads_arg_txt = "";
+        }
+        if (!new_override_kv.empty()) {
+          auto kvv = split(new_override_kv, ':');
+          auto key = kvv[0];
+          std::vector<nlohmann::json> vals{};
+          for (std::size_t j = 1; j < kvv.size(); j++) {
+            vals.push_back(nlohmann::json::parse(kvv[j]));
+          }
+          override_kv.emplace_back(key, vals);
+          new_override_kv = "";
+        }
+        for (int j = i; j < argc - 1; j++) {
+          argv[j] = argv[j + 1];
+        }
+        argc--;
+        i--;
+      }
+    }
+
+    Mode metric_objective = Mode::kLatency;
+    if (mode == "throughput") { metric_objective = Mode::kThroughput; }
+
+    int max_threads =
+      (metric_objective == Mode::kThroughput) ? std::thread::hardware_concurrency() : 1;
+    if (threads[1] == -1) threads[1] = max_threads;
+
+    if (metric_objective == Mode::kLatency) {
+      if (threads[0] != 1 || threads[1] != 1) {
+        log_warn("Latency mode enabled. Overriding threads arg, running with single thread.");
+        threads = {1, 1};
+      }
+    }
+
+    if (build_mode == search_mode) {
+      log_error("One and only one of --build and --search should be specified");
+      printf_usage();
+      return -1;
+    }
+
+    if (!conf_stream) {
+      log_error("Can't open configuration file: %s", conf_path);
+      return -1;
+    }
+
+    if (cudart.needed() && !cudart.found()) {
+      log_warn("cudart library is not found, GPU-based indices won't work.");
+    }
+
+    auto& conf        = bench::configuration::initialize(conf_stream, data_prefix, index_prefix);
+    std::string dtype = conf.get_dataset_conf().dtype;
+
+    if (dtype == "float") {
+      dispatch_benchmark<float>(cmdline,
+                                conf,
+                                force_overwrite,
+                                build_mode,
+                                search_mode,
+                                override_kv,
+                                metric_objective,
+                                threads,
+                                no_lap_sync);
+    } else if (dtype == "half") {
+      dispatch_benchmark<half>(cmdline,
+                               conf,
+                               force_overwrite,
+                               build_mode,
+                               search_mode,
+                               override_kv,
+                               metric_objective,
+                               threads,
+                               no_lap_sync);
+    } else if (dtype == "uint8") {
+      dispatch_benchmark<std::uint8_t>(cmdline,
+                                       conf,
+                                       force_overwrite,
+                                       build_mode,
+                                       search_mode,
+                                       override_kv,
+                                       metric_objective,
+                                       threads,
+                                       no_lap_sync);
+    } else if (dtype == "int8") {
+      dispatch_benchmark<std::int8_t>(cmdline,
+                                      conf,
+                                      force_overwrite,
+                                      build_mode,
+                                      search_mode,
+                                      override_kv,
+                                      metric_objective,
+                                      threads,
+                                      no_lap_sync);
     } else {
-      log_warn("Query file '%s' does not exist; benchmarking search is impossible.",
-               query_file.c_str());
+      log_error("datatype '%s' is not supported", dtype.c_str());
+      return -1;
     }
-    for (auto& index : indices) {
-      index.search_params = apply_overrides(index.search_params, override_kv);
-    }
-    register_search<T>(dataset, indices, metric_objective, threads, no_lap_sync);
+
+    ::benchmark::Initialize(&argc, argv, printf_usage);
+    if (::benchmark::ReportUnrecognizedArguments(argc, argv)) return -1;
+    ::benchmark::RunSpecifiedBenchmarks();
+    ::benchmark::Shutdown();
+    // Release a possibly cached algo object, so that it cannot be alive longer than the handle
+    // to a shared library it depends on (dynamic benchmark executable).
+    current_algo.reset();
+    current_algo_props.reset();
+    reset_global_device_resources();
+    return 0;
   }
-}
-
-inline auto parse_bool_flag(const char* arg, const char* pat, bool& result) -> bool
-{
-  if (strcmp(arg, pat) == 0) {
-    result = true;
-    return true;
-  }
-  return false;
-}
-
-inline auto parse_string_flag(const char* arg, const char* pat, std::string& result) -> bool
-{
-  auto n = strlen(pat);
-  if (strncmp(pat, arg, strlen(pat)) == 0) {
-    result = arg + n + 1;
-    return true;
-  }
-  return false;
-}
-
-inline auto run_main(int argc, char** argv) -> int
-{
-  bool force_overwrite        = false;
-  bool build_mode             = false;
-  bool search_mode            = false;
-  bool no_lap_sync            = false;
-  std::string data_prefix     = "data";
-  std::string index_prefix    = "index";
-  std::string new_override_kv = "";
-  std::string mode            = "latency";
-  std::string threads_arg_txt = "";
-  std::vector<int> threads    = {1, -1};  // min_thread, max_thread
-  kv_series override_kv{};
-
-  char arg0_default[] = "benchmark";  // NOLINT
-  char* args_default  = arg0_default;
-  if (!argv) {
-    argc = 1;
-    argv = &args_default;
-  }
-  if (argc == 1) {
-    printf_usage();
-    return -1;
-  }
-  // Save command line for reproducibility.
-  std::string cmdline(argv[0]);
-  for (int i = 1; i < argc; i++) {
-    cmdline += " " + std::string(argv[i]);
-  }
-
-  char* conf_path = argv[--argc];
-  std::ifstream conf_stream(conf_path);
-
-  for (int i = 1; i < argc; i++) {
-    if (parse_bool_flag(argv[i], "--force", force_overwrite) ||
-        parse_bool_flag(argv[i], "--build", build_mode) ||
-        parse_bool_flag(argv[i], "--search", search_mode) ||
-        parse_bool_flag(argv[i], "--no-lap-sync", no_lap_sync) ||
-        parse_string_flag(argv[i], "--data_prefix", data_prefix) ||
-        parse_string_flag(argv[i], "--index_prefix", index_prefix) ||
-        parse_string_flag(argv[i], "--mode", mode) ||
-        parse_string_flag(argv[i], "--override_kv", new_override_kv) ||
-        parse_string_flag(argv[i], "--threads", threads_arg_txt)) {
-      if (!threads_arg_txt.empty()) {
-        auto threads_arg = split(threads_arg_txt, ':');
-        threads[0]       = std::stoi(threads_arg[0]);
-        if (threads_arg.size() > 1) {
-          threads[1] = std::stoi(threads_arg[1]);
-        } else {
-          threads[1] = threads[0];
-        }
-        threads_arg_txt = "";
-      }
-      if (!new_override_kv.empty()) {
-        auto kvv = split(new_override_kv, ':');
-        auto key = kvv[0];
-        std::vector<nlohmann::json> vals{};
-        for (std::size_t j = 1; j < kvv.size(); j++) {
-          vals.push_back(nlohmann::json::parse(kvv[j]));
-        }
-        override_kv.emplace_back(key, vals);
-        new_override_kv = "";
-      }
-      for (int j = i; j < argc - 1; j++) {
-        argv[j] = argv[j + 1];
-      }
-      argc--;
-      i--;
-    }
-  }
-
-  Mode metric_objective = Mode::kLatency;
-  if (mode == "throughput") { metric_objective = Mode::kThroughput; }
-
-  int max_threads =
-    (metric_objective == Mode::kThroughput) ? std::thread::hardware_concurrency() : 1;
-  if (threads[1] == -1) threads[1] = max_threads;
-
-  if (metric_objective == Mode::kLatency) {
-    if (threads[0] != 1 || threads[1] != 1) {
-      log_warn("Latency mode enabled. Overriding threads arg, running with single thread.");
-      threads = {1, 1};
-    }
-  }
-
-  if (build_mode == search_mode) {
-    log_error("One and only one of --build and --search should be specified");
-    printf_usage();
-    return -1;
-  }
-
-  if (!conf_stream) {
-    log_error("Can't open configuration file: %s", conf_path);
-    return -1;
-  }
-
-  if (cudart.needed() && !cudart.found()) {
-    log_warn("cudart library is not found, GPU-based indices won't work.");
-  }
-
-  auto& conf        = bench::configuration::initialize(conf_stream, data_prefix, index_prefix);
-  std::string dtype = conf.get_dataset_conf().dtype;
-
-  if (dtype == "float") {
-    dispatch_benchmark<float>(cmdline,
-                              conf,
-                              force_overwrite,
-                              build_mode,
-                              search_mode,
-                              override_kv,
-                              metric_objective,
-                              threads,
-                              no_lap_sync);
-  } else if (dtype == "half") {
-    dispatch_benchmark<half>(cmdline,
-                             conf,
-                             force_overwrite,
-                             build_mode,
-                             search_mode,
-                             override_kv,
-                             metric_objective,
-                             threads,
-                             no_lap_sync);
-  } else if (dtype == "uint8") {
-    dispatch_benchmark<std::uint8_t>(cmdline,
-                                     conf,
-                                     force_overwrite,
-                                     build_mode,
-                                     search_mode,
-                                     override_kv,
-                                     metric_objective,
-                                     threads,
-                                     no_lap_sync);
-  } else if (dtype == "int8") {
-    dispatch_benchmark<std::int8_t>(cmdline,
-                                    conf,
-                                    force_overwrite,
-                                    build_mode,
-                                    search_mode,
-                                    override_kv,
-                                    metric_objective,
-                                    threads,
-                                    no_lap_sync);
-  } else {
-    log_error("datatype '%s' is not supported", dtype.c_str());
-    return -1;
-  }
-
-  ::benchmark::Initialize(&argc, argv, printf_usage);
-  if (::benchmark::ReportUnrecognizedArguments(argc, argv)) return -1;
-  ::benchmark::RunSpecifiedBenchmarks();
-  ::benchmark::Shutdown();
-  // Release a possibly cached algo object, so that it cannot be alive longer than the handle
-  // to a shared library it depends on (dynamic benchmark executable).
-  current_algo.reset();
-  current_algo_props.reset();
-  reset_global_device_resources();
-  return 0;
-}
 };  // namespace cuvs::bench

@@ -77,21 +77,21 @@ cdef class KMeansParams:
         [batch_samples x n_clusters].
     batch_centroids : int
         Number of centroids to process in each batch. If 0, uses n_clusters.
-    inertia_check : bool
-        Deprecated and ignored. Will be
-        removed in a future release. Inertia-based convergence checking
-        always runs.
     init_size : int
         Number of samples to draw for KMeansPlusPlus initialization with
         host (out-of-core) data. When set to 0, uses the heuristic
         min(3 * n_clusters, n_samples). Default: 0.
-    streaming_batch_size : int
+    device_buffer_samples : int
         Number of samples to process per GPU batch when fitting with host
         (numpy) data. When set to 0, defaults to n_samples (process all
         at once). Only used by the batched (host-data) code path. Reducing
-        streaming_batch_size can help reduce GPU memory pressure but increases
+        device_buffer_samples can help reduce GPU memory pressure but increases
         overhead as the number of times centroid adjustments are computed
-        increases.
+        increases. Multiple batches use one input buffer without a stream pool
+        and two when an auxiliary stream enables transfer/compute overlap.
+        Each input buffer uses approximately
+        ``device_buffer_samples * n_features * X.dtype.itemsize`` bytes,
+        excluding algorithm workspaces and optional sample-weight buffers.
 
         Default: 0 (process all data at once).
     hierarchical : bool
@@ -116,9 +116,8 @@ cdef class KMeansParams:
                  oversampling_factor=None,
                  batch_samples=None,
                  batch_centroids=None,
-                 inertia_check=None,
                  init_size=None,
-                 streaming_batch_size=None,
+                 device_buffer_samples=None,
                  hierarchical=None,
                  hierarchical_n_iters=None):
         if metric is not None:
@@ -140,16 +139,10 @@ cdef class KMeansParams:
             self.params.batch_samples = batch_samples
         if batch_centroids is not None:
             self.params.batch_centroids = batch_centroids
-        if inertia_check is not None:
-            warnings.warn(
-                "KMeansParams `inertia_check` is deprecated and ignored; "
-                "inertia-based convergence checking always runs.",
-                FutureWarning
-            )
         if init_size is not None:
             self.params.init_size = init_size
-        if streaming_batch_size is not None:
-            self.params.streaming_batch_size = streaming_batch_size
+        if device_buffer_samples is not None:
+            self.params.device_buffer_samples = device_buffer_samples
         if hierarchical is not None:
             self.params.hierarchical = hierarchical
         if hierarchical_n_iters is not None:
@@ -199,8 +192,8 @@ cdef class KMeansParams:
         return self.params.init_size
 
     @property
-    def streaming_batch_size(self):
-        return self.params.streaming_batch_size
+    def device_buffer_samples(self):
+        return self.params.device_buffer_samples
 
     @property
     def hierarchical(self):
@@ -225,15 +218,24 @@ def fit(
     When X is a device array (CUDA array interface), standard on-device
     k-means is used.  When X is a host array (numpy ndarray or
     ``__array_interface__``), data is streamed to the GPU in batches
-    controlled by ``params.streaming_batch_size``. For large host datasets, consider
-    reducing ``streaming_batch_size`` to reduce GPU memory usage.
+    controlled by ``params.device_buffer_samples``. For large host datasets, consider
+    reducing ``device_buffer_samples`` to reduce GPU memory usage.
+
+    Multiple host batches use one input buffer by default. Configure
+    ``resources.set_stream_pool(1)`` to enable double-buffering and
+    transfer/compute overlap; without it, fitting is correct but serialized.
+    Pinned host memory is crucial for OOC performance: pageable or unregistered
+    memory-mapped input degrades throughput rapidly.
+
+    A memory pool is optional but recommended, especially across repeated
+    fits. Configure both pools before calling ``fit``.
 
     Parameters
     ----------
 
     params : KMeansParams
         Parameters to use to fit KMeans model.  For host data,
-        ``params.streaming_batch_size`` controls how many samples are sent to the
+        ``params.device_buffer_samples`` controls how many samples are sent to the
         GPU per batch.
     X : array-like
         Training instances, shape (m, k).  Accepts both device arrays
@@ -274,9 +276,17 @@ def fit(
     Host-data (batched) example:
 
     >>> import numpy as np
-    >>> X_host = np.random.random((10_000_000, 128)).astype(np.float32)
-    >>> params = KMeansParams(n_clusters=1000, streaming_batch_size=1_000_000)
-    >>> centroids, inertia, n_iter = fit(params, X_host)
+    >>> import cupyx
+    >>> from cuvs.common import Resources
+    >>> X_host = cupyx.empty_pinned((10_000_000, 128), dtype=np.float32)
+    >>> _ = np.random.default_rng().random(
+    ...     X_host.shape, dtype=np.float32, out=X_host)
+    >>> params = KMeansParams(n_clusters=1000, device_buffer_samples=1_000_000)
+    >>> resources = Resources()
+    >>> resources.set_memory_pool(80)  # Percentage of currently free device memory
+    >>> resources.set_stream_pool(1)   # Enables H2D/compute overlap
+    >>> centroids, inertia, n_iter = fit(params, X_host, resources=resources)
+    >>> resources.sync()
     """
 
     is_host = isinstance(X, np.ndarray) or (

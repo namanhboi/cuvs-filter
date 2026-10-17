@@ -14,7 +14,7 @@ from cuvs.common.exceptions import check_cuvs
 from cuvs.common.mg_resources import auto_sync_multi_gpu_resources
 from cuvs.neighbors.common import _check_input_array
 
-from cuvs.cluster.kmeans.kmeans cimport KMeansParams, cuvsKMeansParams_v2
+from cuvs.cluster.kmeans.kmeans cimport KMeansParams, cuvsKMeansParams
 from cuvs.common cimport cydlpack
 from cuvs.common.c_api cimport cuvsResources_t
 
@@ -54,6 +54,15 @@ def fit(
     """
     Find clusters with single-node multi-GPU k-means using host data.
 
+    Multiple host batches use one input buffer per GPU by default. Configure
+    ``resources.set_stream_pool(1)`` to enable double-buffering and
+    transfer/compute overlap; without it, execution is correct but serialized.
+    Pinned host memory is crucial for performance: pageable or unregistered
+    memory-mapped input degrades throughput rapidly.
+
+    A per-device memory pool is optional but recommended. Configure both pools
+    before calling ``fit``.
+
     Parameters
     ----------
     params : KMeansParams
@@ -76,6 +85,24 @@ def fit(
         ``centroids`` is a host NumPy array containing the computed centroids,
         ``inertia`` is the final objective value, and ``n_iter`` is the number
         of iterations run.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import cupyx
+    >>> from cuvs.cluster.kmeans import KMeansParams
+    >>> from cuvs.cluster.mg import kmeans
+    >>> from cuvs.common import MultiGpuResources
+    >>> X = cupyx.empty_pinned((10_000_000, 128), dtype=np.float32)
+    >>> _ = np.random.default_rng().random(
+    ...     X.shape, dtype=np.float32, out=X)
+    >>> params = KMeansParams(n_clusters=1000,
+    ...                       device_buffer_samples=1_000_000)
+    >>> resources = MultiGpuResources()
+    >>> resources.set_memory_pool(80)
+    >>> resources.set_stream_pool(1)
+    >>> result = kmeans.fit(params, X, resources=resources)
+    >>> resources.sync()
     """
 
     if params.hierarchical:
@@ -139,25 +166,25 @@ def fit(
 
     cdef double inertia = 0
     cdef int n_iter = 0
-    cdef cuvsKMeansParams_v2 params_v2
-    params_v2.metric = params.params.metric
-    params_v2.n_clusters = params.params.n_clusters
-    params_v2.init = params.params.init
-    params_v2.max_iter = params.params.max_iter
-    params_v2.tol = params.params.tol
-    params_v2.n_init = params.params.n_init
-    params_v2.oversampling_factor = params.params.oversampling_factor
-    params_v2.batch_samples = params.params.batch_samples
-    params_v2.batch_centroids = params.params.batch_centroids
-    params_v2.hierarchical = params.params.hierarchical
-    params_v2.hierarchical_n_iters = params.params.hierarchical_n_iters
-    params_v2.streaming_batch_size = params.params.streaming_batch_size
-    params_v2.init_size = params.params.init_size
+    cdef cuvsKMeansParams params_c
+    params_c.metric = params.params.metric
+    params_c.n_clusters = params.params.n_clusters
+    params_c.init = params.params.init
+    params_c.max_iter = params.params.max_iter
+    params_c.tol = params.params.tol
+    params_c.n_init = params.params.n_init
+    params_c.oversampling_factor = params.params.oversampling_factor
+    params_c.batch_samples = params.params.batch_samples
+    params_c.batch_centroids = params.params.batch_centroids
+    params_c.hierarchical = params.params.hierarchical
+    params_c.hierarchical_n_iters = params.params.hierarchical_n_iters
+    params_c.device_buffer_samples = params.device_buffer_samples
+    params_c.init_size = params.params.init_size
 
     with cuda_interruptible():
         check_cuvs(cuvsMultiGpuKMeansFit(
             res,
-            &params_v2,
+            &params_c,
             x_dlpack,
             sample_weight_dlpack,
             centroids_dlpack,

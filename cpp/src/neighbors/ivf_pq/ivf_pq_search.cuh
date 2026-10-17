@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2022-2026, NVIDIA CORPORATION.
+ * SPDX-FileCopyrightText: Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -39,7 +39,6 @@
 #include <raft/util/pow2_utils.cuh>
 #include <raft/util/vectorized.cuh>
 
-#include <rmm/cuda_stream_view.hpp>
 #include <rmm/mr/per_device_resource.hpp>
 
 #include <cub/device/device_radix_sort.cuh>
@@ -155,7 +154,7 @@ void select_clusters(raft::resources const& handle,
                      &beta,
                      qc_distances.data(),
                      n_lists,
-                     stream);
+                     stream.get());
 
   // Select neighbor clusters for each query.
   rmm::device_uvector<float> cluster_dists(size_t(n_queries) * size_t(n_probes), stream, mr);
@@ -241,7 +240,7 @@ void select_clusters(raft::resources const& handle,
                      &beta,
                      qc_distances.data(),
                      n_lists,
-                     stream);
+                     stream.get());
 
   // Select neighbor clusters for each query.
   rmm::device_uvector<dist_type> cluster_dists(size_t(n_queries) * size_t(n_probes), stream, mr);
@@ -326,7 +325,7 @@ void select_clusters(raft::resources const& handle,
                      &beta,
                      qc_distances.data(),
                      n_lists,
-                     stream);
+                     stream.get());
 
   // Select neighbor clusters for each query.
   rmm::device_uvector<dist_type> cluster_dists(size_t(n_queries) * size_t(n_probes), stream, mr);
@@ -513,7 +512,7 @@ void ivfpq_search_worker(raft::resources const& handle,
                                     n_queries_probes,
                                     begin_bit,
                                     end_bit,
-                                    stream);
+                                    stream.get());
     rmm::device_buffer cub_workspace(cub_workspace_size, stream, mr);
     cub::DeviceRadixSort::SortPairs(cub_workspace.data(),
                                     cub_workspace_size,
@@ -524,7 +523,7 @@ void ivfpq_search_worker(raft::resources const& handle,
                                     n_queries_probes,
                                     begin_bit,
                                     end_bit,
-                                    stream);
+                                    stream.get());
   }
 
   // select and run the main search kernel
@@ -1023,7 +1022,7 @@ inline void search(raft::resources const& handle,
                            &beta,
                            rot_queries.data(),
                            index.rot_dim(),
-                           stream);
+                           stream.get());
       },
       gemm_queries);
     if (index.metric() == distance::DistanceType::CosineExpanded) {

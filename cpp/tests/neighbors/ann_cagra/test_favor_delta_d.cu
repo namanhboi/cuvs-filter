@@ -96,6 +96,38 @@ struct temporary_file {
   ~temporary_file() { std::filesystem::remove(name); }
 };
 
+// Dataset bindings are non-owning in cuVS 26.12. Keep test vectors alive with the graph.
+template <typename T>
+struct owned_test_index : cuvs::neighbors::cagra::index<T, uint32_t> {
+  using base_type = cuvs::neighbors::cagra::index<T, uint32_t>;
+  using base_type::update_dataset;
+  std::unique_ptr<cuvs::neighbors::device_padded_dataset<T, int64_t>> storage;
+
+  template <typename GraphViewT>
+  owned_test_index(raft::resources const& res,
+                   cuvs::distance::DistanceType metric,
+                   std::unique_ptr<cuvs::neighbors::device_padded_dataset<T, int64_t>> data,
+                   GraphViewT graph)
+    : base_type(res, metric, data->as_dataset_view(), graph), storage(std::move(data))
+  {
+  }
+
+  template <typename ViewT>
+    requires requires(ViewT v) { v.extent(0); }
+  void update_dataset(raft::resources const& res, ViewT view)
+  {
+    auto binding = cuvs::neighbors::make_device_padded_dataset_view(res, view);
+    auto& base   = static_cast<base_type&>(*this);
+    base         = base_type(res, std::move(base), binding);
+  }
+};
+
+template <typename IndexT>
+concept supports_favor_sidecar = requires(raft::resources const& res, IndexT const& idx) {
+  cuvs::neighbors::cagra::save_favor_delta_d(res, std::string{}, {1, 2, 1}, idx, 1.0f);
+};
+static_assert(!supports_favor_sidecar<cuvs::neighbors::cagra::device_pq_index<float>>);
+
 template <typename T>
 auto make_index(raft::resources const& res,
                 std::vector<float> const& values,
@@ -103,7 +135,7 @@ auto make_index(raft::resources const& res,
                 std::vector<uint32_t> const& edges,
                 uint32_t degree,
                 cuvs::distance::DistanceType metric = cuvs::distance::DistanceType::L2Expanded)
-  -> cuvs::neighbors::cagra::index<T, uint32_t>
+  -> owned_test_index<T>
 {
   auto rows    = values.size() / dimension;
   auto dataset = raft::make_host_matrix<T, int64_t>(rows, dimension);
@@ -112,8 +144,10 @@ auto make_index(raft::resources const& res,
     dataset.data_handle()[i] = static_cast<T>(values[i]);
   }
   std::copy(edges.begin(), edges.end(), graph.data_handle());
-  return {
-    res, metric, raft::make_const_mdspan(dataset.view()), raft::make_const_mdspan(graph.view())};
+  return {res,
+          metric,
+          cuvs::neighbors::make_device_padded_dataset(res, raft::make_const_mdspan(dataset.view())),
+          raft::make_const_mdspan(graph.view())};
 }
 
 auto read_file(std::string const& name) -> std::array<unsigned char, 80>
@@ -444,15 +478,7 @@ TEST(CagraFavorDeltaDSidecar, RequiresAttachedDenseDatasetAndGraph)
   cuvs::neighbors::cagra::save_favor_delta_d(res, file.name, {1, 2, 1}, complete, 1);
   EXPECT_ANY_THROW(cuvs::neighbors::cagra::load_favor_delta_d(res, file.name, {1, 2, 1}, empty));
 
-  auto vq      = raft::make_device_matrix<float, uint32_t>(res, 1, 1);
-  auto pq      = raft::make_device_matrix<float, uint32_t>(res, 2, 1);
-  auto encoded = raft::make_device_matrix<uint8_t, int64_t>(res, 3, 1);
-  complete.update_dataset(
-    res,
-    cuvs::neighbors::vpq_dataset<float, int64_t>{std::move(vq), std::move(pq), std::move(encoded)});
-  EXPECT_ANY_THROW(
-    cuvs::neighbors::cagra::save_favor_delta_d(res, file.name, {1, 2, 1}, complete, 1));
-  EXPECT_ANY_THROW(cuvs::neighbors::cagra::load_favor_delta_d(res, file.name, {1, 2, 1}, complete));
+  // Compressed datasets are excluded by the typed public API (see supports_favor_sidecar).
 
   auto disk_index = make_index<float>(res, values, 1, edges, 1);
   temporary_file disk_dataset;
