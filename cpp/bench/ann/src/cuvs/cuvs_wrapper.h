@@ -98,7 +98,7 @@ void normalize_bitmap_brute_force_results(
   normalize_bitmap_brute_force_results<<<grid_size,
                                          block_size,
                                          0,
-                                         raft::resource::get_cuda_stream(res)>>>(
+                                         raft::resource::get_cuda_stream(res).get()>>>(
     filter.view(), neighbors, distances, num_queries, dataset_size, k);
   RAFT_CUDA_TRY(cudaPeekAtLastError());
 }
