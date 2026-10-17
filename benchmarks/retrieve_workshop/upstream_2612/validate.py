@@ -1022,8 +1022,9 @@ def native_output_identity(prefix: Path, summary: dict) -> dict:
             continue
         if node not in ((1 << 31) - 1, (1 << 63) - 1):
             raise ValueError("unexpected native invalid ID")
-        if struct.unpack_from("<f", distances, i * 4)[0] != float.fromhex(
-            "0x1.fffffep127"
+        if struct.unpack_from("<f", distances, i * 4)[0] not in (
+            float.fromhex("0x1.fffffep127"),
+            math.inf,
         ):
             raise ValueError("native sentinel has a valid-looking distance")
         legacy_slots += node == (1 << 31) - 1

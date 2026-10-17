@@ -204,7 +204,8 @@ json run(json const &conf, std::string const &output_prefix) {
         const bool legacy = id == std::numeric_limits<std::int32_t>::max();
         const bool canonical = id == std::numeric_limits<std::int64_t>::max();
         invalid_ids += !(legacy || canonical) ||
-                       hdist[q * k + rank] != std::numeric_limits<float>::max();
+                       (hdist[q * k + rank] != std::numeric_limits<float>::max() &&
+                        hdist[q * k + rank] != std::numeric_limits<float>::infinity());
         legacy_sentinel_slots += legacy;
         continue;
       }

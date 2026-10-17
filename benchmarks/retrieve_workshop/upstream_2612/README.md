@@ -161,7 +161,7 @@ Pinned upstream CAGRA does not dispatch per-query dense bitmap filter objects.
 Both probes therefore use the same public UDF reading the original resident
 bitmap, including 64-bit query-row addressing. This requires no upstream edits.
 Raw native result arrays are retained. Valid-neighbor identity is also compared
-after normalizing only known missing-slot encodings with `FLT_MAX` distances:
+after normalizing only known missing-slot encodings with `FLT_MAX` or positive-infinity distances:
 upstream's widened, visited-bit-cleared uint32 sentinel and the integration's
 canonical int64 sentinel. Unknown IDs or valid-looking sentinel distances fail
 validation; this normalization changes neither search timing nor recall.

@@ -57,17 +57,22 @@ class ValidationContractTest(unittest.TestCase):
             root = Path(d)
             summary = {"n_queries": 1, "k": 2, "n_rows": 100}
 
-            def output(name, node, empty):
+            def output(
+                name,
+                node,
+                empty,
+                empty_distance=float.fromhex("0x1.fffffep127"),
+            ):
                 prefix = root / name
                 prefix.with_suffix(".ids").write_bytes(
                     struct.pack("<qq", node, empty)
                 )
                 prefix.with_suffix(".distances").write_bytes(
-                    struct.pack("<ff", 1.0, float.fromhex("0x1.fffffep127"))
+                    struct.pack("<ff", 1.0, empty_distance)
                 )
                 return validate.native_output_identity(prefix, summary)
 
-            upstream = output("upstream", 7, (1 << 31) - 1)
+            upstream = output("upstream", 7, (1 << 31) - 1, float("inf"))
             canonical = output("canonical", 7, (1 << 63) - 1)
             different = output("different", 8, (1 << 63) - 1)
             self.assertNotEqual(
@@ -100,10 +105,14 @@ class ValidationContractTest(unittest.TestCase):
             prefix.with_suffix(".ids").write_bytes(
                 struct.pack("<q", (1 << 31) - 1)
             )
-            with self.assertRaisesRegex(
-                ValueError, "sentinel has a valid-looking distance"
-            ):
-                validate.native_output_identity(prefix, summary)
+            for distance in (1.0, float("-inf"), float("nan")):
+                prefix.with_suffix(".distances").write_bytes(
+                    struct.pack("<f", distance)
+                )
+                with self.assertRaisesRegex(
+                    ValueError, "sentinel has a valid-looking distance"
+                ):
+                    validate.native_output_identity(prefix, summary)
 
     def test_correctness_resume_requires_unchanged_library_and_results(self):
         with tempfile.TemporaryDirectory() as d:
