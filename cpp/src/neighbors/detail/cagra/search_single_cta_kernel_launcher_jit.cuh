@@ -804,9 +804,9 @@ void select_and_run(
   const IndexT* dev_seed_ptr,         // [num_queries, num_seeds]
   uint32_t* num_executed_iterations,  // [num_queries,]
   const search_params& ps,
-  float favor_raw_delta_d,
-  uint32_t favor_adaptive_start_iteration,
-  uint32_t favor_adaptive_prefix_size,
+  float /* retired FAVOR delta */,
+  uint32_t /* retired FAVOR adaptive start */,
+  uint32_t /* retired FAVOR adaptive prefix */,
   uint32_t topk,
   uint32_t num_itopk_candidates,
   uint32_t block_size,  //
@@ -885,20 +885,18 @@ void select_and_run(
       ->launch(topk_indices_ptr, topk_distances_ptr, queries_ptr, num_queries, topk);
     return;
   } else {
-    const bool favor       = ps.filter_mode == filtering_mode::FAVOR;
     const bool diagnostics = search_diagnostics::get_active_context() != nullptr;
     static_assert(!(navix && passing_accumulator),
                   "NaviX deliberately has no passing-result accumulator");
     static_assert(!(navix && bitmap_seeded),
                   "NaviX and default-CAGRA bitmap seeding use separate filter traits");
     if constexpr (navix) {
-      RAFT_EXPECTS(!favor, "NaviX is a separate default-mode traversal specialization");
       RAFT_EXPECTS(graph.extent(1) == 32 || graph.extent(1) == 64,
                    "NaviX SINGLE_CTA requires graph degree 32 or 64");
     }
     if (diagnostics) {
       RAFT_LOG_INFO("Selecting dedicated SINGLE_CTA %s diagnostic fragment",
-                    navix ? "NaviX" : (favor ? "FAVOR" : "default-filter"));
+                    navix ? "NaviX" : "default-filter");
     }
     std::shared_ptr<rtcx::algorithm_launcher> launcher =
       make_cagra_single_cta_jit_launcher<DataT,
@@ -911,7 +909,7 @@ void select_and_run(
         bitonic_sort_and_merge_multi_warps,
         false /* persistent */,
         make_cagra_sample_filter_udf_fragment<SourceIndexT>(sample_filter),
-        favor,
+        false /* retired FAVOR */,
         diagnostics,
         navix,
         bitmap_seeded,
@@ -933,7 +931,6 @@ void select_and_run(
       if (log_cagra_resources) {
         const char* method = navix                 ? "navix"
                              : passing_accumulator ? "retain"
-                             : favor               ? "favor"
                                                    : "base";
         std::fprintf(stderr,
                      "CAGRA_KERNEL_RESOURCES {\"method\":\"%s\",\"diagnostics\":%s,"
@@ -982,8 +979,6 @@ void select_and_run(
     const uint32_t search_width_u32              = static_cast<uint32_t>(ps.search_width);
     const uint32_t min_iterations_u32            = static_cast<uint32_t>(ps.min_iterations);
     const uint32_t max_iterations_u32            = static_cast<uint32_t>(ps.max_iterations);
-    const uint32_t favor_adaptive_start_iteration_u32 = favor_adaptive_start_iteration;
-    const uint32_t favor_adaptive_prefix_size_u32     = favor_adaptive_prefix_size;
     const unsigned num_random_samplings_u = static_cast<unsigned>(ps.num_random_samplings);
 
     dim3 grid(1, num_queries, 1);
@@ -1049,83 +1044,6 @@ void select_and_run(
       };
       cuvs::neighbors::detail::safely_launch_kernel_with_smem_size<
         search_single_cta_navix_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>(
-        smem_size, kernel_launcher, launcher->get_kernel());
-    } else if (favor) {
-      constexpr std::uint32_t favor_retire_rejected_parent_mask = std::uint32_t{1} << 31;
-      constexpr std::uint32_t favor_automatic_retention_mask    = std::uint32_t{1} << 30;
-      auto favor_penalty_mode_value = static_cast<std::uint32_t>(ps.favor_penalty);
-      const auto selectivity        = 1.0f - ps.filtering_rate;
-      const bool retire_rejected_parents =
-        ps.favor_penalty == favor_penalty_mode::CAGRA_RETENTION_SAFE &&
-        ps.favor_retention_fraction == 0.0f &&
-        selectivity * static_cast<float>(ps.itopk_size) < static_cast<float>(topk);
-      if (retire_rejected_parents) {
-        favor_penalty_mode_value |= favor_retire_rejected_parent_mask;
-        RAFT_LOG_DEBUG(
-          "FAVOR sparse automatic retention enables default-CAGRA rejected-parent retirement "
-          "(selectivity=%g, itopk=%lu, k=%u).",
-          selectivity,
-          ps.itopk_size,
-          topk);
-      }
-      if (ps.favor_retention_fraction == 0.0f && filter_payload.filtering_rates != nullptr) {
-        favor_penalty_mode_value |= favor_automatic_retention_mask;
-      }
-      // Scalar bitset modes retain the historical host-precomputed reference penalty. Query-local
-      // UDF mode instead needs raw delta-d so each CTA can derive its own reference ceiling from
-      // the sampled rate. The automatic-retention transport bit tells the kernel which value it
-      // received without changing the public search parameters or kernel signature.
-      const auto favor_penalty_distance =
-        (favor_penalty_mode_value & favor_automatic_retention_mask) != 0 ? favor_raw_delta_d
-                                                                         : ps.favor_delta_d;
-      const auto favor_retention_fraction =
-        ps.favor_retention_fraction == 0.0f
-          ? favor_automatic_retention_fraction(ps.filtering_rate, ps.itopk_size, topk)
-          : ps.favor_retention_fraction;
-      auto kernel_launcher = [&]() -> void {
-        raft::launch_kernel(
-          {stream, static_cast<std::size_t>(static_cast<std::size_t>(smem_size))},
-          grid,
-          block,
-          raft::kernel_ref<
-            search_single_cta_favor_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>{
-            launcher->get_kernel()},
-          topk_indices_ptr,
-          topk_distances_ptr,
-          topk,
-          queries_ptr,
-          graph.data_handle(),
-          graph_degree_u32,
-          source_indices_ptr,
-          num_random_samplings_u,
-          ps.rand_xor_mask,
-          dev_seed_ptr,
-          num_seeds,
-          hashmap_ptr,
-          max_candidates,
-          max_itopk,
-          itopk_size_u32,
-          search_width_u32,
-          min_iterations_u32,
-          max_iterations_u32,
-          num_executed_iterations,
-          hash_bitlen_u32,
-          small_hash_bitlen_u32,
-          small_hash_reset_interval_u32,
-          query_id_offset,
-          dev_desc,
-          static_cast<IndexT>(graph.extent(0)),
-          filter_payload,
-          ps.filtering_rate,
-          favor_penalty_distance,
-          favor_penalty_mode_value,
-          ps.favor_penalty_lambda,
-          favor_retention_fraction,
-          favor_adaptive_start_iteration_u32,
-          favor_adaptive_prefix_size_u32);
-      };
-      cuvs::neighbors::detail::safely_launch_kernel_with_smem_size<
-        search_single_cta_favor_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>(
         smem_size, kernel_launcher, launcher->get_kernel());
     } else {
       auto kernel_launcher = [&]() -> void {
