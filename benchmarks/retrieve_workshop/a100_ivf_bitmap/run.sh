@@ -3,6 +3,10 @@ set -euo pipefail
 script_dir=$(cd "$(dirname "$0")" && pwd)
 run_root=${RETRIEVE_IVF_RUN_ROOT:-/data/retrieve_workshop_runs/a100_ivf_bitmap_$(date -u +%Y%m%dT%H%M%SZ)}
 python_bin=${PYTHON:-/home/ubuntu/micromamba/envs/cuvs/bin/python}
+if [[ ${1:-all} == sparse ]]; then
+  run_root=${RETRIEVE_IVF_RUN_ROOT:-/data/retrieve_workshop_runs/a100_ivf_flat_sparse_$(date -u +%Y%m%dT%H%M%SZ)}
+  exec "${python_bin}" "${script_dir}/sparse.py" "${2:-all}" --run-root "${run_root}" "${@:3}"
+fi
 if [[ ${1:-all} == status ]]; then
   exec "${python_bin}" "${script_dir}/status.py" --run-root "${RETRIEVE_IVF_RUN_ROOT:?set RETRIEVE_IVF_RUN_ROOT to the running experiment}"
 fi

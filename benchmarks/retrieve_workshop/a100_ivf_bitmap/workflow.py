@@ -561,7 +561,14 @@ def validate_raw(path, points, query_count, k, repetitions):
     return rows
 
 
-def aggregate(raw_shards, points, k, repetitions):
+def aggregate(
+    raw_shards,
+    points,
+    k,
+    repetitions,
+    expected_queries=10000,
+    expected_shards=5,
+):
     groups = defaultdict(list)
     for count, path in raw_shards:
         for row in validate_raw(path, points, count, k, repetitions):
@@ -573,11 +580,11 @@ def aggregate(raw_shards, points, k, repetitions):
         for rep in range(repetitions):
             members = groups[(point_id(point), rep)]
             if (
-                len(members) != 5
-                or sum(count for count, row in members) != 10000
+                len(members) != expected_shards
+                or sum(count for count, row in members) != expected_queries
             ):
                 raise ValueError(
-                    "A point must include all five shards and 10,000 queries"
+                    f"A point must include all {expected_shards} shards and {expected_queries} queries"
                 )
             valid_slots = sum(
                 count * k * row["ValidGTFraction"] for count, row in members
@@ -592,11 +599,11 @@ def aggregate(raw_shards, points, k, repetitions):
             reps.append(
                 dict(
                     repetition_index=rep,
-                    queries=10000,
+                    queries=expected_queries,
                     valid_gt_slots=valid_slots,
                     recall=matches / valid_slots,
                     seconds=seconds,
-                    qps=10000 / seconds,
+                    qps=expected_queries / seconds,
                 )
             )
         output.append(
@@ -674,7 +681,7 @@ def within_window(row, target):
     )
 
 
-def interpolate(a, b, target):
+def interpolate(a, b, target, query_count=10000):
     if (a["index_id"], a["refine_ratio"]) != (
         b["index_id"],
         b["refine_ratio"],
@@ -698,7 +705,7 @@ def interpolate(a, b, target):
     return dict(
         status="interpolated",
         recall=target,
-        qps=10000 / seconds,
+        qps=query_count / seconds,
         interpolation_weight=weight,
         lower_point_id=low["point_id"],
         upper_point_id=high["point_id"],
@@ -958,7 +965,14 @@ class Runner:
                 )
                 temporary.replace(report)
             raw_shards.append((shard["query_count"], str(report)))
-        rows = aggregate(raw_shards, points, k, repetitions)
+        rows = aggregate(
+            raw_shards,
+            points,
+            k,
+            repetitions,
+            expected_queries=self.manifest.get("query_count", 10000),
+            expected_shards=self.manifest.get("shard_count", 5),
+        )
         for row in rows:
             row.update(
                 workload=workload,

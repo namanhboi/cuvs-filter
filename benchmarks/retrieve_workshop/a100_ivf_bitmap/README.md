@@ -96,3 +96,53 @@ where available, otherwise requires every IVF-Flat index calibration to be
 complete for that workload/k and labels the one-repetition result with a dagger.
 Its plots and CSVs contain only IVF-Flat and the three CAGRA methods. The full
 experiment's completion flag and the preserved PQ/SQ data are unchanged.
+
+## Sparse synthetic IVF-Flat experiments
+
+```bash
+export RETRIEVE_IVF_RUN_ROOT=/data/retrieve_workshop_runs/a100_ivf_flat_sparse_$(date -u +%Y%m%dT%H%M%SZ)
+bash benchmarks/retrieve_workshop/a100_ivf_bitmap/run.sh sparse all
+bash benchmarks/retrieve_workshop/a100_ivf_bitmap/run.sh sparse status
+```
+
+This separate run reuses the five original ArXiv random bitmaps at 0.01%,
+0.03%, 0.1%, 0.3%, and 1%, their 2,048 queries and k=10 ground truth, and the
+three successful ArXiv IVF-Flat builds (nlist=1024/2048/4096). It preserves
+both source experiments. Override `--reference-root`, `--index-source-root`,
+and `--paper-data` when moving the artifacts to another machine.
+Large base/index files must retain their original identities and successful
+build provenance; the original base SHA-256 is inherited. Queries, bitmaps,
+ground truth, reference snapshots, runtime binaries, and runner code are hashed.
+
+Stages are `prepare`, `calibrate`, `final`, `analyze`, and `status`; use the
+same run root to resume. Calibration tests powers of two through all lists,
+then refines crossings of 0.950, 0.951, and 0.952 to adjacent integer probes.
+Every final repetition must be in [0.950,0.952]. Measured matches take priority;
+otherwise adjacent confirmed probes may interpolate latency at 0.951, marked
+with an asterisk. Unmatched methods show maximum observed recall and its QPS.
+The fastest three calibration matches (or bracketing pairs) and maximum-recall
+point receive three final repetitions. All-list scans must reach the target,
+and every accepted IVF result must pass the correctness counters.
+
+`analysis/comparison.csv` and `.md` compare IVF-Flat with the paper's frozen
+Base/Retain/NaviX and exact-KNN results. The five PDF/PNG plots include full
+recall and target-window views; curve CSVs retain all measurements. Exact KNN
+is a full-recall throughput reference rather than a matched-recall ANN point.
+The runner reports calibration progress and an ETA based on completed cases;
+the estimate excludes final measurements and plotting.
+
+To add the completed sparse analysis and a grouped selectivity/QPS bar chart
+to the IVF-Flat report, keep `RETRIEVE_IVF_RUN_ROOT` set to the primary IVF run:
+
+```bash
+bash benchmarks/retrieve_workshop/a100_ivf_bitmap/run.sh report \
+  --ivf-methods ivf_flat --allow-calibration \
+  --sparse-run-root /data/retrieve_workshop_runs/a100_ivf_flat_sparse_20261015T025433Z
+```
+
+The five selectivity groups each contain Base, Retain, NaviX, IVF-Flat, and
+exact-KNN bars. A logarithmic QPS axis keeps all methods visible. Unmatched
+methods use hatched bars at their maximum-recall QPS, with achieved recall
+annotated; their throughput is excluded from matched-recall conclusions.
+The report includes separate sparse comparison, curve, and bar-value CSVs
+and hashes both source experiments in its provenance.

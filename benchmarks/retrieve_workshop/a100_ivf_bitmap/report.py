@@ -33,6 +33,220 @@ MAP = dict(
     default_cagra_accumulator="retain",
     navix_reference="navix",
 )
+SPARSE_RATES = ("0p0001", "0p0003", "0p001", "0p003", "0p01")
+SPARSE_METHODS = (
+    "default_cagra",
+    "default_cagra_accumulator",
+    "navix_reference",
+    "ivf_flat",
+    "exact",
+)
+
+
+def load_sparse_results(root):
+    """Only import the completed, hashed five-cohort sparse comparison."""
+    progress = json.loads((root / "state/progress.json").read_text())
+    if progress["state"] != "complete":
+        raise ValueError(
+            "Sparse experiment must finish before report inclusion"
+        )
+    provenance = json.loads((root / "analysis/provenance.json").read_text())
+    for key, path in (
+        ("manifest_sha256", root / "state/manifest.json"),
+        ("comparison_sha256", root / "analysis/comparison.csv"),
+        ("curve_points_sha256", root / "analysis/curve_points.csv"),
+    ):
+        if sha(path) != provenance[key]:
+            raise ValueError(f"Changed sparse report input: {path}")
+    manifest = json.loads((root / "state/manifest.json").read_text())
+    if (
+        manifest["experiment"],
+        manifest["query_count"],
+        manifest["k"],
+        manifest["repetitions"],
+    ) != ("arxiv_sparse_ivf_flat", 2048, 10, 3):
+        raise ValueError(
+            "Sparse report requires the 2,048-query k=10 experiment"
+        )
+    rows = read_csv(root / "analysis/comparison.csv")
+    expected = {
+        (f"synthetic_low_{rate}_random", m)
+        for rate in SPARSE_RATES
+        for m in SPARSE_METHODS
+    }
+    keys = [(r["cohort"], r["method"]) for r in rows]
+    if len(keys) != len(expected) or set(keys) != expected:
+        raise ValueError("Expected exactly 25 sparse method/cohort cells")
+    for row in rows:
+        if int(row["repetitions"]) != 3:
+            raise ValueError("Sparse report requires three-repetition results")
+        for key in (
+            "qps",
+            "recall",
+            "max_recall",
+            "qps_at_max_recall",
+            "recall_min",
+            "recall_max",
+        ):
+            if row.get(key):
+                row[key] = float(row[key])
+                if not math.isfinite(row[key]):
+                    raise ValueError(f"Nonfinite sparse {key}")
+        if row["status"] not in (
+            "measured",
+            "interpolated",
+            "unmatched",
+            "exact",
+        ):
+            raise ValueError("Unknown sparse target status")
+        if (
+            row["status"] in ("measured", "interpolated")
+            and not 0.950 <= row["recall"] <= 0.952 + 1e-12
+        ):
+            raise ValueError("Sparse match is outside the recall window")
+        if row["method"] == "ivf_flat" and row["status"] == "measured":
+            if (
+                not 0.950
+                <= row["recall_min"]
+                <= row["recall_max"]
+                <= 0.952 + 1e-12
+            ):
+                raise ValueError("Sparse IVF repetition is outside the window")
+    return rows
+
+
+def sparse_bar_values(rows):
+    lookup = {(r["cohort"], r["method"]): r for r in rows}
+    values = []
+    for rate in SPARSE_RATES:
+        for method in SPARSE_METHODS:
+            row = lookup[(f"synthetic_low_{rate}_random", method)]
+            unmatched = row["status"] == "unmatched"
+            qps = row["qps_at_max_recall"] if unmatched else row["qps"]
+            if qps <= 0:
+                raise ValueError("Sparse bar QPS must be positive")
+            values.append(
+                dict(
+                    selectivity=float(rate.replace("p", ".")),
+                    method=method,
+                    qps=qps,
+                    recall=row["max_recall"] if unmatched else row["recall"],
+                    status=row["status"],
+                    unmatched=unmatched,
+                )
+            )
+    return values
+
+
+def make_sparse_plot(directory, rows):
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Patch
+    from matplotlib.ticker import FuncFormatter
+
+    values = sparse_bar_values(rows)
+    colors = ("#777777", "#9467bd", "#8c564b", "#1f77b4", "#2ca02c")
+    labels = (
+        "CAGRA-Base",
+        "CAGRA-Retain",
+        "CAGRA-NaviX",
+        "IVF-Flat",
+        "Exact KNN",
+    )
+    fig, ax = plt.subplots(figsize=(7.1, 3.35))
+    width = 0.145
+    for index, (method, color, label) in enumerate(
+        zip(SPARSE_METHODS, colors, labels)
+    ):
+        cells = [r for r in values if r["method"] == method]
+        positions = [i + (index - 2) * width for i in range(5)]
+        bars = ax.bar(
+            positions,
+            [r["qps"] for r in cells],
+            width,
+            color=color,
+            edgecolor="black",
+            linewidth=0.45,
+            label=label,
+        )
+        for bar, cell in zip(bars, cells):
+            if cell["unmatched"]:
+                bar.set_hatch("////")
+                bar.set_alpha(0.5)
+                ax.annotate(
+                    f"max R={cell['recall']:.3f}",
+                    (bar.get_x() + bar.get_width() / 2, cell["qps"]),
+                    xytext=(0, 3),
+                    textcoords="offset points",
+                    ha="center",
+                    va="bottom",
+                    rotation=90,
+                    fontsize=6,
+                )
+    ax.set(
+        xticks=range(5),
+        xticklabels=("0.01%", "0.03%", "0.1%", "0.3%", "1%"),
+        xlabel="Filter selectivity (passing rate)",
+        ylabel="QPS (log scale)",
+        yscale="log",
+        ylim=(200, 240000),
+    )
+    ax.set_yticks([1000, 10000, 100000])
+    ax.yaxis.set_major_formatter(
+        FuncFormatter(lambda value, _: f"{value:,.0f}")
+    )
+    ax.grid(axis="y", alpha=0.2, which="major")
+    ax.set_axisbelow(True)
+    handles = [
+        Patch(facecolor=color, edgecolor="black", linewidth=0.45)
+        for color in colors
+    ]
+    legend_labels = list(labels)
+    handles.append(Patch(facecolor="white", edgecolor="black", hatch="////"))
+    legend_labels.append("Unmatched: QPS at max recall")
+    fig.legend(
+        handles,
+        legend_labels,
+        loc="upper center",
+        ncol=3,
+        fontsize=7.5,
+        frameon=False,
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.85))
+    for ext in ("pdf", "png"):
+        fig.savefig(directory / f"sparse_selectivity_qps.{ext}", dpi=200)
+    plt.close(fig)
+    return values
+
+
+def sparse_section(rows):
+    lookup = {(r["cohort"], r["method"]): r for r in rows}
+    low = [f"synthetic_low_{rate}_random" for rate in SPARSE_RATES[:3]]
+    exact_gains = [
+        lookup[(c, "exact")]["qps"] / lookup[(c, "ivf_flat")]["qps"]
+        for c in low
+    ]
+    navix_gains = [
+        lookup[(f"synthetic_low_{rate}_random", "navix_reference")]["qps"]
+        / lookup[(f"synthetic_low_{rate}_random", "ivf_flat")]["qps"]
+        for rate in SPARSE_RATES[3:]
+    ]
+    return (
+        r"""\section{Synthetic Low-Selectivity Filters}\label{sec:sparse}
+We additionally evaluate independent random bitmaps at 0.01\%, 0.03\%, 0.1\%, 0.3\%, and 1\% passing rates on ArXiv-large, using the original 2,048 queries and exact ground truth from the paper's selectivity study ($k=10$). We reuse the same three IVF-Flat indexes and tune probe counts against $[0.950,0.952]$ Recall@10. All five selected IVF-Flat configurations are directly measured and satisfy this window in each of three final repetitions. These synthetic results are separate from the preliminary one-repetition primary ArXiv measurements.
+
+"""
+        + rf"IVF-Flat reaches the target at every rate and is the fastest qualifying ANN method at 0.01--0.1\%; at 0.01\%, none of the three CAGRA variants reaches the target. However, exact KNN remains {min(exact_gains):.2f}--{max(exact_gains):.2f}$\times$ faster than IVF-Flat at these three rates. At 0.3\% and 1\%, \methodnavix{{}} leads, achieving {navix_gains[0]:.2f}$\times$ and {navix_gains[1]:.2f}$\times$ IVF-Flat's QPS, respectively. Thus the best method shifts from exact search to graph search between the tested 0.1\% and 0.3\% rates on this workload; IVF-Flat expands the range where ANN reaches the target, but does not move that observed crossover."
+        + r"""
+
+\begin{figure*}[!t]\centering
+\includegraphics[width=\textwidth]{figures/sparse_selectivity_qps.pdf}
+\caption{Sparse ArXiv-large throughput at $k=10$, with five bars per passing rate. The QPS axis is logarithmic. Solid ANN bars satisfy $[0.950,0.952]$ Recall@10; exact KNN is a full-recall reference. Hatched bars report QPS at maximum observed recall for methods that did not match the target, with that recall annotated; they are not matched-recall comparisons. Values are medians of three repetitions.}\label{fig:sparse-selectivity}
+\end{figure*}
+"""
+    )
 
 
 def sha(path):
@@ -510,7 +724,7 @@ def flat_findings(cells):
     )
 
 
-def make_tex(cells):
+def make_tex(cells, sparse_rows=None):
     methods = tuple(
         method
         for method in METHODS
@@ -550,6 +764,28 @@ Each cell in Tables~\ref{tab:k10} and~\ref{tab:k100} gives QPS on the first line
     ]
     if flat_only:
         parts = [flat_intro(cells)]
+        if sparse_rows is not None:
+            parts[0] = (
+                parts[0]
+                .replace(
+                    "All measurements use an NVIDIA",
+                    "The primary workload measurements use an NVIDIA",
+                )
+                .replace(
+                    "the ArXiv IVF-Flat comparison is preliminary",
+                    "the primary ArXiv IVF-Flat comparison is preliminary",
+                )
+                .replace(
+                    "ArXiv IVF-Flat values are from",
+                    "Primary ArXiv IVF-Flat values are from",
+                )
+                .replace(
+                    r"\end{abstract}",
+                    r"A separate three-repetition sparse-filter study finds that exact KNN leads through 0.1\% passing, while NaviX leads at 0.3\% and 1\%."
+                    + "\n"
+                    + r"\end{abstract}",
+                )
+            )
     short = dict(
         base=r"\methodbase",
         retain=r"\methodretain",
@@ -595,6 +831,8 @@ Each cell in Tables~\ref{tab:k10} and~\ref{tab:k100} gives QPS on the first line
         parts += [r"\bottomrule\end{tabular}\end{table*}"]
     if flat_only:
         parts.append(flat_findings(cells))
+    if sparse_rows is not None:
+        parts.append(sparse_section(sparse_rows))
     parts.append(r"""\section{Recall--Throughput Curves}
 Faint markers show all measured configurations. Lines show empirical Pareto envelopes across the evaluated settings; they are not measurements between configurations. Diamonds mark matched-recall selections and crosses mark interpolated selections. IVF calibration points use one repetition, IVF final points and the saved CAGRA curves use three. The shaded band marks the target window. Each workload includes a full-range view and a view around its recall target.
 """)
@@ -617,16 +855,61 @@ The report includes its LaTeX source, PDF/PNG plots, combined curve data, matche
 The report includes LaTeX source, PDF/PNG figures, matched-recall and curve CSVs, and hashed provenance. The experiment retains raw benchmark JSON, configurations, the complete IVF-Flat calibration sweep, YFCC final measurements, and the frozen CAGRA sources. The $\dagger$ values can be replaced by ArXiv finalist repetitions without changing the experimental inputs.
 \end{document}
 """
+    if sparse_rows is not None:
+        parts[-1] = parts[-1].replace(
+            r"\end{document}",
+            "The sparse-study comparison and curve data are included as separate CSVs; the grouped-bar CSV records the exact QPS, recall, and target status plotted for all 25 bars. Sparse experiment inputs and output hashes are recorded in the report provenance.\n"
+            + r"\end{document}",
+        )
     return "\n".join(parts)
 
 
-def generate(root, ivf_methods=IVF, allow_calibration=False):
+def generate(
+    root, ivf_methods=IVF, allow_calibration=False, sparse_run_root=None
+):
+    sparse_rows = None
+    if sparse_run_root is not None:
+        if ivf_methods != ("ivf_flat",):
+            raise ValueError(
+                "Sparse inclusion currently requires the IVF-Flat report scope"
+            )
+        sparse_rows = load_sparse_results(sparse_run_root)
     cells, curves = load_results(root, ivf_methods, allow_calibration)
     directory = root / (
         "report" if ivf_methods == IVF else "report_" + "_".join(ivf_methods)
     )
     directory.mkdir(exist_ok=True)
     make_plots(directory / "figures", cells, curves)
+    if sparse_rows is not None:
+        bars = make_sparse_plot(directory / "figures", sparse_rows)
+        with (directory / "sparse_bar_values.csv").open(
+            "w", newline=""
+        ) as stream:
+            writer = csv.DictWriter(stream, fieldnames=list(bars[0]))
+            writer.writeheader()
+            writer.writerows(bars)
+        for name in ("comparison.csv", "curve_points.csv"):
+            shutil.copyfile(
+                sparse_run_root / "analysis" / name,
+                directory / ("sparse_" + name),
+            )
+        (directory / "README.md").write_text(
+            "# IVF-Flat versus CAGRA report\n\n"
+            "Open main.pdf; main.tex and figures/ contain the LaTeX source and plots.\n"
+            "Compile with: latexmk -pdf -interaction=nonstopmode -halt-on-error main.tex\n\n"
+            "The primary study covers YFCC and ArXiv EM/EMIS/R at k=10 and k=100.\n"
+            "Primary ArXiv IVF-Flat values remain preliminary one-repetition calibration;\n"
+            "YFCC IVF-Flat and saved CAGRA use three repetitions.\n\n"
+            "The added sparse study covers five ArXiv random passing rates (0.01%, 0.03%,\n"
+            "0.1%, 0.3%, 1%) at k=10 with 2,048 queries and three final repetitions.\n"
+            "Its grouped bar chart uses a logarithmic QPS axis. Hatched bars are QPS at\n"
+            "maximum recall for unmatched methods, with achieved recall annotated.\n"
+            "Exact KNN bars are full-recall measurements.\n\n"
+            "matched_recall.csv and curve_points.csv retain the primary study data.\n"
+            "sparse_comparison.csv, sparse_curve_points.csv, and sparse_bar_values.csv\n"
+            "contain the added study and all 25 plotted bar values. provenance.json\n"
+            "records both experiments and generated artifact hashes.\n"
+        )
     for name, rows in (
         ("matched_recall.csv", cells),
         ("curve_points.csv", curves),
@@ -637,7 +920,7 @@ def generate(root, ivf_methods=IVF, allow_calibration=False):
             writer.writeheader()
             writer.writerows(rows)
     source = directory / "main.tex"
-    source.write_text(make_tex(cells))
+    source.write_text(make_tex(cells, sparse_rows))
     with (directory / "build.log").open("w") as log:
         subprocess.run(
             [
@@ -685,6 +968,20 @@ def generate(root, ivf_methods=IVF, allow_calibration=False):
             for p in sorted(artifacts)
         ],
     )
+    if sparse_rows is not None:
+        provenance["sparse_experiment"] = dict(
+            run_root=str(sparse_run_root),
+            manifest_sha256=sha(sparse_run_root / "state/manifest.json"),
+            comparison_sha256=sha(sparse_run_root / "analysis/comparison.csv"),
+            curve_points_sha256=sha(
+                sparse_run_root / "analysis/curve_points.csv"
+            ),
+            analysis_provenance=json.loads(
+                (sparse_run_root / "analysis/provenance.json").read_text()
+            ),
+            chart="Five methods per selectivity; unmatched bars use QPS at maximum observed recall",
+            yscale="log",
+        )
     (directory / "provenance.json").write_text(
         json.dumps(provenance, indent=2) + "\n"
     )
@@ -710,6 +1007,11 @@ def main():
         help="Use completed calibration for cells whose final repetitions are pending; mark them preliminary",
     )
     parser.add_argument(
+        "--sparse-run-root",
+        type=Path,
+        help="Include a completed sparse IVF-Flat study and grouped selectivity/QPS bars",
+    )
+    parser.add_argument(
         "--paper-dir",
         type=Path,
         default=Path("/home/ubuntu/paper_selectivity_revision"),
@@ -729,7 +1031,12 @@ def main():
                 + "\n"
             )
             pdf = generate(
-                args.run_root, tuple(args.ivf_methods), args.allow_calibration
+                args.run_root,
+                tuple(args.ivf_methods),
+                args.allow_calibration,
+                args.sparse_run_root.resolve()
+                if args.sparse_run_root
+                else None,
             )
         except Exception as error:
             progress_path.write_text(
