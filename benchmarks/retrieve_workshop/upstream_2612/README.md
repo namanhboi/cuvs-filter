@@ -162,5 +162,7 @@ A shared GPU lock prevents overlapping workloads. Input checksums, executable
 and library hashes, environments, exact configurations, raw repetitions, and
 comparison tables are recorded. Completed benchmark files are reused only when
 their configuration, binary, library, and manifest signatures still match.
+Passed native correctness suites are reused only when their executable, library,
+arguments, and saved result checksum match; failed or changed suites run again.
 Threshold flags remain explicit and require investigation; this runner never
 pushes, modifies saved paper results, or updates `main`.

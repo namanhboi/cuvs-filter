@@ -1,6 +1,6 @@
 # Integration checkpoint, 2026-10-17
 
-This is a source checkpoint, not a completed validation report. Neither `main`
+This is a correctness checkpoint, not a completed performance report. Neither `main`
 nor the original paper results have been changed. NVIDIA's repository is read-only.
 
 Completed checks:
@@ -16,7 +16,7 @@ Completed checks:
   result readers accept both spellings.
 - CPU workflow tests: paper pipeline 7, GPU graph pipeline 8, selectivity follow-up
   7, k=100 Retain occupancy pipeline 5, bitmap/index conversion 11, replay contract
-  8: all 46 passed.
+  10: all 48 passed.
 - Changed Python sources pass syntax checks and Ruff apart from the existing
   E402/E741 conventions in legacy workflow files.
 - Focused CUDA compilation passed for the CAGRA wrapper, CAGRA bitmap/Roaring GPU
@@ -39,12 +39,30 @@ Completed checks:
   Identity-ID selection now enumerates sorted Roaring containers inside search timing;
   remapped IDs retain the exact membership-scan fallback.
 
+Both isolated builds now pass. GPU suites completed with 518 passed tests,
+17 intentional skips, and no failures:
+
+| Checkout | Suite | Passed | Skipped |
+|---|---|---:|---:|
+| Upstream control | Roaring core | 6 | 0 |
+| Upstream control | UDF | 24 | 0 |
+| Upstream control | BBQ | 135 | 0 |
+| Upstream control | Multi-partition | 51 | 0 |
+| Integration | Roaring core | 6 | 0 |
+| Integration | Bitmap/Roaring CAGRA | 60 | 2 |
+| Integration | UDF CAGRA | 37 | 14 |
+| Integration | Bitmap IVF Flat/SQ/PQ | 13 | 1 |
+| Integration | BBQ | 135 | 0 |
+| Integration | Multi-partition | 51 | 0 |
+
+Skips cover single-CTA-only custom controls in other search modes and IVF-SQ's
+absent dynamic batching wrapper. Dense/Roaring Base, Retain, and NaviX comparisons,
+retirement rejection, empty/underfilled rows, remapped IDs, query offsets,
+mixed-container passing seeds, k=100 outputs, and native multi-partition search
+passed. The separate 20-case GPU seed check above is not included in this table.
+
 Still required:
 
-- Complete final control/integration builds after regenerating changed sources.
-- Execute GPU tests, including retirement rejection, dense/Roaring equivalence,
-  empty/underfilled allowlists, remapped IDs, query offsets, k=100 outputs, and
-  native multi-partition search.
 - Load independently verified converted index copies with native cuVS.
 - Run and assess the agreed representative benchmarks against reruns of the old
   binaries and the pinned upstream control. No new performance conclusion is claimed.
