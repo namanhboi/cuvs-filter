@@ -978,6 +978,7 @@ def build_native_drivers(manifest, root: Path, lock_fd: int) -> None:
             str(env),
             str(env / "bin/nvcc"),
             str(validation / f"native-{object_name}.o"),
+            "-Xcompiler=-fopenmp",
             "-o",
             str(root / "bin" / f"native-{name}"),
             "-L" + str(build),
