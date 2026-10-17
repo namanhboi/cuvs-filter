@@ -91,8 +91,10 @@ mapping. Passing-seed selection remains part of search timing.
 An optional `roaring_allowlist_file` names the `CUVSRIDS` artifact above. The
 adapter compares every saved ID row with the original bitmap before constructing
 the native allowlists. Owner construction and this verification happen outside
-search timing. Seed inspection counters count 32-node tiles for Roaring and dense
-bitmap words for the identity dense path; they are not equivalent work measures.
+search timing. Identity-ID Roaring seeds enumerate the sorted portable containers; remapped IDs
+use membership scanning to preserve internal graph-ID order. Seed inspection
+counters count representation-specific tiles for Roaring and bitmap words for
+the dense identity path; they are not equivalent work measures.
 
 New configurations use `passing_result_accumulator` and `search_diagnostics_*`.
 Frozen `favor_udf_passing_accumulator` and `favor_diagnostics_*` names remain

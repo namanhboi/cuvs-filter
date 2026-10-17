@@ -1631,6 +1631,57 @@ TEST_P(CagraRoaringFilterTest, PassingSeedsMatchDenseWithAndWithoutSourceRemappi
   }
 }
 
+TEST_P(CagraRoaringFilterTest, PassingSeedsEnumerateMixedContainersAndRespectGraphBounds)
+{
+  constexpr std::uint32_t rows = 6, columns = 131077, offset = 1, stride = 5000;
+  auto predicate = [](std::uint32_t query, std::uint32_t node) {
+    if (query == 1) { return true; }                       // Bitmap containers.
+    if (query == 2) { return node % 17 == 0; }             // Array containers across keys.
+    if (query == 3) { return node < 3 || node >= 65536; }  // Odd array before bitmap payload.
+    if (query == 4) { return false; }
+    return node >= 131068;  // Partial final word and underfill.
+  };
+  device_bitmap bitmap(res, rows, columns, predicate);
+  auto dense = bitmap.filter();
+  device_roaring roaring(res, rows, columns, predicate);
+  auto stream = raft::resource::get_cuda_stream(res);
+  for (std::uint32_t graph_rows : {columns, columns - 2}) {
+    auto run = [&](auto const& filter) {
+      rmm::device_uvector<std::uint32_t> ids((rows - offset) * stride, stream);
+      rmm::device_uvector<std::uint32_t> counts(rows - offset, stream);
+      detail::select_navix_bitmap_seeds(res,
+                                        filter,
+                                        static_cast<std::uint32_t const*>(nullptr),
+                                        offset,
+                                        rows - offset,
+                                        graph_rows,
+                                        stride,
+                                        ids.data(),
+                                        counts.data());
+      std::vector<std::uint32_t> host_ids(ids.size()), host_counts(counts.size());
+      raft::copy(host_ids.data(), ids.data(), ids.size(), stream);
+      raft::copy(host_counts.data(), counts.data(), counts.size(), stream);
+      raft::resource::sync_stream(res);
+      return std::make_pair(std::move(host_ids), std::move(host_counts));
+    };
+    auto [dense_ids, dense_counts]     = run(dense);
+    auto [roaring_ids, roaring_counts] = run(roaring.filter());
+    EXPECT_EQ(dense_counts, roaring_counts);
+    for (std::uint32_t query = offset; query < rows; ++query) {
+      std::vector<std::uint32_t> expected;
+      for (std::uint32_t node = 0; node < graph_rows && expected.size() < stride; ++node) {
+        if (predicate(query, node)) { expected.push_back(node); }
+      }
+      auto local = query - offset;
+      ASSERT_EQ(roaring_counts[local], expected.size());
+      for (std::uint32_t rank = 0; rank < expected.size(); ++rank) {
+        EXPECT_EQ(roaring_ids[local * stride + rank], expected[rank]);
+        EXPECT_EQ(dense_ids[local * stride + rank], expected[rank]);
+      }
+    }
+  }
+}
+
 INSTANTIATE_TEST_CASE_P(CagraRoaringFilters,
                         CagraRoaringFilterTest,
                         ::testing::Values(cagra::search_algo::SINGLE_CTA));

@@ -36,7 +36,70 @@ RAFT_KERNEL navix_select_roaring_seeds_kernel(
   auto* output                 = seed_ids + static_cast<std::uint64_t>(local_query) * seed_stride;
 
   if (query < filter->num_queries && filter->empty_rows[query] == 0) {
-    for (std::uint64_t tile = 0; tile < graph_size && found < seed_stride; tile += warp_size) {
+    bool enumerated = false;
+    if (source_indices == nullptr) {
+      // cuVS from_ids emits portable no-run containers. Enumerate their sorted prefix instead
+      // of testing every absent ID. Keep the membership fallback for other encodings and remaps.
+      auto const* bytes  = reinterpret_cast<std::uint8_t const*>(filter->refs[query]->data());
+      auto const* header = reinterpret_cast<std::uint32_t const*>(bytes);
+      if (header[0] == 12346u) {
+        enumerated            = true;
+        auto const containers = header[1];
+        auto const* key_cards = reinterpret_cast<std::uint16_t const*>(bytes + 8);
+        auto const* offsets = reinterpret_cast<std::uint32_t const*>(bytes + 8 + 4ull * containers);
+        for (std::uint32_t c = 0; c < containers && found < seed_stride; ++c) {
+          auto const base = std::uint32_t{key_cards[2 * c]} << 16;
+          if (base >= graph_size) { break; }
+          auto const cardinality = std::uint32_t{key_cards[2 * c + 1]} + 1;
+          auto const* payload    = reinterpret_cast<std::uint16_t const*>(bytes + offsets[c]);
+          if (cardinality <= 4096) {
+            for (std::uint32_t start = 0; start < cardinality && found < seed_stride;
+                 start += warp_size) {
+              auto const position = start + lane;
+              auto const id       = position < cardinality ? base + payload[position] : graph_size;
+              auto const mask     = __ballot_sync(0xffffffffu, id < graph_size);
+              auto const rank     = __popc(mask & ((std::uint32_t{1} << lane) - 1));
+              if (id < graph_size && found + rank < seed_stride) {
+                output[found + rank] = static_cast<IndexT>(id);
+              }
+              found += min(static_cast<std::uint32_t>(__popc(mask)), seed_stride - found);
+              ++units;
+            }
+          } else {
+            // Container payloads are only 16-bit aligned after odd-length array containers.
+            // Use two aligned halfword loads rather than an unaligned uint32/uint64 load.
+            for (std::uint32_t start = 0; start < 2048 && found < seed_stride; start += warp_size) {
+              auto const word_id = start + lane;
+              auto const first   = base + word_id * 32;
+              auto word          = std::uint32_t{payload[2 * word_id]} |
+                          (std::uint32_t{payload[2 * word_id + 1]} << 16);
+              if (first >= graph_size) {
+                word = 0;
+              } else if (graph_size - first < 32) {
+                word &= (std::uint32_t{1} << (graph_size - first)) - 1;
+              }
+              auto inclusive = static_cast<std::uint32_t>(__popc(word));
+              for (unsigned delta = 1; delta < warp_size; delta *= 2) {
+                auto const prior = __shfl_up_sync(0xffffffffu, inclusive, delta);
+                if (lane >= delta) { inclusive += prior; }
+              }
+              auto const before = inclusive - static_cast<std::uint32_t>(__popc(word));
+              auto remaining    = word;
+              auto position     = found + before;
+              while (remaining != 0 && position < seed_stride) {
+                output[position++] = static_cast<IndexT>(first + __ffs(remaining) - 1);
+                remaining &= remaining - 1;
+              }
+              auto const total = __shfl_sync(0xffffffffu, inclusive, warp_size - 1);
+              found += min(total, seed_stride - found);
+              ++units;
+            }
+          }
+        }
+      }
+    }
+    for (std::uint64_t tile = 0; !enumerated && tile < graph_size && found < seed_stride;
+         tile += warp_size) {
       auto const internal = tile + lane;
       bool passes         = false;
       if (internal < graph_size) {
@@ -61,7 +124,7 @@ RAFT_KERNEL navix_select_roaring_seeds_kernel(
   }
   if (lane == 0) {
     seed_counts[local_query] = found;
-    // Units count 32-node tiles; the dense identity path instead counts bitmap words.
+    // Units are representation-specific: array-entry/bitmap-word tiles, or remapped ID tiles.
     if (inspected_units != nullptr) { inspected_units[local_query] = units; }
   }
 }
