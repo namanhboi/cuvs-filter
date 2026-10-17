@@ -166,7 +166,7 @@ json run(json const &conf, std::string const &output_prefix) {
   raft::copy(hdist.data(), distances.data_handle(), distances.size(), stream);
   raft::resource::sync_stream(res);
   std::uint64_t matching = 0, total = 0, violations = 0, duplicates = 0,
-                invalid_ids = 0;
+                invalid_ids = 0, legacy_sentinel_slots = 0;
   for (std::int64_t q = 0; q < nq; ++q) {
     std::set<std::uint32_t> truth;
     for (std::int64_t rank = 0; rank < k; ++rank) {
@@ -179,7 +179,13 @@ json run(json const &conf, std::string const &output_prefix) {
     for (std::int64_t rank = 0; rank < k; ++rank) {
       auto id = hids[q * k + rank];
       if (id < 0 || id >= rows) {
-        invalid_ids += id != std::numeric_limits<std::int64_t>::max();
+        // Upstream clears the internal uint32 visited bit before widening output
+        // IDs, including empty slots. Keep that raw encoding in the saved array.
+        const bool legacy = id == std::numeric_limits<std::int32_t>::max();
+        const bool canonical = id == std::numeric_limits<std::int64_t>::max();
+        invalid_ids += !(legacy || canonical) ||
+                       hdist[q * k + rank] != std::numeric_limits<float>::max();
+        legacy_sentinel_slots += legacy;
         continue;
       }
       if (!seen.insert(id).second) {
@@ -192,8 +198,6 @@ json run(json const &conf, std::string const &output_prefix) {
       matching += truth.count(id);
     }
   }
-  if (violations || invalid_ids)
-    throw std::runtime_error("native filtered output is invalid");
   auto write = [&](std::string suffix, auto const &values) {
     std::ofstream out(output_prefix + suffix, std::ios::binary);
     out.write(reinterpret_cast<char const *>(values.data()),
@@ -203,13 +207,19 @@ json run(json const &conf, std::string const &output_prefix) {
   };
   write(".ids", hids);
   write(".distances", hdist);
+  if (violations || invalid_ids)
+    throw std::runtime_error("native filtered output is invalid: violations=" +
+                             std::to_string(violations) + ", invalid_ids=" +
+                             std::to_string(invalid_ids));
   return {{"repetitions", repetitions},
           {"recall", total ? double(matching) / total : 0.0},
           {"n_queries", nq},
+          {"n_rows", rows},
           {"k", k},
           {"matching", matching},
           {"valid_gt", total},
           {"filter_violations", violations},
+          {"legacy_sentinel_slots", legacy_sentinel_slots},
           {"duplicate_results", duplicates}};
 }
 

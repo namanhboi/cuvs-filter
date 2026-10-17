@@ -157,6 +157,11 @@ paths, and compares public CAGRA search with an independently compiled upstream
 control on 13 datasets/result widths. Both native probes use their own checkout's
 headers and library ABI. Native probe timing is compared only with native probe
 timing, separately from the cuVS-bench comparisons.
+Raw native result arrays are retained. Valid-neighbor identity is also compared
+after normalizing only known missing-slot encodings with `FLT_MAX` distances:
+upstream's widened, visited-bit-cleared uint32 sentinel and the integration's
+canonical int64 sentinel. Unknown IDs or valid-looking sentinel distances fail
+validation; this normalization changes neither search timing nor recall.
 
 A shared GPU lock prevents overlapping workloads. Input checksums, executable
 and library hashes, environments, exact configurations, raw repetitions, and

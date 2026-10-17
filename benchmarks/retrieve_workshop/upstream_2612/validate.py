@@ -18,6 +18,7 @@ import re
 import shlex
 import shutil
 import statistics
+import struct
 import subprocess
 import tarfile
 import time
@@ -984,6 +985,33 @@ def comparison(old: dict, new: dict) -> dict:
     }
 
 
+def native_output_identity(prefix: Path, summary: dict) -> dict:
+    """Compare valid IDs while preserving upstream's raw missing-slot encoding."""
+    raw = prefix.with_suffix(".ids").read_bytes()
+    distances = prefix.with_suffix(".distances").read_bytes()
+    slots = summary["n_queries"] * summary["k"]
+    if len(raw) != slots * 8 or len(distances) != slots * 4:
+        raise ValueError("incorrect native output array size")
+    normalized = bytearray(raw)
+    legacy_slots = 0
+    for i, (node,) in enumerate(struct.iter_unpack("<q", raw)):
+        if 0 <= node < summary["n_rows"]:
+            continue
+        if node not in ((1 << 31) - 1, (1 << 63) - 1):
+            raise ValueError("unexpected native invalid ID")
+        if struct.unpack_from("<f", distances, i * 4)[0] != float.fromhex(
+            "0x1.fffffep127"
+        ):
+            raise ValueError("native sentinel has a valid-looking distance")
+        legacy_slots += node == (1 << 31) - 1
+        struct.pack_into("<q", normalized, i * 8, (1 << 63) - 1)
+    return {
+        "ids_sha256": hashlib.sha256(raw).hexdigest(),
+        "comparable_ids_sha256": hashlib.sha256(normalized).hexdigest(),
+        "legacy_sentinel_slots": legacy_slots,
+    }
+
+
 def analyze(args) -> None:
     root = args.root
     manifest = json.loads((root / "manifest.json").read_text())
@@ -1028,7 +1056,7 @@ def analyze(args) -> None:
             value["qps"] = statistics.median(
                 r["qps"] for r in value["repetitions"]
             )
-            value["ids_sha256"] = sha(prefix.with_suffix(".ids"))
+            value.update(native_output_identity(prefix, value))
             pair[variant] = value
         native_rows.append(
             {
@@ -1036,6 +1064,8 @@ def analyze(args) -> None:
                 **comparison(pair["control"], pair["integrated"]),
                 "identical_ids": pair["control"]["ids_sha256"]
                 == pair["integrated"]["ids_sha256"],
+                "identical_valid_ids": pair["control"]["comparable_ids_sha256"]
+                == pair["integrated"]["comparable_ids_sha256"],
                 "control": pair["control"],
                 "integrated": pair["integrated"],
             }
@@ -1050,7 +1080,7 @@ def analyze(args) -> None:
     native_flags = [
         r
         for r in native_rows
-        if r["recall_flag"] or r["qps_flag"] or not r["identical_ids"]
+        if r["recall_flag"] or r["qps_flag"] or not r["identical_valid_ids"]
     ]
     save(
         root / "comparison.json",
