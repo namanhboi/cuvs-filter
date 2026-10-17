@@ -709,6 +709,19 @@ def hash_inputs(args) -> None:
     print(json.dumps({"verified_input_checksums": len(values)}))
 
 
+def cache_order(jobs):
+    """Group immutable jobs by index to avoid cycling three 45 GB files through RAM."""
+
+    def order(job):
+        payload = json.loads(Path(job["config"]).read_text())
+        index = payload["index"][0]
+        if index["algo"] == "cuvs_ivf_flat":
+            return (0, job["variant"] == "old", index["file"], job["id"])
+        return (1, False, payload["dataset"]["base_file"], job["id"])
+
+    return sorted(jobs, key=order)
+
+
 def run(args) -> None:
     root = args.root
     manifest = json.loads((root / "manifest.json").read_text())
@@ -838,7 +851,16 @@ def run(args) -> None:
                 )
         progress["status"] = "benchmarking"
         save(root / "progress.json", progress)
-        for job in manifest["jobs"]:
+        jobs = cache_order(manifest["jobs"])
+        save(
+            root / "execution_order.json",
+            {
+                "policy": "group_by_saved_index",
+                "configuration_order_in_manifest_is_unchanged": True,
+                "jobs": [job["id"] for job in jobs],
+            },
+        )
+        for job in jobs:
             variant = "old" if job["variant"] == "old" else "integrated"
             config = Path(job["config"])
             if sha(config) != job["config_sha256"]:

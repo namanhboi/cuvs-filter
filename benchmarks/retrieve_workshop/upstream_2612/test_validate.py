@@ -10,6 +10,48 @@ import validate
 
 
 class ValidationContractTest(unittest.TestCase):
+    def test_cache_grouping_preserves_every_frozen_job_and_config(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            jobs, before = [], {}
+            for i, (variant, index) in enumerate(
+                (
+                    ("old", "old.index"),
+                    ("integrated", "new.index"),
+                    ("old", "old.index"),
+                    ("integrated", "new.index"),
+                )
+            ):
+                config = root / f"{i}.json"
+                config.write_text(
+                    json.dumps(
+                        {
+                            "index": [
+                                {"algo": "cuvs_ivf_flat", "file": index}
+                            ],
+                            "dataset": {"base_file": "frozen.fbin"},
+                        }
+                    )
+                )
+                before[config] = config.read_bytes()
+                jobs.append(
+                    {"id": str(i), "variant": variant, "config": str(config)}
+                )
+            snapshot = copy.deepcopy(jobs)
+            result = validate.cache_order(jobs)
+            self.assertEqual(jobs, snapshot)
+            self.assertEqual(sorted(result, key=lambda x: x["id"]), jobs)
+            self.assertEqual(
+                [
+                    json.loads(Path(x["config"]).read_text())["index"][0][
+                        "file"
+                    ]
+                    for x in result
+                ],
+                ["new.index", "new.index", "old.index", "old.index"],
+            )
+            self.assertEqual({p: p.read_bytes() for p in before}, before)
+
     def test_native_missing_slot_encoding_does_not_hide_neighbor_changes(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
