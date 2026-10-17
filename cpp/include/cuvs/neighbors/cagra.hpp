@@ -56,7 +56,7 @@ enum class filtering_mode : uint32_t {
   FAVOR [[deprecated("FAVOR is retired; use Base, Retain, or NaviX")]] = 1,
 };
 
-enum class favor_penalty_mode : uint32_t {
+enum class [[deprecated("FAVOR is retired")]] favor_penalty_mode : uint32_t {
   /** The penalty formula used by the reference FAVOR implementation. */
   REFERENCE = 0,
   /** Cap the reference penalty using query/CTA-local distance spacing. */
@@ -154,26 +154,18 @@ struct search_params : cuvs::neighbors::search_params {
    */
   filtering_mode filter_mode = filtering_mode::DEFAULT;
 
-  /** Dataset/graph-specific FAVOR delta-d statistic. Required when filter_mode is FAVOR. */
+  /** Retired compatibility field. FAVOR requests are rejected. */
   [[deprecated("FAVOR is retired; this parameter is unsupported")]] float favor_delta_d = -1.0f;
 
-  /** FAVOR penalty formula. REFERENCE preserves the original behavior. */
-  [[deprecated(
-    "FAVOR is retired; this parameter is unsupported")]] favor_penalty_mode favor_penalty =
-    favor_penalty_mode::REFERENCE;
+  /** Retired compatibility field. FAVOR requests are rejected. */
+  [[deprecated("FAVOR is retired; this parameter is unsupported")]]
+  favor_penalty_mode favor_penalty = favor_penalty_mode::REFERENCE;
 
-  /** Dimensionless multiplier applied to the query/CTA-local distance gap. */
+  /** Retired compatibility field. FAVOR requests are rejected. */
   [[deprecated("FAVOR is retired; this parameter is unsupported")]] float favor_penalty_lambda =
     1.0f;
 
-  /**
-   * Fraction of the current retention headroom that a rejected candidate's penalty may consume.
-   * Explicit values must be finite and in (0, 1). Zero selects a CAGRA-local automatic value from
-   * the expected number of passing entries in itopk. The default 0.5 preserves the original
-   * retention-safe midpoint rule. Automatic selection is supported by SINGLE_CTA and MULTI_CTA;
-   * MULTI_CTA uses the user-configured global itopk before traversal-breadth adjustment. Explicit
-   * non-default values are currently supported only by SINGLE_CTA.
-   */
+  /** Retired compatibility field. FAVOR requests are rejected. */
   [[deprecated("FAVOR is retired; this parameter is unsupported")]] float favor_retention_fraction =
     0.5f;
 
@@ -505,8 +497,8 @@ struct extend_params {
   uint32_t max_chunk_size = 0;
 };
 
-/** Parameters for FAVOR-compatible intrinsic dimensionality estimation. */
-struct favor_delta_d_params {
+/** Retired FAVOR estimator parameters, retained only for source compatibility. */
+struct [[deprecated("FAVOR is retired")]] favor_delta_d_params {
   uint32_t alpha     = 10;
   uint32_t beta      = 127;
   uint32_t bfs_depth = 2;
@@ -1024,11 +1016,7 @@ using cagra_index_t =
                            uint32_t,
                            cuvs::neighbors::dataset_view_type_t<DatasetViewT>>>;
 
-/**
- * Compute FAVOR's delta-d statistic from deterministic breadth-first neighborhoods of a
- * prebuilt, dense CAGRA graph. Roots that yield fewer than `beta` unique candidates contribute
- * zero to the average.
- */
+/** Retired FAVOR estimator. Always throws; no estimation is performed. */
 [[deprecated("FAVOR is retired")]] CUVS_EXPORT float compute_favor_delta_d(
   raft::resources const& res,
   favor_delta_d_params const& params,
@@ -1046,14 +1034,7 @@ using cagra_index_t =
   favor_delta_d_params const& params,
   cagra::index<uint8_t, uint32_t> const& index);
 
-/**
- * Save a computed FAVOR delta-d value in a versioned binary sidecar bound to the graph,
- * logical dataset contents, index metadata, and calculation parameters.
- *
- * The index must have an attached dense device dataset and graph. Dataset row padding is not
- * included in the content fingerprint. Fingerprints detect accidental incompatibility and are
- * not a cryptographic security mechanism.
- */
+/** Retired FAVOR sidecar API. Always throws; no file is written. */
 [[deprecated("FAVOR is retired")]] CUVS_EXPORT void save_favor_delta_d(
   raft::resources const& res,
   std::string const& filename,
@@ -1079,11 +1060,7 @@ using cagra_index_t =
   cagra::index<uint8_t, uint32_t> const& index,
   float delta_d);
 
-/**
- * Load a FAVOR delta-d sidecar after the serialized graph's dense dataset has been attached.
- * Incompatibility or corruption is reported as an error; this function never recomputes the
- * value.
- */
+/** Retired FAVOR sidecar API. Always throws; no file is read. */
 [[deprecated("FAVOR is retired")]] CUVS_EXPORT float load_favor_delta_d(
   raft::resources const& res,
   std::string const& filename,

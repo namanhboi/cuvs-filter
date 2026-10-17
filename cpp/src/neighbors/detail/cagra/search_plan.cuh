@@ -5,7 +5,6 @@
 
 #pragma once
 
-#include "favor_penalty.cuh"
 #include "hashmap.hpp"
 #include "sample_filter_utils.cuh"
 
@@ -31,16 +30,6 @@
 #include <variant>
 
 namespace cuvs::neighbors::cagra::detail {
-
-/**
- * Keep the rejected adaptive-termination experiment out of normal CAGRA behavior while retaining
- * an exact, internal reproduction path for its benchmark and diagnostic artifacts.
- */
-inline bool favor_adaptive_termination_experiment_enabled() noexcept
-{
-  auto const* value = std::getenv("CUVS_FAVOR_EXPERIMENTAL_ADAPTIVE_TERMINATION");
-  return value != nullptr && value[0] == '1' && value[1] == '\0';
-}
 
 template <typename T>
 struct is_cagra_bitset_sample_filter : std::false_type {};
@@ -146,13 +135,10 @@ struct search_plan_impl_base : public search_params {
       graph_degree(graph_degree),
       topk(topk),
       configured_itopk_size(params.itopk_size),
-      configured_max_iterations(params.max_iterations),
-      favor_raw_delta_d(params.favor_delta_d)
+      configured_max_iterations(params.max_iterations)
   {
-    if (filter_mode == filtering_mode::FAVOR && algo == search_algo::AUTO) {
-      algo = search_algo::SINGLE_CTA;
-      RAFT_LOG_DEBUG("Auto strategy: FAVOR filtering selects single-cta");
-    }
+    RAFT_EXPECTS(filter_mode == filtering_mode::DEFAULT,
+                 "FAVOR is retired. Use CAGRA-Base, CAGRA-Retain, or CAGRA-NaviX.");
     if (persistent) {
       if (algo == search_algo::AUTO) {
         algo = search_algo::SINGLE_CTA;
@@ -218,32 +204,11 @@ struct search_plan_impl : public search_plan_impl_base {
   {
     adjust_search_params(is_cagra_bitset_sample_filter<SAMPLE_FILTER_T>::value);
     check_params();
-    calculate_favor_penalty();
     calc_hashmap_params(res);
     if (!persistent) {  // Persistent kernel does not provide this functionality
       num_executed_iterations.resize(max_queries, raft::resource::get_cuda_stream(res));
     }
     RAFT_LOG_DEBUG("# algo = %d", static_cast<int>(algo));
-  }
-
-  void calculate_favor_penalty()
-  {
-    if (filter_mode != filtering_mode::FAVOR) {
-      favor_penalty_distance = 0.0f;
-      return;
-    }
-    // Preserve the exact effective-ef convention of the original kernels: SINGLE_CTA used the
-    // rounded traversal itopk, whereas MULTI_CTA used the user-configured global itopk.
-    auto const reference_itopk =
-      algo == search_algo::MULTI_CTA ? configured_itopk_size : itopk_size;
-    favor_penalty_distance =
-      favor_reference_penalty(filtering_rate, reference_itopk, favor_delta_d);
-    // Kernel launchers already carry the plan's private search_params copy. Reuse its historical
-    // delta-d slot for the reference upper bound. Query-local modes derive their final CTA scalar
-    // from this upper bound after the initial local candidate ordering.
-    favor_delta_d = favor_penalty_distance;
-    RAFT_LOG_DEBUG("# FAVOR raw delta-d: %g", favor_raw_delta_d);
-    RAFT_LOG_DEBUG("# FAVOR reference penalty distance: %g", favor_penalty_distance);
   }
 
   virtual ~search_plan_impl() {}
@@ -285,8 +250,7 @@ struct search_plan_impl : public search_plan_impl_base {
       max_iterations = _max_iterations;
     }
     // MULTI_CTA needs enough independent traversals to compensate for the fraction of rows
-    // rejected by the filter. FAVOR uses the same adjusted traversal breadth as default
-    // filtering, while configured_itopk_size retains the user-supplied value for its penalty.
+    // rejected by the filter.
     if (algo == search_algo::MULTI_CTA && (0.0 < filtering_rate && filtering_rate < 1.0)) {
       size_t adjusted_itopk_size =
         (size_t)((float)topk / (1.0 - filtering_rate) +
@@ -308,28 +272,6 @@ struct search_plan_impl : public search_plan_impl_base {
                      itopk_size,
                      itopk32);
       itopk_size = itopk32;
-    }
-    if (favor_adaptive_termination_experiment_enabled() && bitset_filter &&
-        configured_max_iterations == 0 && algo == search_algo::SINGLE_CTA &&
-        filter_mode == filtering_mode::FAVOR &&
-        favor_penalty == favor_penalty_mode::CAGRA_RETENTION_SAFE &&
-        favor_retention_fraction == 0.0f) {
-      const auto budget = favor_adaptive_budget(filtering_rate,
-                                                itopk_size,
-                                                topk,
-                                                search_width,
-                                                dataset_size,
-                                                graph_degree,
-                                                static_cast<std::uint32_t>(max_iterations));
-      if (budget.prefix_size != 0) {
-        favor_adaptive_start_iteration = budget.start_iteration;
-        favor_adaptive_prefix_size     = budget.prefix_size;
-        max_iterations                 = budget.hard_iteration;
-        RAFT_LOG_DEBUG("# sparse FAVOR adaptive termination: prefix=%u, start=%u, hard=%u",
-                       favor_adaptive_prefix_size,
-                       favor_adaptive_start_iteration,
-                       static_cast<std::uint32_t>(max_iterations));
-      }
     }
     team_size = dataset_desc.team_size;
   }
@@ -498,42 +440,6 @@ struct search_plan_impl : public search_plan_impl_base {
     if (algo != search_algo::SINGLE_CTA && algo != search_algo::MULTI_CTA &&
         algo != search_algo::MULTI_KERNEL) {
       error_message += "An invalid kernel mode has been given: " + std::to_string((int)algo) + "";
-    }
-    if (filter_mode == filtering_mode::FAVOR) {
-      if (algo != search_algo::SINGLE_CTA && algo != search_algo::MULTI_CTA) {
-        error_message += "FAVOR filtering supports only SINGLE_CTA and MULTI_CTA. ";
-      }
-      if (persistent) { error_message += "FAVOR filtering does not support persistent search. "; }
-      if (!std::isfinite(favor_delta_d) || favor_delta_d < 0.0f) {
-        error_message += "`favor_delta_d` must be finite and nonnegative. ";
-      }
-      if (!(filtering_rate >= 0.0f && filtering_rate < 1.0f)) {
-        error_message += "FAVOR filtering requires an exact filtering rate in [0, 1). ";
-      }
-      if (favor_penalty != favor_penalty_mode::REFERENCE &&
-          favor_penalty != favor_penalty_mode::CAGRA_QUERY_LOCAL &&
-          favor_penalty != favor_penalty_mode::CAGRA_RETENTION_SAFE) {
-        error_message += "Invalid FAVOR penalty mode. ";
-      }
-      if (!std::isfinite(favor_penalty_lambda) || favor_penalty_lambda <= 0.0f) {
-        error_message += "`favor_penalty_lambda` must be finite and positive. ";
-      }
-      if (!std::isfinite(favor_retention_fraction) || favor_retention_fraction < 0.0f ||
-          favor_retention_fraction >= 1.0f) {
-        error_message += "`favor_retention_fraction` must be finite and in [0, 1). ";
-      }
-      if (favor_retention_fraction == 0.0f &&
-          favor_penalty != favor_penalty_mode::CAGRA_RETENTION_SAFE) {
-        error_message += "Automatic `favor_retention_fraction` requires CAGRA_RETENTION_SAFE. ";
-      }
-      const bool multi_cta_automatic_retention =
-        algo == search_algo::MULTI_CTA && favor_retention_fraction == 0.0f;
-      if (algo != search_algo::SINGLE_CTA && !multi_cta_automatic_retention &&
-          favor_retention_fraction != 0.5f) {
-        error_message +=
-          "Explicit non-default `favor_retention_fraction` supports only SINGLE_CTA FAVOR "
-          "filtering. ";
-      }
     }
     if (thread_block_size != 0 && thread_block_size != 64 && thread_block_size != 128 &&
         thread_block_size != 256 && thread_block_size != 512 && thread_block_size != 1024) {

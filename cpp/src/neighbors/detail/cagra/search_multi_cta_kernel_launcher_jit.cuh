@@ -59,6 +59,7 @@ void select_and_run(const dataset_descriptor_host<DataT, IndexT, DistanceT>& dat
                     SampleFilterT sample_filter,
                     cudaStream_t stream)
 {
+  RAFT_EXPECTS(ps.filter_mode == filtering_mode::DEFAULT, "FAVOR is retired");
   const auto filter_payload      = extract_cagra_sample_filter<SourceIndexT>(sample_filter, stream);
   const uint32_t query_id_offset = filter_payload.query_id_offset;
   const bool favor               = ps.filter_mode == filtering_mode::FAVOR;

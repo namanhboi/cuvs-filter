@@ -19,8 +19,8 @@ namespace cuvs::neighbors::cagra::detail {
  * Private runtime decoration used by benchmark UDF search.
  *
  * The public filter API intentionally does not expose per-query rates or result-accumulator
- * policy. FAVOR attaches its sampled query-local rates; default CAGRA always attaches a null rate
- * pointer and can independently select the passive passing-result accumulator.
+ * policy. Supported searches attach a null rate pointer and can independently select the passive
+ * passing-result accumulator.
  */
 template <class CagraSampleFilterT, bool PassingAccumulator>
 struct CagraSampleFilterWithRuntimeState {
@@ -43,7 +43,7 @@ struct CagraSampleFilterWithRuntimeState {
  * Private runtime decoration used by the benchmark-only NaviX SINGLE_CTA experiment.
  *
  * NaviX is deliberately selected from the filter type instead of a public search parameter. This
- * keeps the public CAGRA API and the default/FAVOR kernel specializations unchanged while still
+ * keeps the public CAGRA API and default kernel specializations unchanged while still
  * allowing the JIT launcher to select a dedicated kernel binary.
  */
 template <class CagraSampleFilterT>
