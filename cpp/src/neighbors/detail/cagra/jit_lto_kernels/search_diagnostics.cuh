@@ -7,7 +7,7 @@
 
 #include <cstdint>
 
-namespace cuvs::neighbors::cagra::detail::favor_search_diagnostics {
+namespace cuvs::neighbors::cagra::detail::search_diagnostics {
 
 // Schema 9 adds mechanism-level work counters used to separate adjacency, predicate, and vector
 // distance work. Consumers must not interpret earlier query-summary binaries with this layout.
@@ -231,4 +231,4 @@ struct context {
   std::uint32_t navix_seed_stride{};
 };
 
-}  // namespace cuvs::neighbors::cagra::detail::favor_search_diagnostics
+}  // namespace cuvs::neighbors::cagra::detail::search_diagnostics

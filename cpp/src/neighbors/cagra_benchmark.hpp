@@ -45,11 +45,11 @@ CUVS_EXPORT void benchmark_estimate_favor_udf_filtering_rates(
   std::uint32_t sample_offset = 0);
 
 /**
- * Run the private SINGLE_CTA UDF path. FAVOR requires sampled query-local rates; default CAGRA
- * requires a null rate pointer and never estimates selectivity.
+ * Run the private SINGLE_CTA UDF path with optional passing-result accumulation.
+ * The rate pointer must be null; Base and Retain never estimate per-query selectivity.
  */
 template <typename T>
-CUVS_EXPORT void benchmark_search_favor_udf_with_sampled_rates(
+CUVS_EXPORT void benchmark_search_udf_with_result_accumulator(
   raft::resources const& res,
   cagra::search_params const& params,
   cagra::index<T, std::uint32_t> const& index,

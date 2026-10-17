@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include "favor_search_diagnostics.hpp"
+#include "search_diagnostics.hpp"
 
-namespace cuvs::neighbors::cagra::detail::favor_search_diagnostics {
+namespace cuvs::neighbors::cagra::detail::search_diagnostics {
 namespace {
 thread_local context* active_context              = nullptr;
 thread_local const std::uint32_t* active_seed_ptr = nullptr;
@@ -32,4 +32,4 @@ void set_active_seeds(const std::uint32_t* values, std::uint32_t count) noexcept
   active_seed_ptr   = values;
   active_seed_count = count;
 }
-}  // namespace cuvs::neighbors::cagra::detail::favor_search_diagnostics
+}  // namespace cuvs::neighbors::cagra::detail::search_diagnostics

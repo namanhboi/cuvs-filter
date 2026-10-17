@@ -11,8 +11,8 @@
 #include "../common/cuda_huge_page_resource.hpp"
 #include "cuvs_ann_bench_utils.h"
 #include "favor_retry_diagnostic_session.h"
-#include "favor_search_diagnostic_session.h"
 #include "filtered_dataset_adapter.h"
+#include "search_diagnostic_session.h"
 #include <rmm/mr/pinned_host_memory_resource.hpp>
 
 #include <cuvs/distance/distance.hpp>
@@ -189,7 +189,7 @@ class cuvs_cagra : public algo<T>, public algo_gpu {
     cuvs::neighbors::cagra::search_params p;
     std::optional<std::string> favor_delta_d_file;
     cuvs::neighbors::cagra::favor_delta_d_params favor_delta_d_params;
-    detail::favor_diagnostic_config favor_diagnostics;
+    detail::search_diagnostic_config favor_diagnostics;
     detail::favor_retry_diagnostic_config favor_retry_diagnostics;
     /** Benchmark-only independent B0 FAVOR starts. Empty preserves normal CAGRA behavior. */
     std::vector<std::uint64_t> favor_seed_masks;
@@ -376,7 +376,7 @@ class cuvs_cagra : public algo<T>, public algo_gpu {
   mutable std::uint32_t udf_query_offset_{};
   mutable std::uint32_t bitmap_query_offset_{};
   bool filter_empty_{false};
-  std::shared_ptr<detail::favor_diagnostic_session> favor_diagnostic_session_;
+  std::shared_ptr<detail::search_diagnostic_session> search_diagnostic_session_;
   std::shared_ptr<detail::favor_retry_diagnostic_session> favor_retry_diagnostic_session_;
   std::vector<std::uint64_t> favor_seed_masks_;
   std::vector<std::shared_ptr<index_type>> sub_indices_;
@@ -605,6 +605,9 @@ void cuvs_cagra<T, IdxT>::set_search_param(const search_param_base& param,
     filter_ = make_cuvs_filter(nullptr, index_ ? index_->size() : 0);
   }
   auto sp = dynamic_cast<const search_param&>(param);
+  RAFT_EXPECTS(sp.p.filter_mode == cuvs::neighbors::cagra::filtering_mode::DEFAULT,
+               "FAVOR is retired. Use CAGRA-Base, CAGRA-Retain, or CAGRA-NaviX.");
+
   if (sp.require_identity_source_indices) {
     RAFT_EXPECTS(index_ != nullptr, "identity source-ID validation requires a loaded CAGRA index");
     RAFT_EXPECTS(
@@ -810,10 +813,10 @@ void cuvs_cagra<T, IdxT>::set_search_param(const search_param_base& param,
       RAFT_EXPECTS(!detail::favor_adaptive_termination_enabled(),
                    "FAVOR termination shadow requires adaptive termination to be disabled");
     }
-    favor_diagnostic_session_ =
-      std::make_shared<detail::favor_diagnostic_session>(sp.favor_diagnostics);
+    search_diagnostic_session_ =
+      std::make_shared<detail::search_diagnostic_session>(sp.favor_diagnostics);
   } else {
-    favor_diagnostic_session_.reset();
+    search_diagnostic_session_.reset();
   }
   if (sp.favor_retry_diagnostics.enabled()) {
     RAFT_EXPECTS(filter_bitset_ != nullptr,
@@ -1139,8 +1142,8 @@ void cuvs_cagra<T, IdxT>::search_base(
                                                                       *navix_policy_);
       }
     };
-    if (favor_diagnostic_session_) {
-      favor_diagnostic_session_->capture(
+    if (search_diagnostic_session_) {
+      search_diagnostic_session_->capture(
         handle_,
         static_cast<std::uint32_t>(batch_size),
         static_cast<std::uint32_t>(k),
@@ -1192,22 +1195,22 @@ void cuvs_cagra<T, IdxT>::search_base(
         bitmap_query_offset_,
         favor_udf_passing_accumulator_);
     };
-    if (favor_diagnostic_session_) {
+    if (search_diagnostic_session_) {
       RAFT_EXPECTS(!cagra_bitmap_seeds_,
                    "default-CAGRA bitmap-seed control has no diagnostic fragment");
-      favor_diagnostic_session_->capture(handle_,
-                                         static_cast<std::uint32_t>(batch_size),
-                                         static_cast<std::uint32_t>(k),
-                                         static_cast<std::uint32_t>(index_->graph().extent(1)),
-                                         static_cast<std::uint32_t>(search_params_.search_width),
-                                         static_cast<std::int64_t>(index_->size()),
-                                         static_cast<std::uint32_t>(search_params_.itopk_size),
-                                         search_params_.max_iterations,
-                                         -1.0f,
-                                         true,
-                                         nullptr,
-                                         neighbors,
-                                         run_bitmap_search);
+      search_diagnostic_session_->capture(handle_,
+                                          static_cast<std::uint32_t>(batch_size),
+                                          static_cast<std::uint32_t>(k),
+                                          static_cast<std::uint32_t>(index_->graph().extent(1)),
+                                          static_cast<std::uint32_t>(search_params_.search_width),
+                                          static_cast<std::int64_t>(index_->size()),
+                                          static_cast<std::uint32_t>(search_params_.itopk_size),
+                                          search_params_.max_iterations,
+                                          -1.0f,
+                                          true,
+                                          nullptr,
+                                          neighbors,
+                                          run_bitmap_search);
     } else {
       run_bitmap_search();
     }
@@ -1237,7 +1240,7 @@ void cuvs_cagra<T, IdxT>::search_base(
           favor_udf_sample_offset_);
       }
       if (search_params_.filter_mode == cuvs::neighbors::cagra::filtering_mode::FAVOR) {
-        cuvs::neighbors::cagra::detail::benchmark_search_favor_udf_with_sampled_rates<T>(
+        cuvs::neighbors::cagra::detail::benchmark_search_udf_with_result_accumulator<T>(
           handle_,
           search_params_,
           *index_,
@@ -1250,7 +1253,7 @@ void cuvs_cagra<T, IdxT>::search_base(
         return;
       }
 
-      cuvs::neighbors::cagra::detail::benchmark_search_favor_udf_with_sampled_rates<T>(
+      cuvs::neighbors::cagra::detail::benchmark_search_udf_with_result_accumulator<T>(
         handle_,
         search_params_,
         *index_,
@@ -1261,20 +1264,20 @@ void cuvs_cagra<T, IdxT>::search_base(
         sampled_rates,
         favor_udf_passing_accumulator_);
     };
-    if (favor_diagnostic_session_) {
-      favor_diagnostic_session_->capture(handle_,
-                                         static_cast<std::uint32_t>(batch_size),
-                                         static_cast<std::uint32_t>(k),
-                                         static_cast<std::uint32_t>(index_->graph().extent(1)),
-                                         static_cast<std::uint32_t>(search_params_.search_width),
-                                         static_cast<std::int64_t>(index_->size()),
-                                         static_cast<std::uint32_t>(search_params_.itopk_size),
-                                         search_params_.max_iterations,
-                                         -1.0f,
-                                         true,
-                                         nullptr,
-                                         neighbors,
-                                         run_udf_accumulated_search);
+    if (search_diagnostic_session_) {
+      search_diagnostic_session_->capture(handle_,
+                                          static_cast<std::uint32_t>(batch_size),
+                                          static_cast<std::uint32_t>(k),
+                                          static_cast<std::uint32_t>(index_->graph().extent(1)),
+                                          static_cast<std::uint32_t>(search_params_.search_width),
+                                          static_cast<std::int64_t>(index_->size()),
+                                          static_cast<std::uint32_t>(search_params_.itopk_size),
+                                          search_params_.max_iterations,
+                                          -1.0f,
+                                          true,
+                                          nullptr,
+                                          neighbors,
+                                          run_udf_accumulated_search);
     } else {
       run_udf_accumulated_search();
     }
@@ -1286,7 +1289,7 @@ void cuvs_cagra<T, IdxT>::search_base(
     auto run_retry_round =
       [&](std::uint32_t max_iterations,
           std::uint64_t rand_xor_mask,
-          cuvs::neighbors::cagra::detail::favor_search_diagnostics::context* diagnostic_context,
+          cuvs::neighbors::cagra::detail::search_diagnostics::context* diagnostic_context,
           const std::uint32_t* seeds,
           std::uint32_t seed_count,
           std::int64_t* round_neighbors,
@@ -1299,10 +1302,10 @@ void cuvs_cagra<T, IdxT>::search_base(
           raft::make_device_matrix_view<std::int64_t, std::int64_t>(round_neighbors, batch_size, k);
         auto round_distances_view =
           raft::make_device_matrix_view<float, std::int64_t>(round_distances, batch_size, k);
-        cuvs::neighbors::cagra::detail::favor_search_diagnostics::scoped_context context_scope{
+        cuvs::neighbors::cagra::detail::search_diagnostics::scoped_context context_scope{
           diagnostic_context};
-        cuvs::neighbors::cagra::detail::favor_search_diagnostics::scoped_seeds seed_scope{
-          seeds, seed_count};
+        cuvs::neighbors::cagra::detail::search_diagnostics::scoped_seeds seed_scope{seeds,
+                                                                                    seed_count};
         cuvs::neighbors::cagra::detail::benchmark_search_favor_with_known_filtering_rate<T>(
           handle_,
           params_copy,
@@ -1408,20 +1411,20 @@ void cuvs_cagra<T, IdxT>::search_base(
         cuvs::neighbors::cagra::search(
           handle_, search_params_, *index_, queries_view, neighbors_view, distances_view, *filter_);
       };
-      if (favor_diagnostic_session_) {
-        favor_diagnostic_session_->capture(handle_,
-                                           static_cast<std::uint32_t>(batch_size),
-                                           static_cast<std::uint32_t>(k),
-                                           static_cast<std::uint32_t>(index_->graph().extent(1)),
-                                           static_cast<std::uint32_t>(search_params_.search_width),
-                                           static_cast<std::int64_t>(index_->size()),
-                                           static_cast<std::uint32_t>(search_params_.itopk_size),
-                                           search_params_.max_iterations,
-                                           search_params_.filtering_rate,
-                                           true,
-                                           nullptr,
-                                           neighbors,
-                                           run_search);
+      if (search_diagnostic_session_) {
+        search_diagnostic_session_->capture(handle_,
+                                            static_cast<std::uint32_t>(batch_size),
+                                            static_cast<std::uint32_t>(k),
+                                            static_cast<std::uint32_t>(index_->graph().extent(1)),
+                                            static_cast<std::uint32_t>(search_params_.search_width),
+                                            static_cast<std::int64_t>(index_->size()),
+                                            static_cast<std::uint32_t>(search_params_.itopk_size),
+                                            search_params_.max_iterations,
+                                            search_params_.filtering_rate,
+                                            true,
+                                            nullptr,
+                                            neighbors,
+                                            run_search);
       } else {
         run_search();
       }

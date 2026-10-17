@@ -52,8 +52,8 @@ enum class search_algo {
 enum class filtering_mode : uint32_t {
   /** Preserve the existing CAGRA filtering behavior. */
   DEFAULT = 0,
-  /** Apply FAVOR exclusion-distance scoring during graph traversal. */
-  FAVOR = 1,
+  /** Retired mode. Retained only so legacy callers receive an explicit error. */
+  FAVOR [[deprecated("FAVOR is retired; use Base, Retain, or NaviX")]] = 1,
 };
 
 enum class favor_penalty_mode : uint32_t {
@@ -148,20 +148,23 @@ struct search_params : cuvs::neighbors::search_params {
   float filtering_rate = -1.0;
 
   /**
-   * Filtering implementation. FAVOR supports bitset filters with SINGLE_CTA and MULTI_CTA.
+   * Filtering implementation. Only DEFAULT is supported; FAVOR is retired.
    * Per-query `bitmap_filter<uint32_t, int64_t>` filters currently support DEFAULT mode with
    * SINGLE_CTA, MULTI_CTA, or AUTO.
    */
   filtering_mode filter_mode = filtering_mode::DEFAULT;
 
   /** Dataset/graph-specific FAVOR delta-d statistic. Required when filter_mode is FAVOR. */
-  float favor_delta_d = -1.0f;
+  [[deprecated("FAVOR is retired; this parameter is unsupported")]] float favor_delta_d = -1.0f;
 
   /** FAVOR penalty formula. REFERENCE preserves the original behavior. */
-  favor_penalty_mode favor_penalty = favor_penalty_mode::REFERENCE;
+  [[deprecated(
+    "FAVOR is retired; this parameter is unsupported")]] favor_penalty_mode favor_penalty =
+    favor_penalty_mode::REFERENCE;
 
   /** Dimensionless multiplier applied to the query/CTA-local distance gap. */
-  float favor_penalty_lambda = 1.0f;
+  [[deprecated("FAVOR is retired; this parameter is unsupported")]] float favor_penalty_lambda =
+    1.0f;
 
   /**
    * Fraction of the current retention headroom that a rejected candidate's penalty may consume.
@@ -171,7 +174,8 @@ struct search_params : cuvs::neighbors::search_params {
    * MULTI_CTA uses the user-configured global itopk before traversal-breadth adjustment. Explicit
    * non-default values are currently supported only by SINGLE_CTA.
    */
-  float favor_retention_fraction = 0.5f;
+  [[deprecated("FAVOR is retired; this parameter is unsupported")]] float favor_retention_fraction =
+    0.5f;
 
   /** Data type of the query vector and codebook table on shared memory. Currently, only VPQ
    * supports FP8. **/
@@ -1025,18 +1029,22 @@ using cagra_index_t =
  * prebuilt, dense CAGRA graph. Roots that yield fewer than `beta` unique candidates contribute
  * zero to the average.
  */
-CUVS_EXPORT float compute_favor_delta_d(raft::resources const& res,
-                                        favor_delta_d_params const& params,
-                                        cagra::index<float, uint32_t> const& index);
-CUVS_EXPORT float compute_favor_delta_d(raft::resources const& res,
-                                        favor_delta_d_params const& params,
-                                        cagra::index<half, uint32_t> const& index);
-CUVS_EXPORT float compute_favor_delta_d(raft::resources const& res,
-                                        favor_delta_d_params const& params,
-                                        cagra::index<int8_t, uint32_t> const& index);
-CUVS_EXPORT float compute_favor_delta_d(raft::resources const& res,
-                                        favor_delta_d_params const& params,
-                                        cagra::index<uint8_t, uint32_t> const& index);
+[[deprecated("FAVOR is retired")]] CUVS_EXPORT float compute_favor_delta_d(
+  raft::resources const& res,
+  favor_delta_d_params const& params,
+  cagra::index<float, uint32_t> const& index);
+[[deprecated("FAVOR is retired")]] CUVS_EXPORT float compute_favor_delta_d(
+  raft::resources const& res,
+  favor_delta_d_params const& params,
+  cagra::index<half, uint32_t> const& index);
+[[deprecated("FAVOR is retired")]] CUVS_EXPORT float compute_favor_delta_d(
+  raft::resources const& res,
+  favor_delta_d_params const& params,
+  cagra::index<int8_t, uint32_t> const& index);
+[[deprecated("FAVOR is retired")]] CUVS_EXPORT float compute_favor_delta_d(
+  raft::resources const& res,
+  favor_delta_d_params const& params,
+  cagra::index<uint8_t, uint32_t> const& index);
 
 /**
  * Save a computed FAVOR delta-d value in a versioned binary sidecar bound to the graph,
@@ -1046,48 +1054,56 @@ CUVS_EXPORT float compute_favor_delta_d(raft::resources const& res,
  * included in the content fingerprint. Fingerprints detect accidental incompatibility and are
  * not a cryptographic security mechanism.
  */
-CUVS_EXPORT void save_favor_delta_d(raft::resources const& res,
-                                    std::string const& filename,
-                                    favor_delta_d_params const& params,
-                                    cagra::index<float, uint32_t> const& index,
-                                    float delta_d);
-CUVS_EXPORT void save_favor_delta_d(raft::resources const& res,
-                                    std::string const& filename,
-                                    favor_delta_d_params const& params,
-                                    cagra::index<half, uint32_t> const& index,
-                                    float delta_d);
-CUVS_EXPORT void save_favor_delta_d(raft::resources const& res,
-                                    std::string const& filename,
-                                    favor_delta_d_params const& params,
-                                    cagra::index<int8_t, uint32_t> const& index,
-                                    float delta_d);
-CUVS_EXPORT void save_favor_delta_d(raft::resources const& res,
-                                    std::string const& filename,
-                                    favor_delta_d_params const& params,
-                                    cagra::index<uint8_t, uint32_t> const& index,
-                                    float delta_d);
+[[deprecated("FAVOR is retired")]] CUVS_EXPORT void save_favor_delta_d(
+  raft::resources const& res,
+  std::string const& filename,
+  favor_delta_d_params const& params,
+  cagra::index<float, uint32_t> const& index,
+  float delta_d);
+[[deprecated("FAVOR is retired")]] CUVS_EXPORT void save_favor_delta_d(
+  raft::resources const& res,
+  std::string const& filename,
+  favor_delta_d_params const& params,
+  cagra::index<half, uint32_t> const& index,
+  float delta_d);
+[[deprecated("FAVOR is retired")]] CUVS_EXPORT void save_favor_delta_d(
+  raft::resources const& res,
+  std::string const& filename,
+  favor_delta_d_params const& params,
+  cagra::index<int8_t, uint32_t> const& index,
+  float delta_d);
+[[deprecated("FAVOR is retired")]] CUVS_EXPORT void save_favor_delta_d(
+  raft::resources const& res,
+  std::string const& filename,
+  favor_delta_d_params const& params,
+  cagra::index<uint8_t, uint32_t> const& index,
+  float delta_d);
 
 /**
  * Load a FAVOR delta-d sidecar after the serialized graph's dense dataset has been attached.
  * Incompatibility or corruption is reported as an error; this function never recomputes the
  * value.
  */
-CUVS_EXPORT float load_favor_delta_d(raft::resources const& res,
-                                     std::string const& filename,
-                                     favor_delta_d_params const& expected_params,
-                                     cagra::index<float, uint32_t> const& index);
-CUVS_EXPORT float load_favor_delta_d(raft::resources const& res,
-                                     std::string const& filename,
-                                     favor_delta_d_params const& expected_params,
-                                     cagra::index<half, uint32_t> const& index);
-CUVS_EXPORT float load_favor_delta_d(raft::resources const& res,
-                                     std::string const& filename,
-                                     favor_delta_d_params const& expected_params,
-                                     cagra::index<int8_t, uint32_t> const& index);
-CUVS_EXPORT float load_favor_delta_d(raft::resources const& res,
-                                     std::string const& filename,
-                                     favor_delta_d_params const& expected_params,
-                                     cagra::index<uint8_t, uint32_t> const& index);
+[[deprecated("FAVOR is retired")]] CUVS_EXPORT float load_favor_delta_d(
+  raft::resources const& res,
+  std::string const& filename,
+  favor_delta_d_params const& expected_params,
+  cagra::index<float, uint32_t> const& index);
+[[deprecated("FAVOR is retired")]] CUVS_EXPORT float load_favor_delta_d(
+  raft::resources const& res,
+  std::string const& filename,
+  favor_delta_d_params const& expected_params,
+  cagra::index<half, uint32_t> const& index);
+[[deprecated("FAVOR is retired")]] CUVS_EXPORT float load_favor_delta_d(
+  raft::resources const& res,
+  std::string const& filename,
+  favor_delta_d_params const& expected_params,
+  cagra::index<int8_t, uint32_t> const& index);
+[[deprecated("FAVOR is retired")]] CUVS_EXPORT float load_favor_delta_d(
+  raft::resources const& res,
+  std::string const& filename,
+  favor_delta_d_params const& expected_params,
+  cagra::index<uint8_t, uint32_t> const& index);
 
 /**
  * @}

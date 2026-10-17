@@ -58,8 +58,7 @@ struct CagraMultiKernelSearchPlanner
       this->template add_static_fragment<
         fragment_tag_apply_filter_kernel<IndexTag, DistanceTag, SourceIndexTag>>();
     } else if (kernel_name == "estimate_filter_rate") {
-      this
-        ->template add_static_fragment<fragment_tag_estimate_filter_rate_kernel<SourceIndexTag>>();
+      RAFT_FAIL("FAVOR selectivity sampling is retired");
     } else {
       RAFT_FAIL("Unknown CAGRA multi-kernel JIT kernel: %s", kernel_name.c_str());
     }

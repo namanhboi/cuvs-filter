@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "../../../../src/neighbors/detail/cagra/favor_search_diagnostics.hpp"
+#include "../../../../src/neighbors/detail/cagra/search_diagnostics.hpp"
 #include "../common/blob.hpp"
 
 #include <raft/core/resource/cuda_stream.hpp>
@@ -27,9 +27,9 @@
 
 namespace cuvs::bench::detail {
 
-namespace favor_diag = cuvs::neighbors::cagra::detail::favor_search_diagnostics;
+namespace favor_diag = cuvs::neighbors::cagra::detail::search_diagnostics;
 
-struct favor_diagnostic_config {
+struct search_diagnostic_config {
   std::string output_directory;
   std::string ground_truth_file;
   std::string selected_queries_file;
@@ -48,9 +48,11 @@ struct favor_diagnostic_config {
 };
 
 /** Owns one deliberately untimed diagnostic capture for a cuVS Bench CAGRA configuration. */
-class favor_diagnostic_session {
+class search_diagnostic_session {
  public:
-  explicit favor_diagnostic_session(favor_diagnostic_config config) : config_{std::move(config)} {}
+  explicit search_diagnostic_session(search_diagnostic_config config) : config_{std::move(config)}
+  {
+  }
 
   template <typename SearchFn>
   void capture(const raft::resources& res,
@@ -211,9 +213,8 @@ class favor_diagnostic_session {
     std::vector<std::int64_t> result_indices_host(static_cast<std::uint64_t>(num_queries) * topk);
     std::vector<std::uint32_t> navix_seed_ids_host(navix_seed_count);
     std::vector<float> navix_seed_distances_host(navix_seed_count);
-    std::vector<std::uint32_t> seed_inspected_units_host(seed_inspected_units == nullptr
-                                                          ? 0
-                                                          : num_queries);
+    std::vector<std::uint32_t> seed_inspected_units_host(
+      seed_inspected_units == nullptr ? 0 : num_queries);
     if (device_telemetry) {
       RAFT_CUDA_TRY(cudaMemcpy(summaries_host.data(),
                                summaries.data(),
@@ -527,7 +528,7 @@ class favor_diagnostic_session {
              << "}\n";
   }
 
-  favor_diagnostic_config config_;
+  search_diagnostic_config config_;
   std::mutex mutex_;
   bool captured_ = false;
 };

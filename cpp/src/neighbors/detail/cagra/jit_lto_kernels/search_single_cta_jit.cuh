@@ -33,8 +33,8 @@
 #include "extern_device_functions.cuh"
 // Include shared JIT device functions
 #include "device_common_jit.cuh"
-#include "favor_search_diagnostics.cuh"
 #include "navix_device.cuh"
+#include "search_diagnostics.cuh"
 
 namespace cuvs::neighbors::cagra::detail::single_cta_search {
 
@@ -247,16 +247,16 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   const std::uint32_t query_id_offset,  // Offset to add to query_id when calling filter
   const dataset_descriptor_base_t<DataT, IndexT, DistanceT>* dataset_desc,
   cagra_sample_filter<SourceIndexT> filter_payload,
-  const float filtering_rate                                  = 0.0f,
-  const float favor_penalty_distance                          = 0.0f,
-  const std::uint32_t favor_penalty_mode_value                = 0,
-  const float favor_penalty_lambda                            = 1.0f,
-  const float favor_retention_fraction                        = 0.5f,
-  const IndexT graph_size                                     = 0,
-  favor_search_diagnostics::context* const diagnostic_context = nullptr,
-  const std::uint32_t favor_adaptive_start_iteration          = 0,
-  const std::uint32_t favor_adaptive_prefix_size              = 0,
-  const std::uint32_t navix_policy_value                      = 0)
+  const float filtering_rate                            = 0.0f,
+  const float favor_penalty_distance                    = 0.0f,
+  const std::uint32_t favor_penalty_mode_value          = 0,
+  const float favor_penalty_lambda                      = 1.0f,
+  const float favor_retention_fraction                  = 0.5f,
+  const IndexT graph_size                               = 0,
+  search_diagnostics::context* const diagnostic_context = nullptr,
+  const std::uint32_t favor_adaptive_start_iteration    = 0,
+  const std::uint32_t favor_adaptive_prefix_size        = 0,
+  const std::uint32_t navix_policy_value                = 0)
 {
   static_assert(!(FAVOR && NAVIX), "FAVOR and NaviX are separate traversal specializations");
   static_assert(!NAVIX || NAVIX_GRAPH_DEGREE == 32 || NAVIX_GRAPH_DEGREE == 64,
@@ -321,9 +321,9 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
   constexpr IndexT index_msb_1_mask = utils::gen_index_msb_1_mask<IndexT>::value;
   const IndexT invalid_index        = utils::get_max_value<IndexT>();
 
-  favor_search_diagnostics::query_summary* diagnostic_summary = nullptr;
-  std::int32_t diagnostic_trace_slot                          = -1;
-  const auto diagnostic_query_id                              = query_id + query_id_offset;
+  search_diagnostics::query_summary* diagnostic_summary = nullptr;
+  std::int32_t diagnostic_trace_slot                    = -1;
+  const auto diagnostic_query_id                        = query_id + query_id_offset;
   if constexpr (DIAGNOSTICS) {
     if (diagnostic_context != nullptr && diagnostic_query_id < diagnostic_context->num_queries) {
       diagnostic_summary    = diagnostic_context->summaries + diagnostic_query_id;
@@ -332,7 +332,7 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
                                 : diagnostic_context->trace_slot_by_query[diagnostic_query_id];
       if (threadIdx.x == 0) {
         *diagnostic_summary                           = {};
-        diagnostic_summary->schema                    = favor_search_diagnostics::schema_version;
+        diagnostic_summary->schema                    = search_diagnostics::schema_version;
         diagnostic_summary->query_id                  = diagnostic_query_id;
         diagnostic_summary->resolved_max_iterations   = max_iteration;
         diagnostic_summary->hash_bitlen               = hash_bitlen;
@@ -344,9 +344,8 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
         diagnostic_summary->best_unexpanded_distance = raft::upper_bound<float>();
         diagnostic_summary->worst_retained_distance  = raft::upper_bound<float>();
         diagnostic_summary->kth_passing_raw_distance = raft::upper_bound<float>();
-        for (std::uint32_t rank = 0; rank < favor_search_diagnostics::ground_truth_k; ++rank) {
-          diagnostic_summary->gt_first_iteration[rank] =
-            favor_search_diagnostics::invalid_iteration;
+        for (std::uint32_t rank = 0; rank < search_diagnostics::ground_truth_k; ++rank) {
+          diagnostic_summary->gt_first_iteration[rank] = search_diagnostics::invalid_iteration;
         }
       }
     }
@@ -768,15 +767,15 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
 
           if (diagnostic_context->ground_truth_ids != nullptr) {
             const auto source = static_cast<std::uint32_t>(to_source_index(node));
-            const auto* gt    = diagnostic_context->ground_truth_ids +
-                             static_cast<std::uint64_t>(diagnostic_query_id) *
-                               favor_search_diagnostics::ground_truth_k;
-            for (std::uint32_t rank = 0; rank < favor_search_diagnostics::ground_truth_k; ++rank) {
+            const auto* gt =
+              diagnostic_context->ground_truth_ids +
+              static_cast<std::uint64_t>(diagnostic_query_id) * search_diagnostics::ground_truth_k;
+            for (std::uint32_t rank = 0; rank < search_diagnostics::ground_truth_k; ++rank) {
               if (source == gt[rank]) {
                 diagnostic_summary->gt_seen_mask |= (1u << rank);
                 if constexpr (NAVIX) { diagnostic_summary->navix_gt_retained_mask |= (1u << rank); }
                 if (diagnostic_summary->gt_first_iteration[rank] ==
-                    favor_search_diagnostics::invalid_iteration) {
+                    search_diagnostics::invalid_iteration) {
                   diagnostic_summary->gt_first_iteration[rank] = iter;
                 }
               }
@@ -848,7 +847,7 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
             checkpoint->frontier_best                   = best_unexpanded;
             checkpoint->prefix_boundary                 = raft::upper_bound<float>();
             checkpoint->kth_passing_raw_distance        = raft::upper_bound<float>();
-            for (std::uint32_t rank = 0; rank < favor_search_diagnostics::ground_truth_k; ++rank) {
+            for (std::uint32_t rank = 0; rank < search_diagnostics::ground_truth_k; ++rank) {
               checkpoint->top_ids[rank]       = 0xffffffffu;
               checkpoint->top_distances[rank] = raft::upper_bound<float>();
             }
@@ -874,7 +873,7 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
                 }
               }
               if (!pass) { continue; }
-              if (passing_rank < favor_search_diagnostics::ground_truth_k) {
+              if (passing_rank < search_diagnostics::ground_truth_k) {
                 checkpoint->top_ids[passing_rank] =
                   static_cast<std::uint32_t>(to_source_index(node));
                 checkpoint->top_distances[passing_rank] =
@@ -883,10 +882,10 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
               ++passing_rank;
             }
             checkpoint->passing_count = passing_rank;
-            checkpoint->output_count  = min(passing_rank, favor_search_diagnostics::ground_truth_k);
-            if (passing_rank >= favor_search_diagnostics::ground_truth_k) {
+            checkpoint->output_count  = min(passing_rank, search_diagnostics::ground_truth_k);
+            if (passing_rank >= search_diagnostics::ground_truth_k) {
               checkpoint->kth_passing_raw_distance =
-                checkpoint->top_distances[favor_search_diagnostics::ground_truth_k - 1];
+                checkpoint->top_distances[search_diagnostics::ground_truth_k - 1];
             }
             ++(*checkpoint_count);
           }
@@ -926,10 +925,9 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
                                       diagnostic_summary->terminal_unexpanded_reject != 0;
           diagnostic_summary->reason = static_cast<std::uint32_t>(
             favor_adaptive_prefix_size != 0
-              ? favor_search_diagnostics::stop_reason::adaptive_safety_cap
-              : (has_unexpanded
-                   ? favor_search_diagnostics::stop_reason::max_with_unexpanded_frontier
-                   : favor_search_diagnostics::stop_reason::max_with_empty_frontier));
+              ? search_diagnostics::stop_reason::adaptive_safety_cap
+              : (has_unexpanded ? search_diagnostics::stop_reason::max_with_unexpanded_frontier
+                                : search_diagnostics::stop_reason::max_with_empty_frontier));
           if (diagnostic_trace_slot >= 0 && iter < diagnostic_context->max_trace_iterations) {
             diagnostic_context
               ->iteration_records[static_cast<std::uint64_t>(diagnostic_trace_slot) *
@@ -1040,8 +1038,8 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
       if constexpr (DIAGNOSTICS) {
         if (threadIdx.x == 0 && diagnostic_summary != nullptr) {
           diagnostic_summary->reason = static_cast<std::uint32_t>(
-            *terminate_flag == 2 ? favor_search_diagnostics::stop_reason::adaptive_converged
-                                 : favor_search_diagnostics::stop_reason::frontier_exhausted);
+            *terminate_flag == 2 ? search_diagnostics::stop_reason::adaptive_converged
+                                 : search_diagnostics::stop_reason::frontier_exhausted);
           if (diagnostic_trace_slot >= 0 && iter < diagnostic_context->max_trace_iterations) {
             diagnostic_context
               ->iteration_records[static_cast<std::uint64_t>(diagnostic_trace_slot) *
@@ -1087,7 +1085,7 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
         : nullptr;
     if constexpr (NAVIX) {
       if (navix_seeded) {
-        favor_search_diagnostics::iteration_record* navix_diagnostic_record = nullptr;
+        search_diagnostics::iteration_record* navix_diagnostic_record = nullptr;
         if constexpr (DIAGNOSTICS) {
           if (diagnostic_trace_slot >= 0 && iter < diagnostic_context->max_trace_iterations) {
             navix_diagnostic_record = diagnostic_context->iteration_records +
@@ -1380,7 +1378,7 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
           duplicates +=
             hash_result == static_cast<std::uint8_t>(hashmap::insert_outcome::duplicate);
           hash_full += hash_result == static_cast<std::uint8_t>(hashmap::insert_outcome::full);
-          favor_search_diagnostics::candidate_record* candidate = nullptr;
+          search_diagnostics::candidate_record* candidate = nullptr;
           if (diagnostic_trace_slot >= 0 && iter < diagnostic_context->max_trace_iterations &&
               j < diagnostic_context->candidates_per_iteration) {
             candidate = diagnostic_context->candidate_records +
@@ -1413,15 +1411,15 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
 
           std::int16_t ground_truth_rank = -1;
           if (diagnostic_context->ground_truth_ids != nullptr) {
-            const auto* gt = diagnostic_context->ground_truth_ids +
-                             static_cast<std::uint64_t>(diagnostic_query_id) *
-                               favor_search_diagnostics::ground_truth_k;
-            for (std::uint32_t rank = 0; rank < favor_search_diagnostics::ground_truth_k; ++rank) {
+            const auto* gt =
+              diagnostic_context->ground_truth_ids +
+              static_cast<std::uint64_t>(diagnostic_query_id) * search_diagnostics::ground_truth_k;
+            for (std::uint32_t rank = 0; rank < search_diagnostics::ground_truth_k; ++rank) {
               if (static_cast<std::uint32_t>(source) == gt[rank]) {
                 ground_truth_rank = static_cast<std::int16_t>(rank);
                 diagnostic_summary->gt_seen_mask |= (1u << rank);
                 if (diagnostic_summary->gt_first_iteration[rank] ==
-                    favor_search_diagnostics::invalid_iteration) {
+                    search_diagnostics::invalid_iteration) {
                   diagnostic_summary->gt_first_iteration[rank] = iter;
                 }
                 break;
@@ -1776,8 +1774,8 @@ RAFT_DEVICE_INLINE_FUNCTION void search_core(
         diagnostic_summary->iterations = iter + 1;
         if constexpr (NAVIX) {
           diagnostic_summary->navix_terminal_phase = static_cast<std::uint32_t>(
-            navix_seeded ? favor_search_diagnostics::navix_terminal_phase::passing_traversal
-                         : favor_search_diagnostics::navix_terminal_phase::seed_discovery);
+            navix_seeded ? search_diagnostics::navix_terminal_phase::passing_traversal
+                         : search_diagnostics::navix_terminal_phase::seed_discovery);
           diagnostic_summary->navix_post_seed_iterations =
             navix_seeded && iter + 1 >= diagnostic_summary->navix_seed_iteration
               ? iter + 1 - diagnostic_summary->navix_seed_iteration
@@ -2106,43 +2104,42 @@ __device__ void search_navix_diagnostic_kernel_jit(
               SourceIndexT,
               true,
               false,
-              GRAPH_DEGREE>(
-    result_indices_ptr,
-    result_distances_ptr,
-    top_k,
-    queries_ptr,
-    knn_graph,
-    graph_degree,
-    source_indices_ptr,
-    num_distilation,
-    rand_xor_mask,
-    seed_ptr,
-    num_seeds,
-    visited_hashmap_ptr,
-    max_candidates,
-    max_itopk,
-    internal_topk,
-    search_width,
-    min_iteration,
-    max_iteration,
-    nullptr,
-    hash_bitlen,
-    small_hash_bitlen,
-    small_hash_reset_interval,
-    query_id,
-    query_id_offset,
-    dataset_desc,
-    filter_payload,
-    0.0f,
-    0.0f,
-    0u,
-    0.0f,
-    0.5f,
-    graph_size,
-    reinterpret_cast<favor_search_diagnostics::context*>(diagnostic_context_ptr),
-    0,
-    0,
-    navix_policy_value);
+              GRAPH_DEGREE>(result_indices_ptr,
+                            result_distances_ptr,
+                            top_k,
+                            queries_ptr,
+                            knn_graph,
+                            graph_degree,
+                            source_indices_ptr,
+                            num_distilation,
+                            rand_xor_mask,
+                            seed_ptr,
+                            num_seeds,
+                            visited_hashmap_ptr,
+                            max_candidates,
+                            max_itopk,
+                            internal_topk,
+                            search_width,
+                            min_iteration,
+                            max_iteration,
+                            nullptr,
+                            hash_bitlen,
+                            small_hash_bitlen,
+                            small_hash_reset_interval,
+                            query_id,
+                            query_id_offset,
+                            dataset_desc,
+                            filter_payload,
+                            0.0f,
+                            0.0f,
+                            0u,
+                            0.0f,
+                            0.5f,
+                            graph_size,
+                            reinterpret_cast<search_diagnostics::context*>(diagnostic_context_ptr),
+                            0,
+                            0,
+                            navix_policy_value);
 }
 
 /** Diagnostic default-filter entry used only by the bench-only scoped attachment. */
@@ -2221,7 +2218,7 @@ __device__ void search_default_diagnostic_kernel_jit(
                     0.0f,
                     0.5f,
                     graph_size,
-                    reinterpret_cast<favor_search_diagnostics::context*>(diagnostic_context_ptr));
+                    reinterpret_cast<search_diagnostics::context*>(diagnostic_context_ptr));
 }
 
 template <bool TOPK_BY_BITONIC_SORT,
@@ -2393,7 +2390,7 @@ __device__ void search_favor_diagnostic_kernel_jit(
                     favor_penalty_lambda,
                     favor_retention_fraction,
                     graph_size,
-                    reinterpret_cast<favor_search_diagnostics::context*>(diagnostic_context_ptr),
+                    reinterpret_cast<search_diagnostics::context*>(diagnostic_context_ptr),
                     favor_adaptive_start_iteration,
                     favor_adaptive_prefix_size);
 }

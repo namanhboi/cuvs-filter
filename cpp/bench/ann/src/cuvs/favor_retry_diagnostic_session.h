@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "../../../../src/neighbors/detail/cagra/favor_search_diagnostics.hpp"
+#include "../../../../src/neighbors/detail/cagra/search_diagnostics.hpp"
 #include "../common/blob.hpp"
 
 #include <raft/core/resource/cuda_stream.hpp>
@@ -29,7 +29,7 @@
 
 namespace cuvs::bench::detail {
 
-namespace favor_retry_diag = cuvs::neighbors::cagra::detail::favor_search_diagnostics;
+namespace favor_retry_diag = cuvs::neighbors::cagra::detail::search_diagnostics;
 
 enum class favor_retry_strategy { independent, passing, frontier, combined, oracle };
 

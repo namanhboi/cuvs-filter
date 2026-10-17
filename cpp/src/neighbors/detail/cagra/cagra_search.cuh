@@ -7,8 +7,8 @@
 
 #include "../../../core/nvtx.hpp"
 #include "factory.cuh"
-#include "favor_search_diagnostics.hpp"
 #include "sample_filter_utils.cuh"
+#include "search_diagnostics.hpp"
 #include "search_multi_cta.cuh"
 #include "search_plan.cuh"
 #include "search_single_cta.cuh"
@@ -114,10 +114,10 @@ void search_main_core(
   }
   const bool can_batch_n_queries = (query_row_stride == query_logical_dim);
 
-  auto const* attached_seed_ptr  = favor_search_diagnostics::get_active_seed_ptr();
-  auto const attached_seed_count = favor_search_diagnostics::get_active_seed_count();
+  auto const* attached_seed_ptr  = search_diagnostics::get_active_seed_ptr();
+  auto const attached_seed_count = search_diagnostics::get_active_seed_count();
   if (attached_seed_ptr != nullptr) { plan->num_seeds = attached_seed_count; }
-  auto* diagnostic_context = favor_search_diagnostics::get_active_context();
+  auto* diagnostic_context = search_diagnostics::get_active_context();
 
   for (unsigned qid = 0; qid < queries.extent(0); qid += max_queries) {
     const uint32_t n_queries = std::min<std::size_t>(max_queries, queries.extent(0) - qid);

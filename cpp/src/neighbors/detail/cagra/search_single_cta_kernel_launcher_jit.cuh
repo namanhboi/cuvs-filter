@@ -11,13 +11,13 @@
 #include <cuvs/detail/jit_lto/cagra/cagra_fragments.hpp>
 
 #include "compute_distance.hpp"  // For dataset_descriptor_host
-#include "favor_search_diagnostics.hpp"
 #include "hashmap.hpp"
 #include "jit_lto_kernels/cagra_jit_launcher_factory.hpp"
 #include "jit_lto_kernels/kernel_def.hpp"
 #include "multi_partition_desc.hpp"
 #include "sample_filter_utils.cuh"  // For CagraSampleFilterWithQueryIdOffset
-#include "search_plan.cuh"          // For search_params
+#include "search_diagnostics.hpp"
+#include "search_plan.cuh"  // For search_params
 #include "search_single_cta_kernel_launcher_common.cuh"
 #include "shared_launcher_jit.hpp"  // For shared JIT helper functions
 
@@ -884,7 +884,7 @@ void select_and_run(
     return;
   } else {
     const bool favor       = ps.filter_mode == filtering_mode::FAVOR;
-    const bool diagnostics = favor_search_diagnostics::get_active_context() != nullptr;
+    const bool diagnostics = search_diagnostics::get_active_context() != nullptr;
     static_assert(!(navix && passing_accumulator),
                   "NaviX deliberately has no passing-result accumulator");
     static_assert(!(navix && bitmap_seeded),
@@ -1001,11 +1001,10 @@ void select_and_run(
       RAFT_CUDA_TRY(cudaGetDevice(&device_id));
       RAFT_CUDA_TRY(cudaDeviceGetAttribute(
         &max_threads_per_sm, cudaDevAttrMaxThreadsPerMultiProcessor, device_id));
-      favor_search_diagnostics::set_launch_metrics(
-        {block_size,
-         smem_size,
-         static_cast<std::uint32_t>(active_blocks_per_sm),
-         static_cast<std::uint32_t>(max_threads_per_sm)});
+      search_diagnostics::set_launch_metrics({block_size,
+                                              smem_size,
+                                              static_cast<std::uint32_t>(active_blocks_per_sm),
+                                              static_cast<std::uint32_t>(max_threads_per_sm)});
     }
 
     if constexpr (navix) {

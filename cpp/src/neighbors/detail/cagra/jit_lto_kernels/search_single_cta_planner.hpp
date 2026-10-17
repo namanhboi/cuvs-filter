@@ -209,33 +209,7 @@ struct CagraSingleCtaSearchPlanner
                                         bool bitonic_sort_and_merge_multi_warps,
                                         bool diagnostics = false)
   {
-    auto add = [&]<bool TopkByBitonic, bool MultiWarpMerge>() {
-      if (diagnostics) {
-        this->template add_static_fragment<
-          fragment_tag_search_single_cta_favor_diagnostic<DataTag,
-                                                          SourceIndexTag,
-                                                          IndexTag,
-                                                          DistanceTag,
-                                                          TopkByBitonic,
-                                                          MultiWarpMerge>>();
-      } else {
-        this->template add_static_fragment<fragment_tag_search_single_cta_favor<DataTag,
-                                                                                SourceIndexTag,
-                                                                                IndexTag,
-                                                                                DistanceTag,
-                                                                                TopkByBitonic,
-                                                                                MultiWarpMerge>>();
-      }
-    };
-    if (topk_by_bitonic_sort && bitonic_sort_and_merge_multi_warps) {
-      add.template operator()<true, true>();
-    } else if (topk_by_bitonic_sort) {
-      add.template operator()<true, false>();
-    } else if (bitonic_sort_and_merge_multi_warps) {
-      add.template operator()<false, true>();
-    } else {
-      add.template operator()<false, false>();
-    }
+    RAFT_FAIL("FAVOR kernel generation is retired");
   }
 };
 

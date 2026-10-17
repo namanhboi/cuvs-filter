@@ -50,7 +50,7 @@ then run:
 #+begin_src sh
 ninja -C cpp/build NEIGHBORS_ANN_CAGRA_FILTER_BITMAP_TEST CUVS_CAGRA_ANN_BENCH
 cpp/build/gtests/NEIGHBORS_ANN_CAGRA_FILTER_BITMAP_TEST
-benchmarks/favor/navix_bitmap/run_experiment.sh all
+benchmarks/retrieve_workshop/navix_bitmap/run_experiment.sh all
 #+end_src
 
 Individual stages are =prepare=, =configs=, =correctness=, =throughput=, and =analyze=.  Override

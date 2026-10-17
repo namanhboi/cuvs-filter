@@ -262,6 +262,7 @@ ConfigureTest(
 ConfigureTest(
   NAME NEIGHBORS_ANN_CAGRA_FILTER_BITMAP_TEST
   PATH neighbors/ann_cagra/test_filter_bitmap.cu
+  ADDITIONAL_DEP cuco::cuco
   GPUS 1
   PERCENT 100
 )
@@ -273,19 +274,7 @@ ConfigureTest(
   PERCENT 100
 )
 
-ConfigureTest(
-  NAME NEIGHBORS_ANN_CAGRA_FAVOR_DELTA_D_TEST
-  PATH neighbors/ann_cagra/test_favor_delta_d.cu
-  GPUS 1
-  PERCENT 100
-)
 
-ConfigureTest(
-  NAME NEIGHBORS_ANN_CAGRA_FAVOR_SEARCH_TEST
-  PATH neighbors/ann_cagra/test_favor_search.cu
-  GPUS 1
-  PERCENT 100
-)
 
 ConfigureTest(
   NAME NEIGHBORS_ANN_CAGRA_MERGE_TEST

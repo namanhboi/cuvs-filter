@@ -7,7 +7,7 @@ following upstream `main` during validation would change the experiment.
 
 ## Scope
 
-- Preserve Base, Retain, NaviX, FAVOR, diagnostics, and existing per-query dense
+- Preserve Base, Retain, NaviX, shared diagnostics, and existing per-query dense
   bitmap filtering for CAGRA and IVF-Flat/SQ/PQ.
 - Add lossless dense-bitmap-to-Roaring conversion and per-query Roaring support
   for Base, Retain, and NaviX, including passing-seed selection.
@@ -16,6 +16,8 @@ following upstream `main` during validation would change the experiment.
 - Convert copies of old CAGRA v5 and IVF-Flat v4 indexes to the new formats while
   preserving graphs, vectors, centroids, list assignments, and IDs. Updating a
   version number alone is not a conversion.
+- Retire FAVOR execution, kernels, parameters, sidecar computation, and experiment
+  entrypoints. Preserve historical results and shared Retain/NaviX functionality.
 - Defer full parameter sweeps and Roaring filtering for IVF.
 
 ## Isolation and review
@@ -32,7 +34,7 @@ review before advancing the user's `main` branch.
 ## Validation gate
 
 1. Run relevant GPU correctness tests for bitmap/UDF/Roaring filtering,
-   Retain/NaviX/FAVOR, k=100 result compaction, stream/lifetime handling, and IVF
+   Retain/NaviX, rejection of retired FAVOR requests, k=100 result compaction, and IVF
    refinement with empty or underfilled candidate pools.
 2. Check converted index component identity and dense/Roaring membership
    equivalence, including empty and full allowlists and shared query mappings.

@@ -502,6 +502,24 @@ template <typename T, typename IdxT>
 void parse_search_param(const nlohmann::json& conf,
                         typename cuvs::bench::cuvs_cagra<T, IdxT>::search_param& param)
 {
+  // Historic paper configurations use FAVOR-era names for shared Retain/diagnostic controls.
+  if (conf.contains("passing_result_accumulator")) {
+    param.favor_udf_passing_accumulator        = conf.at("passing_result_accumulator");
+    param.favor_udf_passing_accumulator_is_set = true;
+    if (conf.contains("favor_udf_passing_accumulator") &&
+        conf.at("favor_udf_passing_accumulator") != conf.at("passing_result_accumulator")) {
+      THROW("Conflicting passing-result accumulator settings");
+    }
+  }
+  if (conf.value("filter_mode", std::string{"default"}) == "favor") {
+    THROW("FAVOR is retired. Use CAGRA-Base, CAGRA-Retain, or CAGRA-NaviX.");
+  }
+  for (auto const& [key, value] : conf.items()) {
+    if (key.starts_with("favor_") && !key.starts_with("favor_diagnostics_") &&
+        key != "favor_udf_passing_accumulator") {
+      THROW("FAVOR parameter %s is retired", key.c_str());
+    }
+  }
   if (conf.contains("max_queries")) { param.p.max_queries = conf.at("max_queries"); }
   if (conf.contains("itopk")) { param.p.itopk_size = conf.at("itopk"); }
   if (conf.contains("search_width")) { param.p.search_width = conf.at("search_width"); }

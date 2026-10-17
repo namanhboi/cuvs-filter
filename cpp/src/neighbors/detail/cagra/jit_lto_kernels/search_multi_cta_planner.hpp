@@ -42,8 +42,7 @@ struct CagraMultiCtaSearchPlanner
 
   void add_search_multi_cta_favor_kernel_fragment()
   {
-    this->template add_static_fragment<
-      fragment_tag_search_multi_cta_favor<DataTag, SourceIndexTag, IndexTag, DistanceTag>>();
+    RAFT_FAIL("FAVOR kernel generation is retired");
   }
 };
 

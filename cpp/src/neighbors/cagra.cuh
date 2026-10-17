@@ -492,6 +492,8 @@ void search_with_filtering(raft::resources const& res,
   RAFT_EXPECTS(queries.extent(1) == idx.dim(),
                "Number of query dimensions should equal number of dimensions in the index.");
 
+  RAFT_EXPECTS(params.filter_mode == filtering_mode::DEFAULT,
+               "FAVOR is retired. Use CAGRA-Base, CAGRA-Retain, or CAGRA-NaviX.");
   search_params params_copy = params;
   if constexpr (detail::is_bitmap_filter<std::decay_t<CagraSampleFilterT>>::value) {
     const auto bitmap = sample_filter.view();
@@ -529,6 +531,9 @@ void search(raft::resources const& res,
             raft::device_matrix_view<float, int64_t, raft::row_major> distances,
             const cuvs::neighbors::filtering::base_filter& sample_filter_ref)
 {
+  RAFT_EXPECTS(params.filter_mode == filtering_mode::DEFAULT,
+               "FAVOR is retired. Use CAGRA-Base, CAGRA-Retain, or CAGRA-NaviX.");
+
   try {
     using none_filter_type    = cuvs::neighbors::filtering::none_sample_filter;
     auto& sample_filter       = dynamic_cast<const none_filter_type&>(sample_filter_ref);

@@ -4,7 +4,7 @@ set -euo pipefail
 repo_dir=$(cd "$(dirname "$0")/../../.."; pwd)
 data_root=${NAVIX_BITMAP_DATA_ROOT:-"${repo_dir}/datasets"}
 bitmap_root=${NAVIX_BITMAP_ROOT:-"${data_root}/navix_bitmap"}
-result_root=${NAVIX_BITMAP_RESULT_ROOT:-"${repo_dir}/benchmarks/favor/navix_bitmap/results_20260809"}
+result_root=${NAVIX_BITMAP_RESULT_ROOT:-"${repo_dir}/benchmarks/retrieve_workshop/navix_bitmap/results_20260809"}
 bench_bin="${repo_dir}/cpp/build/bench/ann/CUVS_CAGRA_ANN_BENCH"
 build_libcuvs="${repo_dir}/cpp/build/libcuvs.so"
 python_bin=${PYTHON:-/home/ubuntu/micromamba/envs/cuvs/bin/python}
@@ -22,7 +22,7 @@ prepare_sparse() {
   if [[ -f "${output}/manifest.json" && "${NAVIX_BITMAP_FORCE_PREPARE:-0}" != 1 ]]; then
     return
   fi
-  "${python_bin}" "${repo_dir}/benchmarks/favor/navix_bitmap/prepare_bitmaps.py" sparse \
+  "${python_bin}" "${repo_dir}/benchmarks/retrieve_workshop/navix_bitmap/prepare_bitmaps.py" sparse \
     --base-metadata "${base_metadata}" --query-metadata "${query_metadata}" \
     --query-vectors "${query_vectors}" --groundtruth "${groundtruth}" \
     --vector-dtype "${dtype}" --output "${output}" --limit "${limit}" \
@@ -39,7 +39,7 @@ prepare_range() {
   if [[ -f "${output}/manifest.json" && "${NAVIX_BITMAP_FORCE_PREPARE:-0}" != 1 ]]; then
     return
   fi
-  "${python_bin}" "${repo_dir}/benchmarks/favor/navix_bitmap/prepare_bitmaps.py" range \
+  "${python_bin}" "${repo_dir}/benchmarks/retrieve_workshop/navix_bitmap/prepare_bitmaps.py" range \
     --base-metadata "${base_metadata}" --query-metadata "${query_metadata}" \
     --query-vectors "${query_vectors}" --groundtruth "${groundtruth}" \
     --vector-dtype float32 --output "${output}" --limit "${limit}"
@@ -98,7 +98,7 @@ generate_one() {
   local base_file=$4
   local index_file=$5
   local dtype=$6
-  "${python_bin}" "${repo_dir}/benchmarks/favor/navix_bitmap/generate_configs.py" \
+  "${python_bin}" "${repo_dir}/benchmarks/retrieve_workshop/navix_bitmap/generate_configs.py" \
     --bitmap-manifest "${manifest}" --base-file "${base_file}" \
     --index-file "${index_file}" --dataset-name "${workload}-${phase}" \
     --dtype "${dtype}" --output "${result_root}/configs/${phase}/${workload}"
@@ -153,7 +153,7 @@ run_phase() {
 }
 
 analyze() {
-  "${python_bin}" "${repo_dir}/benchmarks/favor/navix_bitmap/analyze.py" \
+  "${python_bin}" "${repo_dir}/benchmarks/retrieve_workshop/navix_bitmap/analyze.py" \
     --result-root "${result_root}" --bitmap-root "${bitmap_root}"
 }
 

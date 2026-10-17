@@ -215,6 +215,14 @@ class CagraBitmapFilterDegree64Test : public CagraBitmapFilterTest {
   std::uint32_t graph_degree() const override { return 64; }
 };
 
+TEST_P(CagraBitmapFilterTest, RejectsRetiredFavorMode)
+{
+  auto search_params        = params();
+  search_params.filter_mode = cagra::filtering_mode::FAVOR;
+  cuvs::neighbors::filtering::none_sample_filter filter;
+  EXPECT_THROW(search_dynamic(res, filter, search_params), raft::logic_error);
+}
+
 TEST_P(CagraBitmapFilterTest, AllPassingMatchesBitsetAcrossTopKBoundaries)
 {
   device_bitmap bitmap(res, kQueries, kRows, [](auto, auto) { return true; });
@@ -351,7 +359,7 @@ TEST_P(CagraBitmapFilterTest, DefaultAccumulatorBitmapMatchesEquivalentUdfExactl
         0,
         true);
     } else {
-      detail::benchmark_search_favor_udf_with_sampled_rates<float>(
+      detail::benchmark_search_udf_with_result_accumulator<float>(
         res,
         search_params,
         *index,

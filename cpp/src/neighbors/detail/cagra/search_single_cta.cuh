@@ -7,8 +7,8 @@
 #include "../neighbors_device_intrinsics.cuh"
 #include "bitonic.hpp"
 #include "device_memory_ops.hpp"
-#include "favor_search_diagnostics.hpp"
 #include "hashmap.hpp"
+#include "search_diagnostics.hpp"
 #include "search_plan.cuh"
 #include "search_single_cta_kernel.cuh"
 #include "topk_by_radix.cuh"
@@ -160,7 +160,7 @@ struct search
       additional_smem_size =
         std::max<std::uint32_t>(additional_smem_size, sizeof(scan_op_t::TempStorage));
     }
-    if (favor_search_diagnostics::get_active_context() != nullptr) {
+    if (search_diagnostics::get_active_context() != nullptr) {
       // The diagnostic child-distance path writes one hash-outcome byte per candidate. FAVOR's
       // passing accumulator additionally reuses one predicate-outcome byte per candidate.
       const auto diagnostic_candidate_bytes =

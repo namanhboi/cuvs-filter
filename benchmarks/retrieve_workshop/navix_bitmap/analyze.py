@@ -514,7 +514,7 @@ def report(result_root: Path, bitmap_root: Path, rows: list[Aggregate], plots: d
             "#+begin_src sh",
             "ninja -C cpp/build NEIGHBORS_ANN_CAGRA_FILTER_BITMAP_TEST CUVS_CAGRA_ANN_BENCH",
             "cpp/build/gtests/NEIGHBORS_ANN_CAGRA_FILTER_BITMAP_TEST",
-            "benchmarks/favor/navix_bitmap/run_experiment.sh all",
+            "benchmarks/retrieve_workshop/navix_bitmap/run_experiment.sh all",
             "#+end_src",
             "",
             "The sweep is B0-only: L in {64,128,256,512}, W in {1,2}, k=10, degree=32,",

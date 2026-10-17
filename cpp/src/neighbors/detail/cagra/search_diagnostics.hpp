@@ -5,11 +5,11 @@
 
 #pragma once
 
-#include "jit_lto_kernels/favor_search_diagnostics.cuh"
+#include "jit_lto_kernels/search_diagnostics.cuh"
 
 #include <cuvs/core/export.hpp>
 
-namespace cuvs::neighbors::cagra::detail::favor_search_diagnostics {
+namespace cuvs::neighbors::cagra::detail::search_diagnostics {
 
 /**
  * Bench-only, thread-local diagnostic attachment.
@@ -69,4 +69,4 @@ class scoped_seeds {
   std::uint32_t previous_count_;
 };
 
-}  // namespace cuvs::neighbors::cagra::detail::favor_search_diagnostics
+}  // namespace cuvs::neighbors::cagra::detail::search_diagnostics
