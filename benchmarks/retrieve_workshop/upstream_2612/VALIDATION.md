@@ -1,9 +1,9 @@
 # Integration validation, 2026-10-17
 
-The agreed representative validation is complete. The integration is published
-for review separately from `main`; original paper results are unchanged. NVIDIA's
-repository is read-only. See [the assessment](results/a100_20261017/ASSESSMENT.md)
-for measurements, investigations, and remaining limitations.
+The agreed representative validation and [merge review](MERGE_REVIEW.md) are
+complete. Original paper results are unchanged; NVIDIA's repository is read-only.
+See [the assessment](results/a100_20261017/ASSESSMENT.md) for measurements,
+investigations, and remaining limitations.
 
 Completed checks:
 
@@ -86,7 +86,7 @@ Representative benchmark findings:
 The automated `ready_for_review` field remains false because it requires exact
 native equality and no representation flags. The assessment documents these
 findings without changing the raw flags. This is a review checkpoint, not automatic
-approval to update `main`.
+approval to update `main`; the separate merge review records the disposition.
 
 Settings were frozen and replayed on the first 2,048 queries. These are compatibility
 measurements, not a newly tuned matched-recall method ranking. Full sweeps, tuning,

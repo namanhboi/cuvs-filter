@@ -182,3 +182,5 @@ equality flags are in [VALIDATION.md](VALIDATION.md) and the
 [archived assessment](results/a100_20261017/ASSESSMENT.md). The native comparison
 preserves older fork compaction fixes that are absent from pinned upstream;
 native upstream equality is therefore reported separately from fork compatibility.
+The completed [merge review](MERGE_REVIEW.md) records the disposition of those
+findings and identifies the validated build and historical baseline binaries.
