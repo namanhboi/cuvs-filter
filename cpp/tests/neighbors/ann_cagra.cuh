@@ -1180,32 +1180,29 @@ class AnnCagraFilterTest : public ::testing::TestWithParam<AnnCagraInputs> {
                                     min_recall,
                                     false));
       }
-      if (!ps.compression.has_value()) {
-        // Don't evaluate distances for CAGRA-Q for now as the error can be somewhat large
+      EXPECT_TRUE(eval_distances(handle_,
+                                 database.data(),
+                                 search_queries.data(),
+                                 indices_dev.data(),
+                                 distances_dev.data(),
+                                 ps.n_rows,
+                                 ps.dim,
+                                 ps.n_queries,
+                                 ps.k,
+                                 ps.metric,
+                                 1.0e-4));
+      if (ps.algo != cagra::search_algo::MULTI_KERNEL) {
         EXPECT_TRUE(eval_distances(handle_,
                                    database.data(),
                                    search_queries.data(),
-                                   indices_dev.data(),
-                                   distances_dev.data(),
+                                   bitmap_indices_dev.data(),
+                                   bitmap_distances_dev.data(),
                                    ps.n_rows,
                                    ps.dim,
                                    ps.n_queries,
                                    ps.k,
                                    ps.metric,
                                    1.0e-4));
-        if (ps.algo != cagra::search_algo::MULTI_KERNEL) {
-          EXPECT_TRUE(eval_distances(handle_,
-                                     database.data(),
-                                     search_queries.data(),
-                                     bitmap_indices_dev.data(),
-                                     bitmap_distances_dev.data(),
-                                     ps.n_rows,
-                                     ps.dim,
-                                     ps.n_queries,
-                                     ps.k,
-                                     ps.metric,
-                                     1.0e-4));
-        }
       }
     }
   }
