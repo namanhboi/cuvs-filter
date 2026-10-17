@@ -157,6 +157,9 @@ paths, and compares public CAGRA search with an independently compiled upstream
 control on 13 datasets/result widths. Both native probes use their own checkout's
 headers and library ABI. Native probe timing is compared only with native probe
 timing, separately from the cuVS-bench comparisons.
+Pinned upstream CAGRA does not dispatch per-query dense bitmap filter objects.
+Both probes therefore use the same public UDF reading the original resident
+bitmap, including 64-bit query-row addressing. This requires no upstream edits.
 Raw native result arrays are retained. Valid-neighbor identity is also compared
 after normalizing only known missing-slot encodings with `FLT_MAX` distances:
 upstream's widened, visited-bit-cleared uint32 sentinel and the integration's

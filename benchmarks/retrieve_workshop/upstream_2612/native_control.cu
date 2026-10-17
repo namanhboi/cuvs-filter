@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 // Compile this file separately against each checkout. It uses only upstream
 // public APIs.
-#include <cuvs/core/bitmap.hpp>
 #include <cuvs/neighbors/cagra.hpp>
 #include <nlohmann/json.hpp>
 #include <raft/core/copy.cuh>
@@ -28,6 +27,12 @@
 #include <vector>
 
 using json = nlohmann::json;
+
+struct bitmap_context {
+  const std::uint32_t *words;
+  std::uint64_t rows;
+};
+static_assert(sizeof(bitmap_context) == 16);
 
 struct mapped_file {
   void *data{MAP_FAILED};
@@ -115,9 +120,24 @@ json run(json const &conf, std::string const &output_prefix) {
   auto host_words = reinterpret_cast<std::uint32_t const *>(b + 40);
   rmm::device_uvector<std::uint32_t> words(nwords, stream);
   raft::copy(words.data(), host_words, nwords, stream);
-  auto filter = cuvs::neighbors::filtering::bitmap_filter(
-      cuvs::core::bitmap_view<std::uint32_t, std::int64_t>(words.data(), nq,
-                                                           rows));
+  // Pinned upstream CAGRA exposes UDF filtering, not per-query dense bitmap
+  // dispatch. Use the identical public UDF on both checkouts.
+  bitmap_context host_context{words.data(), std::uint64_t(rows)};
+  rmm::device_uvector<bitmap_context> context(1, stream);
+  raft::copy(context.data(), &host_context, 1, stream);
+  cuvs::neighbors::filtering::udf_filter filter(R"cpp(
+    struct bitmap_context {
+      const uint32_t* words;
+      uint64_t rows;
+    };
+    __device__ bool cuvs_filter_udf(uint32_t query, source_index_t source, void* data) {
+      const auto* context = static_cast<const bitmap_context*>(data);
+      const auto row = static_cast<uint64_t>(source);
+      if (row >= context->rows) { return false; }
+      const uint64_t bit = uint64_t(query) * context->rows + row;
+      return (context->words[bit >> 5] & (uint32_t{1} << (bit & 31))) != 0;
+    }
+  )cpp", context.data(), 0.0f);
 
   cuvs::neighbors::cagra::search_params params;
   params.algo = cuvs::neighbors::cagra::search_algo::SINGLE_CTA;
@@ -219,6 +239,7 @@ json run(json const &conf, std::string const &output_prefix) {
           {"matching", matching},
           {"valid_gt", total},
           {"filter_violations", violations},
+          {"filter_api", "public_udf_dense_bitmap"},
           {"legacy_sentinel_slots", legacy_sentinel_slots},
           {"duplicate_results", duplicates}};
 }
