@@ -759,12 +759,40 @@ def run(args) -> None:
                     "CORE_ROARING_ALLOWLIST_TEST",
                     "NEIGHBORS_ANN_CAGRA_FILTER_UDF_TEST",
                     "NEIGHBORS_ANN_CAGRA_BBQ_UINT32_TEST",
+                    "NEIGHBORS_ANN_CAGRA_FLOAT_UINT32_TEST",
                 ],
             ),
-            ("integrated", ["NEIGHBORS_ANN_CAGRA_BBQ_UINT32_TEST"]),
+            (
+                "integrated",
+                [
+                    "NEIGHBORS_ANN_CAGRA_BBQ_UINT32_TEST",
+                    "NEIGHBORS_ANN_CAGRA_FLOAT_UINT32_TEST",
+                ],
+            ),
         ):
             for target in targets:
                 out = root / "correctness" / f"{variant}-{target}.json"
+                if target == "NEIGHBORS_ANN_CAGRA_FLOAT_UINT32_TEST":
+                    # The initial library builds have finished before this point. Never run
+                    # concurrent Ninja instances against the same build directory.
+                    execute(
+                        [
+                            "micromamba",
+                            "run",
+                            "-p",
+                            str(environment),
+                            "cmake",
+                            "--build",
+                            str(repositories[variant] / "cpp/build"),
+                            "--parallel",
+                            "4",
+                            "--target",
+                            target,
+                        ],
+                        root,
+                        out.with_suffix(".build.log"),
+                        lock.fileno(),
+                    )
                 command = [
                     "micromamba",
                     "run",
@@ -775,6 +803,8 @@ def run(args) -> None:
                     str(repositories[variant] / "cpp/build/gtests" / target),
                     "--gtest_output=json:" + str(out),
                 ]
+                if target == "NEIGHBORS_ANN_CAGRA_FLOAT_UINT32_TEST":
+                    command.append("--gtest_filter=*MultiPartition*")
                 execute(command, root, out.with_suffix(".log"), lock.fileno())
                 tests = json.loads(out.read_text())
                 if tests["tests"] == 0 or tests.get("failures", 0):

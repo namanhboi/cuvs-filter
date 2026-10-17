@@ -151,7 +151,8 @@ method/width template, with both sources recorded. This performs no tuning.
 
 The runner waits for the recorded build, GPU-test, index-conversion, and native
 probe compilation prerequisites. It runs the native upstream Roaring/UDF/BBQ
-smoke suites, reruns old binaries, measures integrated dense and CAGRA Roaring
+smoke suites and multi-partition search tests, reruns old binaries, measures
+integrated dense and CAGRA Roaring
 paths, and compares public CAGRA search with an independently compiled upstream
 control on 13 datasets/result widths. Both native probes use their own checkout's
 headers and library ABI. Native probe timing is compared only with native probe
