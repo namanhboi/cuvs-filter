@@ -1,0 +1,27 @@
+{
+  "kind": "cagra",
+  "source": "/data/retrieve_data/yfcc-10M/cagra_g64_ig128.index",
+  "output": "/data/cuvs-upstream-validation/indices/yfcc_cagra.index",
+  "source_version": 5,
+  "target_version": 6,
+  "source_sha256": "e393f47fb017c542baab837d7b532f6582d7c13a800f90ae747156bf1867744f",
+  "output_sha256": "2363ec8cff56640b58fd4224bd42b1cbd8c014a620f706a37690ac5afa192fa7",
+  "summary": {
+    "dtype": "|u1",
+    "rows": 10000000,
+    "stored_dim": 192,
+    "degree": 64,
+    "metric": 0
+  },
+  "components": {
+    "graph": {
+      "dtype": "<u4",
+      "shape": [
+        10000000,
+        64
+      ],
+      "sha256": "da1c0d60c890a7822e296055006b18c379f54b48511bdd4fc4eeead34fa9ff49"
+    }
+  },
+  "verified_components": true
+}

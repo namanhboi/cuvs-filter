@@ -9,10 +9,10 @@
 #include "../../../src/neighbors/cagra_benchmark.hpp"
 #include "../../../src/neighbors/detail/cagra/favor_multi_seed_benchmark.cuh"
 #include "../../../src/neighbors/detail/cagra/favor_penalty.cuh"
-#include "../../../src/neighbors/detail/cagra/favor_search_diagnostics.hpp"
 #include "../../../src/neighbors/detail/cagra/jit_lto_kernels/cagra_filter_payload.cuh"
 #include "../../../src/neighbors/detail/cagra/jit_lto_kernels/device_common_jit.cuh"
 #include "../../../src/neighbors/detail/cagra/jit_lto_kernels/search_single_cta_device_helpers.cuh"
+#include "../../../src/neighbors/detail/cagra/search_diagnostics.hpp"
 
 #include <raft/core/copy.cuh>
 #include <raft/core/device_mdarray.hpp>
@@ -443,15 +443,14 @@ TEST_F(CagraFavorSearchTest, TerminationShadowCapturesOrderedPassingTrajectory)
 
   constexpr std::uint32_t checkpoint_stride = 8;
   auto stream                               = raft::resource::get_cuda_stream(res);
-  rmm::device_uvector<cagra::detail::favor_search_diagnostics::query_summary> summaries(kQueries,
-                                                                                        stream);
-  rmm::device_uvector<cagra::detail::favor_search_diagnostics::termination_checkpoint_record>
-    checkpoints(kQueries * checkpoint_stride, stream);
+  rmm::device_uvector<cagra::detail::search_diagnostics::query_summary> summaries(kQueries, stream);
+  rmm::device_uvector<cagra::detail::search_diagnostics::termination_checkpoint_record> checkpoints(
+    kQueries * checkpoint_stride, stream);
   rmm::device_uvector<std::uint32_t> checkpoint_counts(kQueries, stream);
-  rmm::device_uvector<cagra::detail::favor_search_diagnostics::context> context(1, stream);
+  rmm::device_uvector<cagra::detail::search_diagnostics::context> context(1, stream);
   RAFT_CUDA_TRY(cudaMemsetAsync(
     checkpoint_counts.data(), 0, checkpoint_counts.size() * sizeof(std::uint32_t), stream));
-  cagra::detail::favor_search_diagnostics::context context_host{};
+  cagra::detail::search_diagnostics::context context_host{};
   context_host.summaries                          = summaries.data();
   context_host.termination_checkpoints            = checkpoints.data();
   context_host.termination_checkpoint_counts      = checkpoint_counts.data();
@@ -464,11 +463,11 @@ TEST_F(CagraFavorSearchTest, TerminationShadowCapturesOrderedPassingTrajectory)
 
   search_result result;
   {
-    cagra::detail::favor_search_diagnostics::scoped_context diagnostic_scope{context.data()};
+    cagra::detail::search_diagnostics::scoped_context diagnostic_scope{context.data()};
     result = run(favor_params, filter);
   }
-  std::vector<cagra::detail::favor_search_diagnostics::termination_checkpoint_record>
-    checkpoints_host(checkpoints.size());
+  std::vector<cagra::detail::search_diagnostics::termination_checkpoint_record> checkpoints_host(
+    checkpoints.size());
   std::vector<std::uint32_t> counts_host(kQueries);
   raft::copy(checkpoints_host.data(), checkpoints.data(), checkpoints_host.size(), stream);
   raft::copy(counts_host.data(), checkpoint_counts.data(), counts_host.size(), stream);
@@ -622,7 +621,7 @@ TEST_F(CagraFavorSearchTest, BenchmarkExplicitSeedsMatchNativeRandomInitializati
   rmm::device_uvector<std::uint32_t> seeds(seeds_host.size(), stream);
   raft::copy(seeds.data(), seeds_host.data(), seeds_host.size(), stream);
 
-  cagra::detail::favor_search_diagnostics::scoped_seeds seed_scope{seeds.data(), initial_width};
+  cagra::detail::search_diagnostics::scoped_seeds seed_scope{seeds.data(), initial_width};
   auto actual = run(favor_params, filter);
   EXPECT_EQ(actual.neighbors, expected.neighbors);
   EXPECT_EQ(actual.distances, expected.distances);
@@ -640,13 +639,12 @@ TEST_F(CagraFavorSearchTest, TerminalSnapshotPreservesTaggedPreCompactionFrontie
   constexpr std::uint32_t terminal_stride   = 64;
   constexpr std::uint64_t terminal_elements = kQueries * terminal_stride;
   auto stream                               = raft::resource::get_cuda_stream(res);
-  rmm::device_uvector<cagra::detail::favor_search_diagnostics::query_summary> summaries(kQueries,
-                                                                                        stream);
+  rmm::device_uvector<cagra::detail::search_diagnostics::query_summary> summaries(kQueries, stream);
   rmm::device_uvector<std::uint32_t> tagged_ids(terminal_elements, stream);
   rmm::device_uvector<float> terminal_distances(terminal_elements, stream);
   rmm::device_uvector<std::uint8_t> terminal_flags(terminal_elements, stream);
-  rmm::device_uvector<cagra::detail::favor_search_diagnostics::context> context(1, stream);
-  cagra::detail::favor_search_diagnostics::context context_host{};
+  rmm::device_uvector<cagra::detail::search_diagnostics::context> context(1, stream);
+  cagra::detail::search_diagnostics::context context_host{};
   context_host.summaries           = summaries.data();
   context_host.terminal_tagged_ids = tagged_ids.data();
   context_host.terminal_distances  = terminal_distances.data();
@@ -656,7 +654,7 @@ TEST_F(CagraFavorSearchTest, TerminalSnapshotPreservesTaggedPreCompactionFrontie
   raft::copy(context.data(), &context_host, 1, stream);
 
   auto expected = run(favor_params, filter);
-  cagra::detail::favor_search_diagnostics::scoped_context diagnostic_scope{context.data()};
+  cagra::detail::search_diagnostics::scoped_context diagnostic_scope{context.data()};
   auto actual = run(favor_params, filter);
   EXPECT_EQ(actual.neighbors, expected.neighbors);
   EXPECT_EQ(actual.distances, expected.distances);

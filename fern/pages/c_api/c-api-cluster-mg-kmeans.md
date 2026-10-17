@@ -14,8 +14,8 @@ _Source header: `cuvs/cluster/mg_kmeans.h`_
 Find clusters with single-node multi-GPU k-means using host data.
 
 ```c
-CUVS_EXPORT cuvsError_t cuvsMultiGpuKMeansFit(cuvsResources_t res,
-cuvsKMeansParams_v2_t params,
+cuvsError_t cuvsMultiGpuKMeansFit(cuvsResources_t res,
+cuvsKMeansParams_t params,
 DLManagedTensor* X,
 DLManagedTensor* sample_weight,
 DLManagedTensor* centroids,
@@ -25,12 +25,16 @@ int* n_iter);
 
 X, sample_weight, and centroids must be host-accessible, row-major, C-contiguous DLPack tensors. X and centroids must have dtype float32 or float64, and sample_weight must match X when provided.
 
+Multiple batches use one input buffer per GPU by default. Call cuvsMultiGpuResourcesSetStreamPool(res, 1) to enable double-buffering and transfer/compute overlap; without it execution is correct but serialized. Pinned host memory (for example, from cuvsRMMHostAlloc) is crucial; pageable or unregistered mmap-backed input degrades throughput rapidly.
+
+A per-device memory pool is optional but recommended. Configure both before the fit:
+
 **Parameters**
 
 | Name | Direction | Type | Description |
 | --- | --- | --- | --- |
 | `res` | in | [`cuvsResources_t`](/api-reference/c-api-core-c-api#cuvsresources-t) | cuvsMultiGpuResources_t opaque C handle created by cuvsMultiGpuResourcesCreate or cuvsMultiGpuResourcesCreateWithDeviceIds. |
-| `params` | in | [`cuvsKMeansParams_v2_t`](/api-reference/c-api-cluster-kmeans#cuvskmeansparams-v2) | Parameters for KMeans model. |
+| `params` | in | [`cuvsKMeansParams_t`](/api-reference/c-api-cluster-kmeans#cuvskmeansparams) | Parameters for KMeans model. |
 | `X` | in | `DLManagedTensor*` | Host training instances to cluster. [dim = n_samples x n_features] |
 | `sample_weight` | in | `DLManagedTensor*` | Optional host weights for each observation in X. [len = n_samples] |
 | `centroids` | inout | `DLManagedTensor*` | Host centroids. When init is Array, used as the initial cluster centers. The final generated centroids are copied back to this tensor. [dim = n_clusters x n_features] |
@@ -39,4 +43,4 @@ X, sample_weight, and centroids must be host-accessible, row-major, C-contiguous
 
 **Returns**
 
-[`CUVS_EXPORT cuvsError_t`](/api-reference/c-api-core-c-api#cuvserror-t)
+[`cuvsError_t`](/api-reference/c-api-core-c-api#cuvserror-t)

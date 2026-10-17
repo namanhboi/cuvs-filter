@@ -1,14 +1,14 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2023-2026, NVIDIA CORPORATION.
+ * SPDX-FileCopyrightText: Copyright (c) 2023-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #pragma once
 
-#include "favor_penalty.cuh"
 #include "hashmap.hpp"
 #include "sample_filter_utils.cuh"
 
+#include <cuda/stream>
 #include <cuvs/neighbors/common.hpp>
 #include <neighbors/detail/cagra/compute_distance-ext.cuh>
 #include <raft/core/resource/cuda_stream.hpp>
@@ -30,16 +30,6 @@
 #include <variant>
 
 namespace cuvs::neighbors::cagra::detail {
-
-/**
- * Keep the rejected adaptive-termination experiment out of normal CAGRA behavior while retaining
- * an exact, internal reproduction path for its benchmark and diagnostic artifacts.
- */
-inline bool favor_adaptive_termination_experiment_enabled() noexcept
-{
-  auto const* value = std::getenv("CUVS_FAVOR_EXPERIMENTAL_ADAPTIVE_TERMINATION");
-  return value != nullptr && value[0] == '1' && value[1] == '\0';
-}
 
 template <typename T>
 struct is_cagra_bitset_sample_filter : std::false_type {};
@@ -68,8 +58,8 @@ struct is_cagra_bitset_sample_filter<
 template <typename T>
 struct lightweight_uvector {
  private:
-  using raft_res_type = const raft::resources*;
-  using rmm_res_type  = std::tuple<rmm::device_async_resource_ref, rmm::cuda_stream_view>;
+  using raft_res_type            = const raft::resources*;
+  using rmm_res_type             = std::tuple<rmm::device_async_resource_ref, cuda::stream_ref>;
   static constexpr size_t kAlign = 256;
 
   std::variant<raft_res_type, rmm_res_type> res_;
@@ -98,21 +88,21 @@ struct lightweight_uvector {
     }
     auto copy_size = std::min(size_, new_size);
     if (copy_size > 0) {
-      cudaMemcpyAsync(new_ptr, ptr_, copy_size * sizeof(T), cudaMemcpyDefault, s);
+      cudaMemcpyAsync(new_ptr, ptr_, copy_size * sizeof(T), cudaMemcpyDefault, s.get());
     }
     if (size_ > 0) { r.deallocate(s, ptr_, size_ * sizeof(T), kAlign); }
     ptr_  = new_ptr;
     size_ = new_size;
   }
 
-  void resize(size_t new_size, rmm::cuda_stream_view stream)
+  void resize(size_t new_size, cuda::stream_ref stream)
   {
     if (new_size == size_) { return; }
     if (std::holds_alternative<raft_res_type>(res_)) {
       auto& h = std::get<raft_res_type>(res_);
       res_    = rmm_res_type{raft::resource::get_workspace_resource_ref(*h), stream};
     } else {
-      std::get<rmm::cuda_stream_view>(std::get<rmm_res_type>(res_)) = stream;
+      std::get<cuda::stream_ref>(std::get<rmm_res_type>(res_)) = stream;
     }
     resize(new_size);
   }
@@ -145,13 +135,10 @@ struct search_plan_impl_base : public search_params {
       graph_degree(graph_degree),
       topk(topk),
       configured_itopk_size(params.itopk_size),
-      configured_max_iterations(params.max_iterations),
-      favor_raw_delta_d(params.favor_delta_d)
+      configured_max_iterations(params.max_iterations)
   {
-    if (filter_mode == filtering_mode::FAVOR && algo == search_algo::AUTO) {
-      algo = search_algo::SINGLE_CTA;
-      RAFT_LOG_DEBUG("Auto strategy: FAVOR filtering selects single-cta");
-    }
+    RAFT_EXPECTS(filter_mode == filtering_mode::DEFAULT,
+                 "FAVOR is retired. Use CAGRA-Base, CAGRA-Retain, or CAGRA-NaviX.");
     if (persistent) {
       if (algo == search_algo::AUTO) {
         algo = search_algo::SINGLE_CTA;
@@ -217,32 +204,11 @@ struct search_plan_impl : public search_plan_impl_base {
   {
     adjust_search_params(is_cagra_bitset_sample_filter<SAMPLE_FILTER_T>::value);
     check_params();
-    calculate_favor_penalty();
     calc_hashmap_params(res);
     if (!persistent) {  // Persistent kernel does not provide this functionality
       num_executed_iterations.resize(max_queries, raft::resource::get_cuda_stream(res));
     }
     RAFT_LOG_DEBUG("# algo = %d", static_cast<int>(algo));
-  }
-
-  void calculate_favor_penalty()
-  {
-    if (filter_mode != filtering_mode::FAVOR) {
-      favor_penalty_distance = 0.0f;
-      return;
-    }
-    // Preserve the exact effective-ef convention of the original kernels: SINGLE_CTA used the
-    // rounded traversal itopk, whereas MULTI_CTA used the user-configured global itopk.
-    auto const reference_itopk =
-      algo == search_algo::MULTI_CTA ? configured_itopk_size : itopk_size;
-    favor_penalty_distance =
-      favor_reference_penalty(filtering_rate, reference_itopk, favor_delta_d);
-    // Kernel launchers already carry the plan's private search_params copy. Reuse its historical
-    // delta-d slot for the reference upper bound. Query-local modes derive their final CTA scalar
-    // from this upper bound after the initial local candidate ordering.
-    favor_delta_d = favor_penalty_distance;
-    RAFT_LOG_DEBUG("# FAVOR raw delta-d: %g", favor_raw_delta_d);
-    RAFT_LOG_DEBUG("# FAVOR reference penalty distance: %g", favor_penalty_distance);
   }
 
   virtual ~search_plan_impl() {}
@@ -284,8 +250,7 @@ struct search_plan_impl : public search_plan_impl_base {
       max_iterations = _max_iterations;
     }
     // MULTI_CTA needs enough independent traversals to compensate for the fraction of rows
-    // rejected by the filter. FAVOR uses the same adjusted traversal breadth as default
-    // filtering, while configured_itopk_size retains the user-supplied value for its penalty.
+    // rejected by the filter.
     if (algo == search_algo::MULTI_CTA && (0.0 < filtering_rate && filtering_rate < 1.0)) {
       size_t adjusted_itopk_size =
         (size_t)((float)topk / (1.0 - filtering_rate) +
@@ -307,28 +272,6 @@ struct search_plan_impl : public search_plan_impl_base {
                      itopk_size,
                      itopk32);
       itopk_size = itopk32;
-    }
-    if (favor_adaptive_termination_experiment_enabled() && bitset_filter &&
-        configured_max_iterations == 0 && algo == search_algo::SINGLE_CTA &&
-        filter_mode == filtering_mode::FAVOR &&
-        favor_penalty == favor_penalty_mode::CAGRA_RETENTION_SAFE &&
-        favor_retention_fraction == 0.0f) {
-      const auto budget = favor_adaptive_budget(filtering_rate,
-                                                itopk_size,
-                                                topk,
-                                                search_width,
-                                                dataset_size,
-                                                graph_degree,
-                                                static_cast<std::uint32_t>(max_iterations));
-      if (budget.prefix_size != 0) {
-        favor_adaptive_start_iteration = budget.start_iteration;
-        favor_adaptive_prefix_size     = budget.prefix_size;
-        max_iterations                 = budget.hard_iteration;
-        RAFT_LOG_DEBUG("# sparse FAVOR adaptive termination: prefix=%u, start=%u, hard=%u",
-                       favor_adaptive_prefix_size,
-                       favor_adaptive_start_iteration,
-                       static_cast<std::uint32_t>(max_iterations));
-      }
     }
     team_size = dataset_desc.team_size;
   }
@@ -354,12 +297,18 @@ struct search_plan_impl : public search_plan_impl_base {
       // table that each CTA has in the shared memory. This hash table is not
       // shared among CTAs. This hash table is reset and restored in each iteration.
       //
-      const uint32_t max_visited_nodes = mc_itopk_size + (graph_degree * 2);
-      small_hash_bitlen                = 8;  // 256
-      while (max_visited_nodes > hashmap::get_size(small_hash_bitlen) * max_fill_rate) {
+      const uint32_t max_visited_nodes       = mc_itopk_size + (graph_degree * 2);
+      constexpr size_t max_small_hash_bitlen = 14;  // 16K
+      small_hash_bitlen                      = 8;   // 256
+      // Stop at the supported maximum rather than growing without bound: hashmap::get_size()
+      // is 1U << bitlen, which is undefined (and wraps to a small value) once bitlen reaches
+      // 32, so an unbounded loop would never satisfy its exit condition again.
+      while (small_hash_bitlen <= max_small_hash_bitlen &&
+             max_visited_nodes > hashmap::get_size(small_hash_bitlen) * max_fill_rate) {
         small_hash_bitlen += 1;
       }
-      RAFT_EXPECTS(small_hash_bitlen <= 14, "small_hash_bitlen cannot be largen than 14 (16K)");
+      RAFT_EXPECTS(small_hash_bitlen <= max_small_hash_bitlen,
+                   "small_hash_bitlen cannot be largen than 14 (16K)");
       //
       // [traversed_hash_table]
       // Whether a node has ever been used as the starting point for a traversal
@@ -368,13 +317,15 @@ struct search_plan_impl : public search_plan_impl_base {
       //
       const auto max_traversed_nodes =
         mc_num_cta_per_query * max((size_t)mc_itopk_size, max_iterations);
-      unsigned min_bitlen = 11;  // 2K
+      unsigned min_bitlen                  = 11;  // 2K
+      constexpr int64_t max_hash_bitlen_mc = 25;  // 32M
       if (min_bitlen < hashmap_min_bitlen) { min_bitlen = hashmap_min_bitlen; }
       hash_bitlen = min_bitlen;
-      while (max_traversed_nodes > hashmap::get_size(hash_bitlen) * max_fill_rate) {
+      while (hash_bitlen <= max_hash_bitlen_mc &&
+             max_traversed_nodes > hashmap::get_size(hash_bitlen) * max_fill_rate) {
         hash_bitlen += 1;
       }
-      RAFT_EXPECTS(hash_bitlen <= 25, "hash_bitlen cannot be largen than 25 (32M)");
+      RAFT_EXPECTS(hash_bitlen <= max_hash_bitlen_mc, "hash_bitlen cannot be largen than 25 (32M)");
     } else {
       constexpr std::uint32_t visit_multiplier =
         cagra_filter_uses_navix<SAMPLE_FILTER_T>::value ? 2u : 1u;
@@ -392,7 +343,8 @@ struct search_plan_impl : public search_plan_impl_base {
         unsigned max_bitlen = 13;  // 8K
         if (min_bitlen < hashmap_min_bitlen) { min_bitlen = hashmap_min_bitlen; }
         hash_bitlen = min_bitlen;
-        while (max_visited_nodes > hashmap::get_size(hash_bitlen) * max_fill_rate) {
+        while (hash_bitlen <= max_bitlen &&
+               max_visited_nodes > hashmap::get_size(hash_bitlen) * max_fill_rate) {
           hash_bitlen += 1;
         }
         if (hash_bitlen > max_bitlen) {
@@ -431,13 +383,15 @@ struct search_plan_impl : public search_plan_impl_base {
         //
         uint32_t max_visited_nodes =
           itopk_size + (search_width * graph_degree * visit_multiplier * max_iterations);
-        unsigned min_bitlen = 11;  // 2K
+        unsigned min_bitlen               = 11;  // 2K
+        constexpr int64_t max_hash_bitlen = 20;  // 1M
         if (min_bitlen < hashmap_min_bitlen) { min_bitlen = hashmap_min_bitlen; }
         hash_bitlen = min_bitlen;
-        while (max_visited_nodes > hashmap::get_size(hash_bitlen) * max_fill_rate) {
+        while (hash_bitlen <= max_hash_bitlen &&
+               max_visited_nodes > hashmap::get_size(hash_bitlen) * max_fill_rate) {
           hash_bitlen += 1;
         }
-        RAFT_EXPECTS(hash_bitlen <= 20,
+        RAFT_EXPECTS(hash_bitlen <= max_hash_bitlen,
                      "hash_bitlen cannot be largen than 20 (1M). You can decrease itopk_size, "
                      "search_width or max_iterations to reduce the required hashmap size.");
       }
@@ -486,42 +440,6 @@ struct search_plan_impl : public search_plan_impl_base {
     if (algo != search_algo::SINGLE_CTA && algo != search_algo::MULTI_CTA &&
         algo != search_algo::MULTI_KERNEL) {
       error_message += "An invalid kernel mode has been given: " + std::to_string((int)algo) + "";
-    }
-    if (filter_mode == filtering_mode::FAVOR) {
-      if (algo != search_algo::SINGLE_CTA && algo != search_algo::MULTI_CTA) {
-        error_message += "FAVOR filtering supports only SINGLE_CTA and MULTI_CTA. ";
-      }
-      if (persistent) { error_message += "FAVOR filtering does not support persistent search. "; }
-      if (!std::isfinite(favor_delta_d) || favor_delta_d < 0.0f) {
-        error_message += "`favor_delta_d` must be finite and nonnegative. ";
-      }
-      if (!(filtering_rate >= 0.0f && filtering_rate < 1.0f)) {
-        error_message += "FAVOR filtering requires an exact filtering rate in [0, 1). ";
-      }
-      if (favor_penalty != favor_penalty_mode::REFERENCE &&
-          favor_penalty != favor_penalty_mode::CAGRA_QUERY_LOCAL &&
-          favor_penalty != favor_penalty_mode::CAGRA_RETENTION_SAFE) {
-        error_message += "Invalid FAVOR penalty mode. ";
-      }
-      if (!std::isfinite(favor_penalty_lambda) || favor_penalty_lambda <= 0.0f) {
-        error_message += "`favor_penalty_lambda` must be finite and positive. ";
-      }
-      if (!std::isfinite(favor_retention_fraction) || favor_retention_fraction < 0.0f ||
-          favor_retention_fraction >= 1.0f) {
-        error_message += "`favor_retention_fraction` must be finite and in [0, 1). ";
-      }
-      if (favor_retention_fraction == 0.0f &&
-          favor_penalty != favor_penalty_mode::CAGRA_RETENTION_SAFE) {
-        error_message += "Automatic `favor_retention_fraction` requires CAGRA_RETENTION_SAFE. ";
-      }
-      const bool multi_cta_automatic_retention =
-        algo == search_algo::MULTI_CTA && favor_retention_fraction == 0.0f;
-      if (algo != search_algo::SINGLE_CTA && !multi_cta_automatic_retention &&
-          favor_retention_fraction != 0.5f) {
-        error_message +=
-          "Explicit non-default `favor_retention_fraction` supports only SINGLE_CTA FAVOR "
-          "filtering. ";
-      }
     }
     if (thread_block_size != 0 && thread_block_size != 64 && thread_block_size != 128 &&
         thread_block_size != 256 && thread_block_size != 512 && thread_block_size != 1024) {

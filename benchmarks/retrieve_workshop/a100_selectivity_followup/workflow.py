@@ -24,7 +24,7 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 WORKSHOP = HERE.parent
 REPO = WORKSHOP.parents[1]
-sys.path.insert(0, str(REPO / "benchmarks" / "favor" / "navix_bitmap"))
+sys.path.insert(0, str(WORKSHOP / "navix_bitmap"))
 sys.path.insert(0, str(WORKSHOP / "exact_bitmap"))
 sys.path.insert(0, str(WORKSHOP / "gpu_graph"))
 

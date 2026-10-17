@@ -1,0 +1,38 @@
+{
+  "dataset": {
+    "name": "paper-r-k100-q0",
+    "base_file": "/data/retrieve_data/arxiv-for-fanns-large/base.fbin",
+    "query_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/r/throughput_10000/shard_00_00000_02048/query.bin",
+    "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/r/throughput_10000/shard_00_00000_02048/groundtruth.ibin",
+    "distance": "euclidean",
+    "dtype": "float",
+    "filter": {
+      "kind": "bitmap",
+      "file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/r/throughput_10000/shard_00_00000_02048/filter.bitmap"
+    }
+  },
+  "search_basic_param": {
+    "k": 100,
+    "batch_size": 2048
+  },
+  "index": [
+    {
+      "name": "ivf-arxiv_flat_n4096_p101_f1",
+      "algo": "cuvs_ivf_flat",
+      "file": "/data/retrieve_workshop_runs/a100_ivf_bitmap_20261014T024338Z/indices/arxiv_flat_n4096.index",
+      "build_param": {
+        "nlist": 4096,
+        "niter": 25,
+        "ratio": 10
+      },
+      "search_params": [
+        {
+          "nprobe": 101,
+          "n_queries": 2048,
+          "k": 100,
+          "validation_case_id": "r__k100__ivf_flat"
+        }
+      ]
+    }
+  ]
+}

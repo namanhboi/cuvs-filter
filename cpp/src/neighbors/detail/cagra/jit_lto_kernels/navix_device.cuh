@@ -7,7 +7,7 @@
 
 #include "cagra_filter_payload.cuh"
 #include "extern_device_functions.cuh"
-#include "favor_search_diagnostics.cuh"
+#include "search_diagnostics.cuh"
 
 #include "../bitonic.hpp"
 #include "../hashmap.hpp"
@@ -152,7 +152,7 @@ RAFT_DEVICE_INLINE_FUNCTION void reset_navix_visited_to_seed_batch(
 
 template <typename SourceIndexT>
 RAFT_DEVICE_INLINE_FUNCTION auto navix_ground_truth_bit(
-  const favor_search_diagnostics::context* diagnostic_context,
+  const search_diagnostics::context* diagnostic_context,
   const std::uint32_t query_id,
   const SourceIndexT source) -> std::uint32_t
 {
@@ -161,8 +161,8 @@ RAFT_DEVICE_INLINE_FUNCTION auto navix_ground_truth_bit(
     return 0;
   }
   const auto* gt = diagnostic_context->ground_truth_ids +
-                   static_cast<std::uint64_t>(query_id) * favor_search_diagnostics::ground_truth_k;
-  for (std::uint32_t rank = 0; rank < favor_search_diagnostics::ground_truth_k; ++rank) {
+                   static_cast<std::uint64_t>(query_id) * search_diagnostics::ground_truth_k;
+  for (std::uint32_t rank = 0; rank < search_diagnostics::ground_truth_k; ++rank) {
     if (static_cast<std::uint32_t>(source) == gt[rank]) { return std::uint32_t{1} << rank; }
   }
   return 0;
@@ -178,8 +178,8 @@ RAFT_DEVICE_INLINE_FUNCTION void capture_navix_seed_batch(
   const std::uint32_t seed_iteration,
   const std::uint32_t query_id,
   const SourceIndexT* source_indices_ptr,
-  favor_search_diagnostics::query_summary* diagnostic_summary,
-  favor_search_diagnostics::context* diagnostic_context)
+  search_diagnostics::query_summary* diagnostic_summary,
+  search_diagnostics::context* diagnostic_context)
 {
   if (diagnostic_summary == nullptr || diagnostic_context == nullptr) { return; }
   if (threadIdx.x == 0) {
@@ -243,9 +243,9 @@ RAFT_DEVICE_INLINE_FUNCTION void compute_navix_candidates_jit(
   cagra_sample_filter<SourceIndexT> filter_payload,
   std::uint32_t* __restrict__ work_ptr,
   const std::uint32_t requested_policy,
-  favor_search_diagnostics::query_summary* diagnostic_summary   = nullptr,
-  favor_search_diagnostics::iteration_record* diagnostic_record = nullptr,
-  favor_search_diagnostics::context* diagnostic_context         = nullptr)
+  search_diagnostics::query_summary* diagnostic_summary   = nullptr,
+  search_diagnostics::iteration_record* diagnostic_record = nullptr,
+  search_diagnostics::context* diagnostic_context         = nullptr)
 {
   static_assert(GRAPH_DEGREE == 32 || GRAPH_DEGREE == 64,
                 "NaviX supports degree-32 and degree-64 CAGRA graphs");

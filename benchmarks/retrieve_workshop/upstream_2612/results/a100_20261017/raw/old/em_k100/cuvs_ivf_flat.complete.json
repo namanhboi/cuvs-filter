@@ -1,0 +1,29 @@
+{
+  "signature": {
+    "config_sha256": "c19651aa4ba9382bd9e5e86d2b7cb436e732e78e650ddeb8709faa87d98c5fc2",
+    "binary_sha256": "ad0e0f309501efa0582a9ec0371cfa25230dfaac87bfe01dc1bec42936da0a43",
+    "library_sha256": "69a79db04bfb3f2756ea2bde44f4c2f6e55c2e542c376888a6a9843e972d8c00",
+    "manifest_sha256": "e06bec7e40ab7f495614a00d517a1b8ea864c2b339b17a59538dafd85756cd93"
+  },
+  "command": [
+    "micromamba",
+    "run",
+    "-p",
+    "/home/ubuntu/micromamba/envs/cuvs",
+    "/home/ubuntu/cuvs-filter/cpp/build/bench/ann/CUVS_IVF_FLAT_ANN_BENCH",
+    "--search",
+    "--mode=throughput",
+    "--threads=1",
+    "--data_prefix=/data/retrieve_data",
+    "--index_prefix=/data/retrieve_data",
+    "--benchmark_repetitions=3",
+    "--benchmark_min_time=0.10s",
+    "--benchmark_min_warmup_time=0.10",
+    "--benchmark_enable_random_interleaving=true",
+    "--benchmark_report_aggregates_only=false",
+    "--benchmark_out_format=json",
+    "--benchmark_out=/data/cuvs-upstream-validation/benchmarks/raw/old/em_k100/cuvs_ivf_flat.json",
+    "/data/cuvs-upstream-validation/benchmarks/configs/old/em_k100/cuvs_ivf_flat.json"
+  ],
+  "raw_sha256": "83a4d7ea408120c75226d854a6eda8d0c9e1b07f201ceeca3bbd1fed5ecb92f4"
+}

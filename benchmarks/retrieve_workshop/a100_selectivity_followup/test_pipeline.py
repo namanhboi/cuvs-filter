@@ -374,7 +374,7 @@ class SelectivityFollowupTest(unittest.TestCase):
                         "itopk": 64,
                         "search_width": 2,
                         "max_iterations": 0,
-                        "favor_udf_passing_accumulator": int(
+                        "passing_result_accumulator": int(
                             "accumulator" in method
                         ),
                         "cagra_bitmap_seeds": 0,

@@ -75,10 +75,12 @@ function(ConfigureTest)
 endfunction()
 
 ConfigureTest(NAME INTEROP_TEST PATH core/interop.cu)
+ConfigureTest(NAME DATASET_C_TEST PATH core/dataset_c.cu)
 ConfigureTest(
   NAME DISTANCE_C_TEST PATH distance/run_pairwise_distance_c.c distance/pairwise_distance_c.cu
 )
 ConfigureTest(NAME KMEANS_C_TEST PATH cluster/kmeans_c.cu)
+ConfigureTest(NAME SELECT_K_C_TEST PATH selection/select_k_c.cu)
 if(BUILD_MG_ALGOS)
   ConfigureTest(NAME KMEANS_MG_C_TEST PATH cluster/kmeans_mg_c.cu)
 endif()
@@ -105,7 +107,11 @@ endif()
 
 ConfigureTest(NAME cuvs_c_headers PATH core/headers.c)
 ConfigureTest(NAME cuvs_c_test PATH core/c_api.c)
+ConfigureTest(NAME cuvs_c_resource_pool_test PATH core/resource_pool.cpp)
+ConfigureTest(NAME cuvs_c_resource_stream_pool_test PATH core/resource_stream_pool.cpp)
 target_link_libraries(cuvs_c_test PRIVATE CUDA::cudart_static)
+target_link_libraries(cuvs_c_resource_pool_test PRIVATE CUDA::cudart_static)
+target_link_libraries(cuvs_c_resource_stream_pool_test PRIVATE CUDA::cudart_static)
 ConfigureTest(NAME cuvs_c_neighbors_test PATH neighbors/c_api.c)
 
 # ##################################################################################################

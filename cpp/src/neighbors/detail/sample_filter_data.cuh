@@ -5,8 +5,14 @@
 
 #pragma once
 
+#include <cuco/bloom_filter.cuh>
+
 #include <cstddef>
 #include <cstdint>
+
+namespace cuvs::core {
+class bloom_filter;
+}
 
 namespace cuvs::neighbors::detail {
 
@@ -29,6 +35,20 @@ struct bitmap_filter_data_t {
   std::int64_t num_rows{};
   std::int64_t num_cols{};
   std::int64_t original_nbits{};
+};
+
+/// Global cuco bloom filter ref for linked @c sample_filter in CAGRA JIT LTO.
+template <typename Key = std::uint32_t>
+struct bloom_filter_data_t {
+  using ref_type = typename cuco::bloom_filter<Key>::ref_type<>;
+
+  explicit bloom_filter_data_t(ref_type filter) : filter(filter) {}
+
+  ref_type filter;
+};
+
+struct bloom_filter_factory {
+  static bloom_filter_data_t<std::uint32_t> make(cuvs::core::bloom_filter const& filter);
 };
 
 }  // namespace cuvs::neighbors::detail

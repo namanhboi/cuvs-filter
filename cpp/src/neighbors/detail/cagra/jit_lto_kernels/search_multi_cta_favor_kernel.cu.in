@@ -51,12 +51,13 @@ extern "C" __global__ __launch_bounds__(1024, 1) void search_multi_cta_favor(
   const std::uint32_t configured_itopk_size,
   const float favor_retention_fraction)
 {
-  search_kernel_jit<true, data_t, index_t, distance_t, source_index_t>(result_indices_ptr,
+  search_core<true, data_t, index_t, distance_t, source_index_t>(result_indices_ptr,
                                                                        result_distances_ptr,
                                                                        dataset_desc,
                                                                        queries_ptr,
                                                                        knn_graph,
                                                                        max_elements,
+                                                                       graph_degree,
                                                                        graph_degree,
                                                                        source_indices_ptr,
                                                                        num_distilation,

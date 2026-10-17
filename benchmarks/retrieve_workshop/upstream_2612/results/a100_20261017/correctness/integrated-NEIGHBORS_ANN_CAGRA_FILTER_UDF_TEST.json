@@ -1,0 +1,675 @@
+{
+  "tests": 51,
+  "failures": 0,
+  "disabled": 0,
+  "errors": 0,
+  "timestamp": "2026-10-17T10:45:55Z",
+  "time": "89.375s",
+  "name": "AllTests",
+  "testsuites": [
+    {
+      "name": "CagraUdfFilters\/CagraUdfFilterTest",
+      "tests": 45,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-10-17T10:45:55Z",
+      "time": "68.395s",
+      "testsuite": [
+        {
+          "name": "AcceptAllMatchesNoFilter\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 371,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:55Z",
+          "time": "11.492s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "AcceptAllMatchesNoFilter\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 371,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:07Z",
+          "time": "2.331s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "AcceptAllMatchesNoFilter\/2",
+          "value_param": "4-byte object <02-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 371,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:09Z",
+          "time": "0.411s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "RejectAllReturnsNoValidNeighbors\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 396,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:09Z",
+          "time": "5.671s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "RejectAllReturnsNoValidNeighbors\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 396,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:15Z",
+          "time": "1.186s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "RejectAllReturnsNoValidNeighbors\/2",
+          "value_param": "4-byte object <02-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 396,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:16Z",
+          "time": "0.158s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "HighFilteringRateReturnsOnlyValidNeighbors\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 406,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:16Z",
+          "time": "5.396s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "HighFilteringRateReturnsOnlyValidNeighbors\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 406,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:22Z",
+          "time": "1.143s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "HighFilteringRateReturnsOnlyValidNeighbors\/2",
+          "value_param": "4-byte object <02-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 406,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:23Z",
+          "time": "0.171s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "DefaultPassingAccumulatorIsPassiveAndRetainsPassingCandidates\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 419,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:23Z",
+          "time": "0.055s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "DefaultPassingAccumulatorIsPassiveAndRetainsPassingCandidates\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 419,
+          "status": "RUN",
+          "result": "SKIPPED",
+          "timestamp": "2026-10-17T10:46:23Z",
+          "time": "0.041s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest",
+          "skipped": [
+            {
+              "message": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu:421\n\n"
+            }
+          ]
+        },
+        {
+          "name": "DefaultPassingAccumulatorIsPassiveAndRetainsPassingCandidates\/2",
+          "value_param": "4-byte object <02-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 419,
+          "status": "RUN",
+          "result": "SKIPPED",
+          "timestamp": "2026-10-17T10:46:23Z",
+          "time": "0.031s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest",
+          "skipped": [
+            {
+              "message": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu:421\n\n"
+            }
+          ]
+        },
+        {
+          "name": "DefaultPassingAccumulatorRejectsRatesAndMultiCta\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 449,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:23Z",
+          "time": "0.04s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "DefaultPassingAccumulatorRejectsRatesAndMultiCta\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 449,
+          "status": "RUN",
+          "result": "SKIPPED",
+          "timestamp": "2026-10-17T10:46:23Z",
+          "time": "0.066s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest",
+          "skipped": [
+            {
+              "message": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu:451\n\n"
+            }
+          ]
+        },
+        {
+          "name": "DefaultPassingAccumulatorRejectsRatesAndMultiCta\/2",
+          "value_param": "4-byte object <02-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 449,
+          "status": "RUN",
+          "result": "SKIPPED",
+          "timestamp": "2026-10-17T10:46:23Z",
+          "time": "0.049s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest",
+          "skipped": [
+            {
+              "message": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu:451\n\n"
+            }
+          ]
+        },
+        {
+          "name": "PassingAccumulatorMatchesAcceptAllAcrossTopKBoundaries\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 463,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:23Z",
+          "time": "0.068s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "PassingAccumulatorMatchesAcceptAllAcrossTopKBoundaries\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 463,
+          "status": "RUN",
+          "result": "SKIPPED",
+          "timestamp": "2026-10-17T10:46:24Z",
+          "time": "0.049s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest",
+          "skipped": [
+            {
+              "message": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu:465\n\n"
+            }
+          ]
+        },
+        {
+          "name": "PassingAccumulatorMatchesAcceptAllAcrossTopKBoundaries\/2",
+          "value_param": "4-byte object <02-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 463,
+          "status": "RUN",
+          "result": "SKIPPED",
+          "timestamp": "2026-10-17T10:46:24Z",
+          "time": "0.052s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest",
+          "skipped": [
+            {
+              "message": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu:465\n\n"
+            }
+          ]
+        },
+        {
+          "name": "RepeatedUdfSearchWithSameSourceMatches\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 478,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:24Z",
+          "time": "0.054s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "RepeatedUdfSearchWithSameSourceMatches\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 478,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:24Z",
+          "time": "0.04s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "RepeatedUdfSearchWithSameSourceMatches\/2",
+          "value_param": "4-byte object <02-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 478,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:24Z",
+          "time": "0.054s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "InvalidSourceThrows\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 488,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:24Z",
+          "time": "0.076s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "InvalidSourceThrows\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 488,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:24Z",
+          "time": "0.058s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "InvalidSourceThrows\/2",
+          "value_param": "4-byte object <02-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 488,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:24Z",
+          "time": "0.058s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "ThresholdMatchesEquivalentBitset\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 495,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:24Z",
+          "time": "5.442s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "ThresholdMatchesEquivalentBitset\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 495,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:29Z",
+          "time": "1.202s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "ThresholdMatchesEquivalentBitset\/2",
+          "value_param": "4-byte object <02-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 495,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:31Z",
+          "time": "0.344s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "TenantContextHonorsQuerySpecificMetadata\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 517,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:31Z",
+          "time": "5.4s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "TenantContextHonorsQuerySpecificMetadata\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 517,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:36Z",
+          "time": "2.566s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "TenantContextHonorsQuerySpecificMetadata\/2",
+          "value_param": "4-byte object <02-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 517,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:39Z",
+          "time": "0.545s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "RejectsRetiredFavorMode\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 624,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:39Z",
+          "time": "0.056s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "RejectsRetiredFavorMode\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 624,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:40Z",
+          "time": "0.036s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "RejectsRetiredFavorMode\/2",
+          "value_param": "4-byte object <02-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 624,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:40Z",
+          "time": "0.057s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "NavixAcceptAllOneHopMatchesDefaultAcrossQueryBatches\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 630,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:40Z",
+          "time": "5.863s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "NavixAcceptAllOneHopMatchesDefaultAcrossQueryBatches\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 630,
+          "status": "RUN",
+          "result": "SKIPPED",
+          "timestamp": "2026-10-17T10:46:45Z",
+          "time": "0.042s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest",
+          "skipped": [
+            {
+              "message": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu:632\n\n"
+            }
+          ]
+        },
+        {
+          "name": "NavixAcceptAllOneHopMatchesDefaultAcrossQueryBatches\/2",
+          "value_param": "4-byte object <02-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 630,
+          "status": "RUN",
+          "result": "SKIPPED",
+          "timestamp": "2026-10-17T10:46:46Z",
+          "time": "0.037s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest",
+          "skipped": [
+            {
+              "message": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu:632\n\n"
+            }
+          ]
+        },
+        {
+          "name": "NavixRejectAllReturnsInvalidSentinels\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 640,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:46Z",
+          "time": "5.863s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "NavixRejectAllReturnsInvalidSentinels\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 640,
+          "status": "RUN",
+          "result": "SKIPPED",
+          "timestamp": "2026-10-17T10:46:51Z",
+          "time": "0.051s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest",
+          "skipped": [
+            {
+              "message": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu:642\n\n"
+            }
+          ]
+        },
+        {
+          "name": "NavixRejectAllReturnsInvalidSentinels\/2",
+          "value_param": "4-byte object <02-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 640,
+          "status": "RUN",
+          "result": "SKIPPED",
+          "timestamp": "2026-10-17T10:46:51Z",
+          "time": "0.052s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest",
+          "skipped": [
+            {
+              "message": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu:642\n\n"
+            }
+          ]
+        },
+        {
+          "name": "NavixPoliciesReturnOnlyPassingUniqueSortedRows\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 652,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:52Z",
+          "time": "5.965s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "NavixPoliciesReturnOnlyPassingUniqueSortedRows\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 652,
+          "status": "RUN",
+          "result": "SKIPPED",
+          "timestamp": "2026-10-17T10:46:57Z",
+          "time": "0.044s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest",
+          "skipped": [
+            {
+              "message": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu:654\n\n"
+            }
+          ]
+        },
+        {
+          "name": "NavixPoliciesReturnOnlyPassingUniqueSortedRows\/2",
+          "value_param": "4-byte object <02-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 652,
+          "status": "RUN",
+          "result": "SKIPPED",
+          "timestamp": "2026-10-17T10:46:58Z",
+          "time": "0.03s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest",
+          "skipped": [
+            {
+              "message": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu:654\n\n"
+            }
+          ]
+        },
+        {
+          "name": "NavixHonorsQueryOffsetsAndSchedulerOrdering\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 684,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:46:58Z",
+          "time": "5.94s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest"
+        },
+        {
+          "name": "NavixHonorsQueryOffsetsAndSchedulerOrdering\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 684,
+          "status": "RUN",
+          "result": "SKIPPED",
+          "timestamp": "2026-10-17T10:47:04Z",
+          "time": "0.04s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest",
+          "skipped": [
+            {
+              "message": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu:686\n\n"
+            }
+          ]
+        },
+        {
+          "name": "NavixHonorsQueryOffsetsAndSchedulerOrdering\/2",
+          "value_param": "4-byte object <02-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 684,
+          "status": "RUN",
+          "result": "SKIPPED",
+          "timestamp": "2026-10-17T10:47:04Z",
+          "time": "0.051s",
+          "classname": "CagraUdfFilters\/CagraUdfFilterTest",
+          "skipped": [
+            {
+              "message": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu:686\n\n"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "CagraUdfFilterHalf\/CagraUdfFilterHalfTest",
+      "tests": 3,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-10-17T10:47:04Z",
+      "time": "7.226s",
+      "testsuite": [
+        {
+          "name": "ThresholdReturnsOnlyValidNeighbors\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 382,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:47:04Z",
+          "time": "5.786s",
+          "classname": "CagraUdfFilterHalf\/CagraUdfFilterHalfTest"
+        },
+        {
+          "name": "ThresholdReturnsOnlyValidNeighbors\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 382,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:47:09Z",
+          "time": "1.146s",
+          "classname": "CagraUdfFilterHalf\/CagraUdfFilterHalfTest"
+        },
+        {
+          "name": "ThresholdReturnsOnlyValidNeighbors\/2",
+          "value_param": "4-byte object <02-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 382,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:47:11Z",
+          "time": "0.293s",
+          "classname": "CagraUdfFilterHalf\/CagraUdfFilterHalfTest"
+        }
+      ]
+    },
+    {
+      "name": "CagraUdfDegree64\/CagraUdfFilterDegree64Test",
+      "tests": 3,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-10-17T10:47:11Z",
+      "time": "13.752s",
+      "testsuite": [
+        {
+          "name": "NavixAcceptAllOneHopMatchesDefault\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 721,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:47:11Z",
+          "time": "7.045s",
+          "classname": "CagraUdfDegree64\/CagraUdfFilterDegree64Test"
+        },
+        {
+          "name": "NavixPoliciesReturnOnlyPassingUniqueSortedRows\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 729,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:47:18Z",
+          "time": "6.639s",
+          "classname": "CagraUdfDegree64\/CagraUdfFilterDegree64Test"
+        },
+        {
+          "name": "NavixTiledSchedulerMatchesSerialReference\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_udf.cu",
+          "line": 759,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:47:25Z",
+          "time": "0.067s",
+          "classname": "CagraUdfDegree64\/CagraUdfFilterDegree64Test"
+        }
+      ]
+    }
+  ]
+}

@@ -11,7 +11,13 @@ namespace cuvs::neighbors::cagra::detail {
 /// Device payload for linked CAGRA sample filters plus query offset for wrapped filters.
 template <typename SourceIndexT>
 struct cagra_sample_filter {
-  enum : std::uint32_t { kind_none = 0, kind_bitset = 1, kind_udf = 2, kind_bitmap = 3 };
+  enum : std::uint32_t {
+    kind_none    = 0,
+    kind_bitset  = 1,
+    kind_udf     = 2,
+    kind_bitmap  = 3,
+    kind_roaring = 4
+  };
 
   void* filter_data{nullptr};
   const float* filtering_rates{nullptr};

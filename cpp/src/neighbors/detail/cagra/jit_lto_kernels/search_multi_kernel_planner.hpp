@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION.
+ * SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -21,7 +21,7 @@ template <typename DataTag,
           typename SampleFilterJitTag = tag_cagra_jit_sample_filter_link_absent>
 struct CagraMultiKernelSearchPlanner
   : CagraPlannerBase<DataTag, IndexTag, DistanceTag, QueryTag, CodebookTag, SampleFilterJitTag> {
-  static inline LauncherJitCache launcher_jit_cache{};
+  static inline rtcx::launcher_jit_cache launcher_jit_cache{};
 
   /// Kernels that only need `sample_filter` + one linked TU (e.g. `apply_filter_kernel`): no
   /// `setup_workspace` / `compute_distance` fragments. Metric / team / VPQ are unused.
@@ -58,8 +58,7 @@ struct CagraMultiKernelSearchPlanner
       this->template add_static_fragment<
         fragment_tag_apply_filter_kernel<IndexTag, DistanceTag, SourceIndexTag>>();
     } else if (kernel_name == "estimate_filter_rate") {
-      this
-        ->template add_static_fragment<fragment_tag_estimate_filter_rate_kernel<SourceIndexTag>>();
+      RAFT_FAIL("FAVOR selectivity sampling is retired");
     } else {
       RAFT_FAIL("Unknown CAGRA multi-kernel JIT kernel: %s", kernel_name.c_str());
     }

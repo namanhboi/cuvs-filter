@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION.
+ * SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,6 +9,7 @@
 #include "../ann_cagra.cuh"
 
 #include <cuvs/core/bitset.hpp>
+#include <cuvs/core/roaring_allowlist.hpp>
 #include <cuvs/neighbors/cagra.hpp>
 
 #include <raft/core/copy.cuh>
@@ -21,6 +22,7 @@
 #include <thrust/sequence.h>
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -133,7 +135,10 @@ class CagraUdfFilterTest : public ::testing::TestWithParam<cagra::search_algo> {
     index_params.graph_build_params =
       cagra::graph_build_params::nn_descent_params(index_params.intermediate_graph_degree);
 
-    index.emplace(cagra::build(res, index_params, raft::make_const_mdspan(dataset->view())));
+    index.emplace(cagra::build(res,
+                               index_params,
+                               cuvs::neighbors::make_device_padded_dataset_view(
+                                 res, raft::make_const_mdspan(dataset->view()))));
     raft::resource::sync_stream(res);
   }
 
@@ -200,7 +205,7 @@ class CagraUdfFilterTest : public ::testing::TestWithParam<cagra::search_algo> {
     search_params.max_queries       = 2;
     search_params.thread_block_size = 256;
 
-    cagra::detail::benchmark_search_favor_udf_with_sampled_rates<float>(
+    cagra::detail::benchmark_search_udf_with_result_accumulator<float>(
       res,
       search_params,
       *index,
@@ -274,9 +279,9 @@ class CagraUdfFilterTest : public ::testing::TestWithParam<cagra::search_algo> {
   }
 
   raft::resources res;
-  std::optional<raft::device_matrix<float, int64_t>> dataset = std::nullopt;
-  std::optional<raft::device_matrix<float, int64_t>> queries = std::nullopt;
-  std::optional<cagra::index<float, uint32_t>> index         = std::nullopt;
+  std::optional<raft::device_matrix<float, int64_t>> dataset       = std::nullopt;
+  std::optional<raft::device_matrix<float, int64_t>> queries       = std::nullopt;
+  std::optional<cagra::device_padded_index<float, uint32_t>> index = std::nullopt;
 };
 
 class CagraUdfFilterDegree64Test : public CagraUdfFilterTest {
@@ -312,7 +317,10 @@ class CagraUdfFilterHalfTest : public ::testing::TestWithParam<cagra::search_alg
     index_params.graph_build_params =
       cagra::graph_build_params::nn_descent_params(index_params.intermediate_graph_degree);
 
-    index.emplace(cagra::build(res, index_params, raft::make_const_mdspan(dataset->view())));
+    index.emplace(cagra::build(res,
+                               index_params,
+                               cuvs::neighbors::make_device_padded_dataset_view(
+                                 res, raft::make_const_mdspan(dataset->view()))));
     raft::resource::sync_stream(res);
   }
 
@@ -355,9 +363,9 @@ class CagraUdfFilterHalfTest : public ::testing::TestWithParam<cagra::search_alg
   }
 
   raft::resources res;
-  std::optional<raft::device_matrix<half, int64_t>> dataset = std::nullopt;
-  std::optional<raft::device_matrix<half, int64_t>> queries = std::nullopt;
-  std::optional<cagra::index<half, uint32_t>> index         = std::nullopt;
+  std::optional<raft::device_matrix<half, int64_t>> dataset       = std::nullopt;
+  std::optional<raft::device_matrix<half, int64_t>> queries       = std::nullopt;
+  std::optional<cagra::device_padded_index<half, uint32_t>> index = std::nullopt;
 };
 
 TEST_P(CagraUdfFilterTest, AcceptAllMatchesNoFilter)
@@ -511,7 +519,8 @@ TEST_P(CagraUdfFilterTest, TenantContextHonorsQuerySpecificMetadata)
   std::vector<uint32_t> host_row_tenants(n_rows);
   std::vector<uint32_t> host_query_tenants(n_queries);
   for (int64_t i = 0; i < n_rows; ++i) {
-    host_row_tenants[static_cast<size_t>(i)] = static_cast<uint32_t>((i / 5) % 3);
+    // Equal tenant cardinalities make the query-specific reference comparison deterministic.
+    host_row_tenants[static_cast<size_t>(i)] = static_cast<uint32_t>(i % 3);
   }
   for (int64_t q = 0; q < n_queries; ++q) {
     host_query_tenants[static_cast<size_t>(q)] = static_cast<uint32_t>(q % 3);
@@ -542,80 +551,80 @@ TEST_P(CagraUdfFilterTest, TenantContextHonorsQuerySpecificMetadata)
       EXPECT_EQ(host_row_tenants[source_id], query_tenant);
     }
   }
-}
 
-TEST_P(CagraUdfFilterTest, FavorSamplesRateAndReturnsOnlyPassingNeighbors)
-{
-  if (GetParam() != cagra::search_algo::SINGLE_CTA) { GTEST_SKIP(); }
+  // Build independent reusable owners and map one view to each query. Compare Roaring against this
+  // existing query-specific UDF result for every single-partition CAGRA algorithm. max_queries=2
+  // above also verifies query-offset propagation through internal chunking.
+  std::vector<cuvs::core::roaring_allowlist> tenant_allowlists;
+  tenant_allowlists.reserve(n_queries);
+  for (std::int64_t query = 0; query < n_queries; ++query) {
+    std::vector<std::uint32_t> allowed_ids;
+    auto const query_tenant = host_query_tenants[static_cast<std::size_t>(query)];
+    for (std::int64_t row = 0; row < n_rows; ++row) {
+      if (host_row_tenants[static_cast<std::size_t>(row)] == query_tenant) {
+        allowed_ids.push_back(static_cast<std::uint32_t>(row));
+      }
+    }
+    tenant_allowlists.push_back(cuvs::core::roaring_allowlist::from_ids(
+      res,
+      n_rows,
+      raft::make_host_vector_view<const std::uint32_t, std::int64_t>(allowed_ids.data(),
+                                                                     allowed_ids.size()),
+      true));
+  }
 
-  // Both scalar hints are intentionally wrong: phase-one FAVOR UDF must derive policy only from
-  // its systematic predicate sample.
-  cuvs::neighbors::filtering::udf_filter udf_filter(threshold_udf_source(), nullptr, 0.0f);
-  auto result = search(udf_filter, 0.0f, true);
+  std::vector<cuvs::core::roaring_allowlist_view> tenant_views;
+  tenant_views.reserve(n_queries);
+  for (auto const& allowlist : tenant_allowlists) {
+    tenant_views.push_back(allowlist.view());
+  }
+  cuvs::neighbors::filtering::roaring_bitmap_filter roaring_bitmap_filter(res, tenant_views);
+  auto roaring_result = search(roaring_bitmap_filter, 2.0f / 3.0f);
+  expect_same_results(result, roaring_result);
 
-  for (int64_t q = 0; q < n_queries; ++q) {
-    float previous_distance = -std::numeric_limits<float>::infinity();
-    std::uint32_t previous_id{};
-    std::vector<std::uint32_t> seen;
-    for (int64_t rank = 0; rank < k; ++rank) {
-      const auto pos       = static_cast<std::size_t>(q * k + rank);
-      const auto source_id = result.neighbors[pos];
+  // Exercise both device tables: first mark one query empty, then repoint that same slot to a
+  // different reusable owner and verify CAGRA consumes the updated mapping.
+  auto empty_allowlist = cuvs::core::roaring_allowlist::from_ids(
+    res, n_rows, raft::make_host_vector_view<const std::uint32_t, std::int64_t>(nullptr, 0));
+  roaring_bitmap_filter.set_allowlist(res, 1, empty_allowlist.view());
+  auto empty_result = search(roaring_bitmap_filter);
+  for (std::int64_t i = 0; i < k; ++i) {
+    auto const source_id = empty_result.neighbors[static_cast<std::size_t>(k + i)];
+    EXPECT_GE(source_id, static_cast<std::uint32_t>(n_rows));
+  }
+
+  roaring_bitmap_filter.set_allowlist(res, 1, tenant_allowlists.front().view());
+  auto updated_result = search(roaring_bitmap_filter, 2.0f / 3.0f);
+  for (std::int64_t query = 0; query < n_queries; ++query) {
+    auto const expected_tenant =
+      query == 1 ? std::uint32_t{0} : host_query_tenants[static_cast<std::size_t>(query)];
+    for (std::int64_t i = 0; i < k; ++i) {
+      auto const source_id = updated_result.neighbors[static_cast<std::size_t>(query * k + i)];
       ASSERT_LT(source_id, static_cast<std::uint32_t>(n_rows));
-      EXPECT_GE(source_id, static_cast<std::uint32_t>(threshold));
-      EXPECT_GE(result.distances[pos], previous_distance);
-      if (result.distances[pos] == previous_distance) { EXPECT_GT(source_id, previous_id); }
-      EXPECT_EQ(std::find(seen.begin(), seen.end(), source_id), seen.end());
-      seen.push_back(source_id);
-      previous_distance = result.distances[pos];
-      previous_id       = source_id;
+      EXPECT_EQ(host_row_tenants[source_id], expected_tenant);
     }
   }
-}
 
-TEST_P(CagraUdfFilterTest, FavorRejectAllUsesInvalidSentinels)
-{
-  if (GetParam() != cagra::search_algo::SINGLE_CTA) { GTEST_SKIP(); }
+  if (GetParam() == cagra::search_algo::SINGLE_CTA) {
+    auto wrong_queries = cuvs::core::roaring_allowlist::from_ids(
+      res, n_rows, raft::make_host_vector_view<const std::uint32_t, std::int64_t>(nullptr, 0));
+    std::array wrong_query_views{wrong_queries.view()};
+    cuvs::neighbors::filtering::roaring_bitmap_filter wrong_query_filter(res, wrong_query_views);
+    EXPECT_THROW(search(wrong_query_filter), raft::logic_error);
 
-  cuvs::neighbors::filtering::udf_filter udf_filter(reject_all_udf_source());
-  auto result = search(udf_filter, -1.0f, true);
-  for (std::size_t i = 0; i < result.neighbors.size(); ++i) {
-    EXPECT_EQ(result.neighbors[i], std::numeric_limits<std::uint32_t>::max());
-    EXPECT_EQ(result.distances[i], std::numeric_limits<float>::max());
+    auto wrong_columns = cuvs::core::roaring_allowlist::from_ids(
+      res, n_rows + 1, raft::make_host_vector_view<const std::uint32_t, std::int64_t>(nullptr, 0));
+    std::vector<cuvs::core::roaring_allowlist_view> wrong_column_views(
+      static_cast<std::size_t>(n_queries), wrong_columns.view());
+    cuvs::neighbors::filtering::roaring_bitmap_filter wrong_column_filter(res, wrong_column_views);
+    EXPECT_THROW(search(wrong_column_filter), raft::logic_error);
   }
 }
 
-TEST_P(CagraUdfFilterTest, FavorTenantContextHonorsTiledQueryIds)
+TEST_P(CagraUdfFilterTest, RejectsRetiredFavorMode)
 {
-  if (GetParam() != cagra::search_algo::SINGLE_CTA) { GTEST_SKIP(); }
-
-  std::vector<uint32_t> host_row_tenants(n_rows);
-  std::vector<uint32_t> host_query_tenants(n_queries);
-  for (int64_t row = 0; row < n_rows; ++row) {
-    host_row_tenants[static_cast<std::size_t>(row)] = static_cast<std::uint32_t>((row / 5) % 3);
-  }
-  for (int64_t query = 0; query < n_queries; ++query) {
-    host_query_tenants[static_cast<std::size_t>(query)] = static_cast<std::uint32_t>(query % 3);
-  }
-
-  auto row_tenants   = raft::make_device_vector<uint32_t, int64_t>(res, n_rows);
-  auto query_tenants = raft::make_device_vector<uint32_t, int64_t>(res, n_queries);
-  auto context       = raft::make_device_vector<tenant_filter_context, int64_t>(res, 1);
-  auto stream        = raft::resource::get_cuda_stream(res);
-  raft::copy(row_tenants.data_handle(), host_row_tenants.data(), host_row_tenants.size(), stream);
-  raft::copy(
-    query_tenants.data_handle(), host_query_tenants.data(), host_query_tenants.size(), stream);
-  tenant_filter_context host_context{row_tenants.data_handle(), query_tenants.data_handle()};
-  raft::copy(context.data_handle(), &host_context, 1, stream);
-
-  cuvs::neighbors::filtering::udf_filter udf_filter(tenant_udf_source(), context.data_handle());
-  auto result = search(udf_filter, -1.0f, true);
-  for (int64_t query = 0; query < n_queries; ++query) {
-    for (int64_t rank = 0; rank < k; ++rank) {
-      const auto source_id = result.neighbors[static_cast<std::size_t>(query * k + rank)];
-      ASSERT_LT(source_id, static_cast<std::uint32_t>(n_rows));
-      EXPECT_EQ(host_row_tenants[source_id], host_query_tenants[static_cast<std::size_t>(query)]);
-    }
-  }
+  cuvs::neighbors::filtering::udf_filter filter(accept_all_udf_source(), nullptr, 0.0f);
+  EXPECT_THROW(search(filter, 0.0f, true), raft::logic_error);
 }
 
 TEST_P(CagraUdfFilterTest, NavixAcceptAllOneHopMatchesDefaultAcrossQueryBatches)

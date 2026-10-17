@@ -1,6 +1,6 @@
 [package]
 name = "cuvs"
-description = "RAPIDS vector search library"
+description = "NVIDIA cuVS vector search library"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -13,6 +13,7 @@ default = []
 doc-only = ["cuvs-sys/doc-only"]
 
 [dependencies]
+bon = "3"
 cuvs-sys = { workspace = true }
 thiserror = "2"
 tinyvec = { version = "1", features = ["alloc"] }

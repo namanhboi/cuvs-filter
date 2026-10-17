@@ -19,8 +19,8 @@ from dataset_profile import load_profile
 
 INSTRUMENTED_SOURCES = (
     "cpp/bench/ann/src/cuvs/cuvs_cagra_wrapper.h",
-    "cpp/bench/ann/src/cuvs/favor_search_diagnostic_session.h",
-    "cpp/src/neighbors/detail/cagra/jit_lto_kernels/favor_search_diagnostics.cuh",
+    "cpp/bench/ann/src/cuvs/search_diagnostic_session.h",
+    "cpp/src/neighbors/detail/cagra/jit_lto_kernels/search_diagnostics.cuh",
     "cpp/src/neighbors/detail/cagra/jit_lto_kernels/navix_device.cuh",
     "cpp/src/neighbors/detail/cagra/jit_lto_kernels/search_single_cta_jit.cuh",
     "cpp/src/neighbors/detail/cagra/search_single_cta_kernel_launcher_jit.cuh",

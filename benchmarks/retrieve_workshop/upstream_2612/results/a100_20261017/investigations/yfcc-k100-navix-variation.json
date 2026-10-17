@@ -1,0 +1,123 @@
+{
+  "case": "yfcc__k100__navix_reference",
+  "observations": {
+    "old": {
+      "recall": [
+        0.7972443254022562,
+        0.7972394377211676,
+        0.7972541007644334
+      ],
+      "minimum": 0.7972394377211676,
+      "maximum": 0.7972541007644334,
+      "median": 0.7972443254022562,
+      "output_errors": {
+        "FilterViolations": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "DuplicateOutputQueries": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "InvalidSentinelErrors": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "InvalidSentinelDistanceErrors": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SentinelOrderErrors": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      }
+    },
+    "integrated": {
+      "recall": [
+        0.7972394377211676,
+        0.7972541007644334,
+        0.7972541007644334
+      ],
+      "minimum": 0.7972394377211676,
+      "maximum": 0.7972541007644334,
+      "median": 0.7972541007644334,
+      "output_errors": {
+        "FilterViolations": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "DuplicateOutputQueries": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "InvalidSentinelErrors": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "InvalidSentinelDistanceErrors": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SentinelOrderErrors": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      }
+    },
+    "roaring": {
+      "recall": [
+        0.797234550040079,
+        0.7972492130833447,
+        0.797234550040079
+      ],
+      "minimum": 0.797234550040079,
+      "maximum": 0.7972492130833447,
+      "median": 0.797234550040079,
+      "output_errors": {
+        "FilterViolations": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "DuplicateOutputQueries": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "InvalidSentinelErrors": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "InvalidSentinelDistanceErrors": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "SentinelOrderErrors": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      }
+    }
+  },
+  "common_range_overlaps": true,
+  "navigation_source": "cpp/src/neighbors/detail/cagra/jit_lto_kernels/navix_device.cuh",
+  "same_navigation_source_after_diagnostics_rename": true,
+  "normalized_source_sha256": "617800b6224a1914f39fcc95f31c9b2f6733ab638bf6fac355a1d43b29b78ebe",
+  "maximum_median_recall_difference": 1.9550724354333582e-05,
+  "agreed_recall_threshold": 0.002,
+  "assessment": "Pre-existing NaviX non-repeatability: all three observed recall ranges overlap, the traversal source differs only by diagnostic namespace renaming, and output invariants pass. Concurrent visited-set insertion is a plausible mechanism, not independently isolated. Preserve the raw representation-equality flag; no retuning or kernel changes are justified by this four-hit difference."
+}

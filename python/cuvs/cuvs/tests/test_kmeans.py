@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025-2026, NVIDIA CORPORATION.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 
@@ -12,6 +12,7 @@ from cuvs.cluster.kmeans import (
     fit,
     predict,
 )
+from cuvs.common import Resources
 from cuvs.distance import pairwise_distance
 
 
@@ -79,11 +80,11 @@ def test_cluster_cost(n_rows, n_cols, n_clusters, dtype):
 @pytest.mark.parametrize("n_rows", [1000, 5000])
 @pytest.mark.parametrize("n_cols", [10, 100])
 @pytest.mark.parametrize("n_clusters", [8, 16])
-@pytest.mark.parametrize("streaming_batch_size", [0, 100, 239, 500])
+@pytest.mark.parametrize("device_buffer_samples", [0, 100, 239, 500])
 @pytest.mark.parametrize("dtype", [np.float64])
 @pytest.mark.parametrize("weighted", [False, True])
 def test_fit_host_matches_fit_device(
-    n_rows, n_cols, n_clusters, streaming_batch_size, dtype, weighted
+    n_rows, n_cols, n_clusters, device_buffer_samples, dtype, weighted
 ):
     """
     Test that fit() with host (numpy) data produces the same centroids as
@@ -122,7 +123,7 @@ def test_fit_host_matches_fit_device(
         init_method="Array",
         max_iter=20,
         tol=1e-10,
-        streaming_batch_size=streaming_batch_size,
+        device_buffer_samples=device_buffer_samples,
     )
     centroids_batched, inertia_batched, _ = fit(
         params_host,
@@ -139,3 +140,28 @@ def test_fit_host_matches_fit_device(
     assert np.allclose(
         inertia_regular, inertia_batched, rtol=1e-3, atol=1e-3
     ), f"max diff: {np.max(np.abs(inertia_regular - inertia_batched))}"
+
+
+def test_fit_host_with_stream_pool_setter():
+    X = np.zeros((128, 2), dtype=np.float32)
+    X[64:] = 10
+    initial_centroids = device_ndarray(
+        np.array([[0, 0], [10, 10]], dtype=np.float32)
+    )
+    params = KMeansParams(
+        n_clusters=2,
+        init_method="Array",
+        device_buffer_samples=16,
+        max_iter=10,
+    )
+    resources = Resources()
+    resources.set_stream_pool(2)
+
+    centroids, inertia, n_iter = fit(
+        params, X, initial_centroids, resources=resources
+    )
+    resources.sync()
+
+    assert n_iter >= 1
+    assert np.isfinite(inertia)
+    assert np.allclose(centroids.copy_to_host(), [[0, 0], [10, 10]], atol=1e-3)

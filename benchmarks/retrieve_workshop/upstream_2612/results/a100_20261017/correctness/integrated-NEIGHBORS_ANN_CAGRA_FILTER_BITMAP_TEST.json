@@ -1,0 +1,756 @@
+{
+  "tests": 62,
+  "failures": 0,
+  "disabled": 0,
+  "errors": 0,
+  "timestamp": "2026-10-17T10:44:25Z",
+  "time": "90.022s",
+  "name": "AllTests",
+  "testsuites": [
+    {
+      "name": "CagraBitmapRecallAccounting",
+      "tests": 1,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-10-17T10:44:25Z",
+      "time": "0s",
+      "testsuite": [
+        {
+          "name": "TreatsOutputsAsASetAndRejectsSentinels",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 1199,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:44:25Z",
+          "time": "0s",
+          "classname": "CagraBitmapRecallAccounting"
+        }
+      ]
+    },
+    {
+      "name": "CagraBitmapSeededHighDimTest",
+      "tests": 1,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-10-17T10:44:25Z",
+      "time": "6.339s",
+      "testsuite": [
+        {
+          "name": "DeepFilteredSearchKeepsCompactionDecisionCTAUniform",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 1379,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:44:25Z",
+          "time": "6.339s",
+          "classname": "CagraBitmapSeededHighDimTest"
+        }
+      ]
+    },
+    {
+      "name": "CagraBitmapFilters\/CagraBitmapFilterTest",
+      "tests": 54,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-10-17T10:44:31Z",
+      "time": "41.724s",
+      "testsuite": [
+        {
+          "name": "RejectsRetiredFavorMode\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 223,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:44:31Z",
+          "time": "0.071s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "RejectsRetiredFavorMode\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 223,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:44:31Z",
+          "time": "0.067s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "RejectsRetiredFavorMode\/2",
+          "value_param": "4-byte object <64-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 223,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:44:31Z",
+          "time": "0.051s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "RejectsRetiredFavorEstimatorAndSidecars\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 231,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:44:31Z",
+          "time": "0.048s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "RejectsRetiredFavorEstimatorAndSidecars\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 231,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:44:31Z",
+          "time": "0.043s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "RejectsRetiredFavorEstimatorAndSidecars\/2",
+          "value_param": "4-byte object <64-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 231,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:44:32Z",
+          "time": "0.033s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "AllPassingMatchesBitsetAcrossTopKBoundaries\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 239,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:44:32Z",
+          "time": "11.25s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "AllPassingMatchesBitsetAcrossTopKBoundaries\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 239,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:44:43Z",
+          "time": "2.42s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "AllPassingMatchesBitsetAcrossTopKBoundaries\/2",
+          "value_param": "4-byte object <64-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 239,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:44:45Z",
+          "time": "0.075s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "DistinctRowsMatchEquivalentUdfAcrossInternalTiles\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 278,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:44:45Z",
+          "time": "5.452s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "DistinctRowsMatchEquivalentUdfAcrossInternalTiles\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 278,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:44:51Z",
+          "time": "1.113s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "DistinctRowsMatchEquivalentUdfAcrossInternalTiles\/2",
+          "value_param": "4-byte object <64-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 278,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:44:52Z",
+          "time": "0.048s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "LegacyNavixBitmapMatchesEquivalentUdfExactly\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 301,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:44:52Z",
+          "time": "12.864s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "LegacyNavixBitmapMatchesEquivalentUdfExactly\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 301,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:05Z",
+          "time": "0.074s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "LegacyNavixBitmapMatchesEquivalentUdfExactly\/2",
+          "value_param": "4-byte object <64-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 301,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:05Z",
+          "time": "0.043s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "DefaultAccumulatorBitmapMatchesEquivalentUdfExactly\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 348,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:05Z",
+          "time": "0.05s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "DefaultAccumulatorBitmapMatchesEquivalentUdfExactly\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 348,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:05Z",
+          "time": "0.036s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "DefaultAccumulatorBitmapMatchesEquivalentUdfExactly\/2",
+          "value_param": "4-byte object <64-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 348,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:05Z",
+          "time": "0.099s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "PreservesOriginalWordSizeMetadata\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 406,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:05Z",
+          "time": "0.034s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "PreservesOriginalWordSizeMetadata\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 406,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:05Z",
+          "time": "0.039s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "PreservesOriginalWordSizeMetadata\/2",
+          "value_param": "4-byte object <64-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 406,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:05Z",
+          "time": "0.043s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "RuntimeApiSupportsBothOutputIndexTypes\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 440,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:05Z",
+          "time": "0.04s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "RuntimeApiSupportsBothOutputIndexTypes\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 440,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:05Z",
+          "time": "0.039s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "RuntimeApiSupportsBothOutputIndexTypes\/2",
+          "value_param": "4-byte object <64-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 440,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:05Z",
+          "time": "0.073s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "RejectAllAndUnderfilledRowsUseCorrectSentinels\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 457,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:05Z",
+          "time": "0.072s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "RejectAllAndUnderfilledRowsUseCorrectSentinels\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 457,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:05Z",
+          "time": "0.044s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "RejectAllAndUnderfilledRowsUseCorrectSentinels\/2",
+          "value_param": "4-byte object <64-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 457,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:05Z",
+          "time": "0.044s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "AutomaticRateMatchesExactAggregateAndExplicitSearch\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 496,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:06Z",
+          "time": "0.042s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "AutomaticRateMatchesExactAggregateAndExplicitSearch\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 496,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:06Z",
+          "time": "0.042s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "AutomaticRateMatchesExactAggregateAndExplicitSearch\/2",
+          "value_param": "4-byte object <64-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 496,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:06Z",
+          "time": "0.043s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "PayloadTracksContentPointerAndNonDefaultStream\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 514,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:06Z",
+          "time": "0.044s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "PayloadTracksContentPointerAndNonDefaultStream\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 514,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:06Z",
+          "time": "0.06s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "PayloadTracksContentPointerAndNonDefaultStream\/2",
+          "value_param": "4-byte object <64-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 514,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:06Z",
+          "time": "0.067s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "SourceIndexRemappingUsesExternalIds\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 540,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:06Z",
+          "time": "6.118s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "SourceIndexRemappingUsesExternalIds\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 540,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:12Z",
+          "time": "0.082s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "SourceIndexRemappingUsesExternalIds\/2",
+          "value_param": "4-byte object <64-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 540,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:12Z",
+          "time": "0.048s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "NavixSeedPrepassIsStableAndHonorsQueryOffset\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 672,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:12Z",
+          "time": "0.043s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "NavixSeedPrepassIsStableAndHonorsQueryOffset\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 672,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:12Z",
+          "time": "0.047s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "NavixSeedPrepassIsStableAndHonorsQueryOffset\/2",
+          "value_param": "4-byte object <64-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 672,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:12Z",
+          "time": "0.038s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "BitmapSeededNavixSupportsSeedCapBelowResultWidth\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 716,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:12Z",
+          "time": "0.048s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "BitmapSeededNavixSupportsSeedCapBelowResultWidth\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 716,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:12Z",
+          "time": "0.071s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "BitmapSeededNavixSupportsSeedCapBelowResultWidth\/2",
+          "value_param": "4-byte object <64-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 716,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:12Z",
+          "time": "0.051s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "BitmapSeededNavixSupportsSeedCapAboveResultWidth\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 794,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:12Z",
+          "time": "0.043s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "BitmapSeededNavixSupportsSeedCapAboveResultWidth\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 794,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:12Z",
+          "time": "0.047s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "BitmapSeededNavixSupportsSeedCapAboveResultWidth\/2",
+          "value_param": "4-byte object <64-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 794,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:12Z",
+          "time": "0.052s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "BitmapSeededDefaultIsDeterministicForOffsetEmptyUnderfilledAndDuplicatePaths\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 909,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:13Z",
+          "time": "0.04s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "BitmapSeededDefaultIsDeterministicForOffsetEmptyUnderfilledAndDuplicatePaths\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 909,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:13Z",
+          "time": "0.05s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "BitmapSeededDefaultIsDeterministicForOffsetEmptyUnderfilledAndDuplicatePaths\/2",
+          "value_param": "4-byte object <64-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 909,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:13Z",
+          "time": "0.058s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "BitmapSeededControlDoesNotLeakIntoUnseededLauncher\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 1108,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:13Z",
+          "time": "0.049s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "BitmapSeededControlDoesNotLeakIntoUnseededLauncher\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 1108,
+          "status": "RUN",
+          "result": "SKIPPED",
+          "timestamp": "2026-10-17T10:45:13Z",
+          "time": "0.037s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest",
+          "skipped": [
+            {
+              "message": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu:1110\n\n"
+            }
+          ]
+        },
+        {
+          "name": "BitmapSeededControlDoesNotLeakIntoUnseededLauncher\/2",
+          "value_param": "4-byte object <64-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 1108,
+          "status": "RUN",
+          "result": "SKIPPED",
+          "timestamp": "2026-10-17T10:45:13Z",
+          "time": "0.043s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest",
+          "skipped": [
+            {
+              "message": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu:1110\n\n"
+            }
+          ]
+        },
+        {
+          "name": "RejectsShapeAndUnsupportedModes\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 1164,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:13Z",
+          "time": "0.053s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "RejectsShapeAndUnsupportedModes\/1",
+          "value_param": "4-byte object <01-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 1164,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:13Z",
+          "time": "0.072s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        },
+        {
+          "name": "RejectsShapeAndUnsupportedModes\/2",
+          "value_param": "4-byte object <64-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 1164,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:13Z",
+          "time": "0.04s",
+          "classname": "CagraBitmapFilters\/CagraBitmapFilterTest"
+        }
+      ]
+    },
+    {
+      "name": "CagraBitmapDegree64\/CagraBitmapFilterDegree64Test",
+      "tests": 3,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-10-17T10:45:13Z",
+      "time": "20.192s",
+      "testsuite": [
+        {
+          "name": "LegacyNavixBitmapMatchesEquivalentUdfExactly\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 1215,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:13Z",
+          "time": "14.248s",
+          "classname": "CagraBitmapDegree64\/CagraBitmapFilterDegree64Test"
+        },
+        {
+          "name": "K100SparseDefaultOutputHasValidPrefix\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 1262,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:27Z",
+          "time": "5.89s",
+          "classname": "CagraBitmapDegree64\/CagraBitmapFilterDegree64Test"
+        },
+        {
+          "name": "BitmapSeededDefaultSupportsIndependentSeedCaps\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 1316,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:33Z",
+          "time": "0.052s",
+          "classname": "CagraBitmapDegree64\/CagraBitmapFilterDegree64Test"
+        }
+      ]
+    },
+    {
+      "name": "CagraRoaringFilters\/CagraRoaringFilterTest",
+      "tests": 3,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-10-17T10:45:33Z",
+      "time": "21.765s",
+      "testsuite": [
+        {
+          "name": "BaseRetainAndNavixMatchDenseAcrossOffsetsAndTopK\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 1508,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:33Z",
+          "time": "21.693s",
+          "classname": "CagraRoaringFilters\/CagraRoaringFilterTest"
+        },
+        {
+          "name": "PassingSeedsMatchDenseWithAndWithoutSourceRemapping\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 1588,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:55Z",
+          "time": "0.032s",
+          "classname": "CagraRoaringFilters\/CagraRoaringFilterTest"
+        },
+        {
+          "name": "PassingSeedsEnumerateMixedContainersAndRespectGraphBounds\/0",
+          "value_param": "4-byte object <00-00 00-00>",
+          "file": "\/data\/cuvs-upstream-integration\/cpp\/tests\/neighbors\/ann_cagra\/test_filter_bitmap.cu",
+          "line": 1634,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-17T10:45:55Z",
+          "time": "0.039s",
+          "classname": "CagraRoaringFilters\/CagraRoaringFilterTest"
+        }
+      ]
+    }
+  ]
+}

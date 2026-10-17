@@ -36,7 +36,7 @@ def search(
         "itopk": itopk,
         "search_width": width,
         "max_iterations": iterations,
-        "favor_udf_passing_accumulator": method == "default_cagra_accumulator",
+        "passing_result_accumulator": method == "default_cagra_accumulator",
         "bitmap_method": method,
     }
     if method.startswith("navix_"):

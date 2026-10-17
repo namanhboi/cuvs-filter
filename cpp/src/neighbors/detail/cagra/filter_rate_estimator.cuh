@@ -14,6 +14,7 @@
 #include <raft/core/error.hpp>
 #include <raft/core/resource/cuda_stream.hpp>
 #include <raft/core/resources.hpp>
+#include <raft/util/kernel_launch.hpp>
 
 #include <rmm/device_uvector.hpp>
 
@@ -25,7 +26,7 @@
 namespace cuvs::neighbors::cagra::detail {
 
 struct favor_udf_rate_estimate {
-  favor_udf_rate_estimate(std::size_t num_queries, rmm::cuda_stream_view stream)
+  favor_udf_rate_estimate(std::size_t num_queries, cuda::stream_ref stream)
     : filtering_rates(num_queries, stream), passing_counts(num_queries, stream)
   {
   }
@@ -44,9 +45,9 @@ inline auto favor_systematic_sample_step(std::uint64_t dataset_size) -> std::uin
   return static_cast<std::uint32_t>(std::max<std::uint64_t>(1, dataset_size / 10'000));
 }
 
-template <typename DataT, typename IndexT, typename SampleFilterT>
+template <typename DataT, typename IndexT, typename SampleFilterT, typename DatasetViewT>
 void estimate_favor_udf_filtering_rates_into(raft::resources const& res,
-                                             cagra::index<DataT, IndexT> const& index,
+                                             cagra::index<DataT, IndexT, DatasetViewT> const& index,
                                              std::uint32_t num_queries,
                                              SampleFilterT const& sample_filter,
                                              float* filtering_rates,
@@ -76,15 +77,16 @@ void estimate_favor_udf_filtering_rates_into(raft::resources const& res,
       make_cagra_sample_filter_udf_fragment<IndexT>(sample_filter));
   if (!launcher) { RAFT_FAIL("Failed to get the CAGRA UDF filtering-rate sampler launcher"); }
 
-  const auto payload = extract_cagra_sample_filter<IndexT>(sample_filter, stream);
+  const auto payload = extract_cagra_sample_filter<IndexT>(sample_filter, stream.get());
   const IndexT* source_indices_ptr =
     index.source_indices().has_value() ? index.source_indices()->data_handle() : nullptr;
   constexpr std::uint32_t block_size = 256;
-  launcher->template dispatch<multi_kernel_search::estimate_filter_rate_kernel_func_t<IndexT>>(
-    stream,
+  raft::launch_kernel(
+    {stream, static_cast<std::size_t>(0)},
     dim3(num_queries, 1, 1),
     dim3(block_size, 1, 1),
-    0,
+    raft::kernel_ref<multi_kernel_search::estimate_filter_rate_kernel_func_t<IndexT>>{
+      launcher->get_kernel()},
     source_indices_ptr,
     static_cast<std::uint32_t>(index.size()),
     sample_step,
@@ -97,9 +99,9 @@ void estimate_favor_udf_filtering_rates_into(raft::resources const& res,
   RAFT_CUDA_TRY(cudaPeekAtLastError());
 }
 
-template <typename DataT, typename IndexT, typename SampleFilterT>
+template <typename DataT, typename IndexT, typename SampleFilterT, typename DatasetViewT>
 auto estimate_favor_udf_filtering_rates(raft::resources const& res,
-                                        cagra::index<DataT, IndexT> const& index,
+                                        cagra::index<DataT, IndexT, DatasetViewT> const& index,
                                         std::uint32_t num_queries,
                                         SampleFilterT const& sample_filter,
                                         std::uint32_t sample_offset = 0) -> favor_udf_rate_estimate

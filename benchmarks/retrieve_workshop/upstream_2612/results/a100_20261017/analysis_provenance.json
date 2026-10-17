@@ -1,0 +1,20 @@
+{
+  "recorded_at": "2026-10-17T12:02:55.595885+00:00",
+  "analysis_source_commit": "fa84b012a7d262a408d5c2ecdd2149ae82baf15a",
+  "analysis_sources_sha256": {
+    "validate.py": "f28f2e4cf3f9d3a7ed150a0c349835554d277911db3564cd50b16ffa4ee8c359",
+    "native_control.cu": "74c6fb8fba4d153494a768da694951642d61a73b8d5dba8781c01b9fe71588f1"
+  },
+  "native_binaries_sha256": {
+    "/data/cuvs-upstream-validation/benchmarks/bin/native-control": "fc7f8afa20d6490996a8266ed07d678b8c004fedcfc9f156bd420c405848c1e0",
+    "/data/cuvs-upstream-validation/benchmarks/bin/native-integrated": "f45e6b9c1ec9323e542c18767221c50ca55cc3dfacb44fc81bdba96dae08b3fc"
+  },
+  "native_libraries_sha256": {
+    "/data/cuvs-upstream-integration/cpp/build/libcuvs.so": "dd1387b3033b4127ea94f6706a7b20a59650e5142f4a88abfdd7e099d2ef41e6",
+    "/data/cuvs-upstream-control/cpp/build/libcuvs.so": "fff00667d1a1291f06a683a9c140c66539a7b6bb896a6141f5a3a38f214baac8"
+  },
+  "manifest_sha256": "e06bec7e40ab7f495614a00d517a1b8ea864c2b339b17a59538dafd85756cd93",
+  "comparison_sha256": "5c492184bfee68df6a957845417dfb84d664f6679487ece587090e1b4aef1d63",
+  "native_compilation_source_matches": true,
+  "note": "Only documentation/evidence changed after this source commit; benchmark artifacts retain their binary/library signatures. Raw automatic flags remain unchanged."
+}

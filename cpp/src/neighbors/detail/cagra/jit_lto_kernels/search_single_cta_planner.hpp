@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2025-2026, NVIDIA CORPORATION.
+ * SPDX-FileCopyrightText: Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -21,7 +21,7 @@ template <typename DataTag,
           typename SampleFilterJitTag>
 struct CagraSingleCtaSearchPlanner
   : CagraPlannerBase<DataTag, IndexTag, DistanceTag, QueryTag, CodebookTag, SampleFilterJitTag> {
-  static inline LauncherJitCache launcher_jit_cache{};
+  static inline rtcx::launcher_jit_cache launcher_jit_cache{};
 
   CagraSingleCtaSearchPlanner(cuvs::distance::DistanceType /*metric*/,
                               bool /*topk_by_bitonic_sort*/,
@@ -209,32 +209,65 @@ struct CagraSingleCtaSearchPlanner
                                         bool bitonic_sort_and_merge_multi_warps,
                                         bool diagnostics = false)
   {
-    auto add = [&]<bool TopkByBitonic, bool MultiWarpMerge>() {
-      if (diagnostics) {
-        this->template add_static_fragment<
-          fragment_tag_search_single_cta_favor_diagnostic<DataTag,
-                                                          SourceIndexTag,
-                                                          IndexTag,
-                                                          DistanceTag,
-                                                          TopkByBitonic,
-                                                          MultiWarpMerge>>();
-      } else {
-        this->template add_static_fragment<fragment_tag_search_single_cta_favor<DataTag,
-                                                                                SourceIndexTag,
-                                                                                IndexTag,
-                                                                                DistanceTag,
-                                                                                TopkByBitonic,
-                                                                                MultiWarpMerge>>();
-      }
-    };
+    RAFT_FAIL("FAVOR kernel generation is retired");
+  }
+};
+
+template <typename DataTag,
+          typename IndexTag,
+          typename DistanceTag,
+          typename SourceIndexTag,
+          typename QueryTag,
+          typename CodebookTag,
+          typename SampleFilterJitTag>
+struct CagraSingleCtaMpSearchPlanner
+  : CagraPlannerBase<DataTag, IndexTag, DistanceTag, QueryTag, CodebookTag, SampleFilterJitTag> {
+  static inline rtcx::launcher_jit_cache launcher_jit_cache{};
+
+  CagraSingleCtaMpSearchPlanner(cuvs::distance::DistanceType /*metric*/,
+                                bool /*topk_by_bitonic_sort*/,
+                                bool /*bitonic_sort_and_merge_multi_warps*/,
+                                uint32_t /*team_size*/,
+                                uint32_t /*dataset_block_dim*/,
+                                bool /*is_vpq*/,
+                                uint32_t /*pq_bits*/,
+                                uint32_t /*pq_len*/)
+    : CagraPlannerBase<DataTag, IndexTag, DistanceTag, QueryTag, CodebookTag, SampleFilterJitTag>(
+        "search_single_cta_mp", launcher_jit_cache)
+  {
+  }
+
+  void add_search_kernel_fragment(bool topk_by_bitonic_sort,
+                                  bool bitonic_sort_and_merge_multi_warps)
+  {
     if (topk_by_bitonic_sort && bitonic_sort_and_merge_multi_warps) {
-      add.template operator()<true, true>();
-    } else if (topk_by_bitonic_sort) {
-      add.template operator()<true, false>();
-    } else if (bitonic_sort_and_merge_multi_warps) {
-      add.template operator()<false, true>();
+      this->template add_static_fragment<fragment_tag_search_single_cta_mp<DataTag,
+                                                                           SourceIndexTag,
+                                                                           IndexTag,
+                                                                           DistanceTag,
+                                                                           true,
+                                                                           true>>();
+    } else if (topk_by_bitonic_sort && !bitonic_sort_and_merge_multi_warps) {
+      this->template add_static_fragment<fragment_tag_search_single_cta_mp<DataTag,
+                                                                           SourceIndexTag,
+                                                                           IndexTag,
+                                                                           DistanceTag,
+                                                                           true,
+                                                                           false>>();
+    } else if (!topk_by_bitonic_sort && bitonic_sort_and_merge_multi_warps) {
+      this->template add_static_fragment<fragment_tag_search_single_cta_mp<DataTag,
+                                                                           SourceIndexTag,
+                                                                           IndexTag,
+                                                                           DistanceTag,
+                                                                           false,
+                                                                           true>>();
     } else {
-      add.template operator()<false, false>();
+      this->template add_static_fragment<fragment_tag_search_single_cta_mp<DataTag,
+                                                                           SourceIndexTag,
+                                                                           IndexTag,
+                                                                           DistanceTag,
+                                                                           false,
+                                                                           false>>();
     }
   }
 };

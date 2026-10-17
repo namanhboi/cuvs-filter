@@ -19,7 +19,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 RETRIEVE_DIR = SCRIPT_DIR.parent
 sys.path.insert(0, str(SCRIPT_DIR))
 sys.path.insert(0, str(RETRIEVE_DIR / "gpu_graph"))
-sys.path.insert(0, str(RETRIEVE_DIR.parent / "favor" / "navix_bitmap"))
+sys.path.insert(0, str(RETRIEVE_DIR / "navix_bitmap"))
 
 from bundle import validate_max_queries_contract
 from dataset_profile import load_profile
@@ -318,7 +318,7 @@ class A100PipelineTest(unittest.TestCase):
                             "max_queries": record["max_queries"],
                             "n_queries": 2_048,
                             "k": 10,
-                            "favor_udf_passing_accumulator": int(
+                            "passing_result_accumulator": int(
                                 "accumulator" in method
                             ),
                             "navix_bitmap_seeds": int(

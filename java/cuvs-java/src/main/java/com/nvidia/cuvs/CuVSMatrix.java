@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2025, NVIDIA CORPORATION.
+ * SPDX-FileCopyrightText: Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
 package com.nvidia.cuvs;
@@ -18,6 +18,7 @@ public interface CuVSMatrix extends AutoCloseable {
 
   enum DataType {
     FLOAT(4),
+    HALF(2),
     INT(4),
     UINT(4),
     BYTE(1);
@@ -72,7 +73,7 @@ public interface CuVSMatrix extends AutoCloseable {
    * A builder to construct a new matrix one row at a time
    * @param <T> the CuVSMatrix type to build
    */
-  interface Builder<T extends CuVSMatrix> {
+  interface Builder<T extends CuVSMatrix> extends AutoCloseable {
     /**
      * Adds a single vector to the matrix.
      *
@@ -94,7 +95,32 @@ public interface CuVSMatrix extends AutoCloseable {
      */
     void addVector(int[] vector);
 
+    /**
+     * Adds a single vector to the matrix. Each element is a raw float16 bit pattern stored in a short.
+     *
+     * @param vector A short array of as many elements as the dimensions
+     */
+    void addVector(short[] vector);
+
+    /**
+     * Completes the matrix and transfers ownership to the caller.
+     *
+     * <p>If this method fails, callers should close the builder. Built-in builders then release
+     * matrix storage allocated during builder construction; providers that inherit the default
+     * no-op {@link #close()} implementation do not.
+     */
     T build();
+
+    /**
+     * Closes this builder. Built-in builders release matrix storage unless ownership was
+     * transferred by a successful {@link #build()}.
+     *
+     * <p>The default implementation preserves compatibility with providers compiled before
+     * builders became closeable. Builders that allocate storage before {@link #build()} should
+     * override this method.
+     */
+    @Override
+    default void close() {}
   }
 
   /**

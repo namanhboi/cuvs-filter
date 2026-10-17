@@ -1,0 +1,210 @@
+{
+  "native/control/em__k100__default_cagra.distances": {
+    "bytes": 819200,
+    "sha256": "70b099809ec05cae2b4083d5c778b1f0ba595d5ba1505f0c5e7e60fc885a67e0"
+  },
+  "native/control/em__k100__default_cagra.ids": {
+    "bytes": 1638400,
+    "sha256": "5aee141f78e69bc47afe2ff6d2064007cc85d120dea071cc4fd68a051935d4a4"
+  },
+  "native/control/em__k10__default_cagra.distances": {
+    "bytes": 81920,
+    "sha256": "67bd5ecb092f74894fb7f60be3ab286e3375a2da756b65721c283ec065607a4a"
+  },
+  "native/control/em__k10__default_cagra.ids": {
+    "bytes": 163840,
+    "sha256": "26b02a6e87f20d19588d8810deb19fc62831eef17560c451bc0549a083aacfb1"
+  },
+  "native/control/emis__k100__default_cagra.distances": {
+    "bytes": 819200,
+    "sha256": "936a2ff333ce35bfac444b6f7283d6a753a5bb78c92891e64060171d89166b35"
+  },
+  "native/control/emis__k100__default_cagra.ids": {
+    "bytes": 1638400,
+    "sha256": "f88c5b7ff0f8a33a5ec6fd6f49881ad8fc86de5824fb2a77f50c87ce4c60357e"
+  },
+  "native/control/emis__k10__default_cagra.distances": {
+    "bytes": 81920,
+    "sha256": "3fcc5b1e7d4dc667ff249771d6ac2b34ae91eb1e339027f6589e11deda8240b7"
+  },
+  "native/control/emis__k10__default_cagra.ids": {
+    "bytes": 163840,
+    "sha256": "e4d6cfcc7719c60eb18fef5cf5de554897aee1e968cf42b4de916520c2545229"
+  },
+  "native/control/r__k100__default_cagra.distances": {
+    "bytes": 819200,
+    "sha256": "bf808ba27b57ee2f21c25a6af576bbc9831bab4042ee5bb101c8a4160e388c27"
+  },
+  "native/control/r__k100__default_cagra.ids": {
+    "bytes": 1638400,
+    "sha256": "3e79c088e3011a4940697992eac03fcc0fe0d7fe129d9066dcfde4a603f766b9"
+  },
+  "native/control/r__k10__default_cagra.distances": {
+    "bytes": 81920,
+    "sha256": "de58645da41f917853fd3d7511d3b62ef3b73ab7c52fb66d399e99303cf32117"
+  },
+  "native/control/r__k10__default_cagra.ids": {
+    "bytes": 163840,
+    "sha256": "7f8768db0a58b34b23cc36f8cff756aecdcff41eab3b6be638f47363546736db"
+  },
+  "native/control/synthetic_low_0p0001_random__k10__default_cagra.distances": {
+    "bytes": 81920,
+    "sha256": "f726d1d070fab98315caf173dec5949da3caf8301ac15a354d81a7923e730830"
+  },
+  "native/control/synthetic_low_0p0001_random__k10__default_cagra.ids": {
+    "bytes": 163840,
+    "sha256": "1867b70720b7cd9c500e949112441ab52d2318380bf8a23a54b663040494c915"
+  },
+  "native/control/synthetic_low_0p0003_random__k10__default_cagra.distances": {
+    "bytes": 81920,
+    "sha256": "38901b000d896fdd7354db6c2a10321c660573560b8bf99559029e5998affd79"
+  },
+  "native/control/synthetic_low_0p0003_random__k10__default_cagra.ids": {
+    "bytes": 163840,
+    "sha256": "127757dee6656b5f5313c6a0af13b572a54c3169d7f63b21e6e4e7ae16fdd473"
+  },
+  "native/control/synthetic_low_0p001_random__k10__default_cagra.distances": {
+    "bytes": 81920,
+    "sha256": "cb72b122e67675e7267291708478006d1ec52d3145a99f0da3033c73437d4f7f"
+  },
+  "native/control/synthetic_low_0p001_random__k10__default_cagra.ids": {
+    "bytes": 163840,
+    "sha256": "83a1025ea898ce0f9da4423a188d2961d75badd20bb8ad2838793844ddf6a647"
+  },
+  "native/control/synthetic_low_0p003_random__k10__default_cagra.distances": {
+    "bytes": 81920,
+    "sha256": "24b2e8b043e674d9cf3935b4a7648dada996aee18e0d042f1f22207600e7476e"
+  },
+  "native/control/synthetic_low_0p003_random__k10__default_cagra.ids": {
+    "bytes": 163840,
+    "sha256": "a9dc7095bf2b9da6d321730f773c81d2147ab035f6f6314386d4dd58376f1c02"
+  },
+  "native/control/synthetic_low_0p01_random__k10__default_cagra.distances": {
+    "bytes": 81920,
+    "sha256": "a3f5bc5fa55052a9165361c4efb40d9969650f31a9bccb15cbfe1da3c2d6f8d6"
+  },
+  "native/control/synthetic_low_0p01_random__k10__default_cagra.ids": {
+    "bytes": 163840,
+    "sha256": "51280e77f49d71a5ded2a774bc7ad99e0ac8587db4da4b964d09c7745eafc4b4"
+  },
+  "native/control/yfcc__k100__default_cagra.distances": {
+    "bytes": 819200,
+    "sha256": "df348e62bb2ceb8f6ab478bbd86a9a192797f4bf8abef6b93fb73cdcbe3c1b29"
+  },
+  "native/control/yfcc__k100__default_cagra.ids": {
+    "bytes": 1638400,
+    "sha256": "2e8829963fed6b67464ba180e66d8b3584978554d301be6f0ef81de4b245b4cd"
+  },
+  "native/control/yfcc__k10__default_cagra.distances": {
+    "bytes": 81920,
+    "sha256": "79b2e58ff4b079c24b8700d2b3d22306832a2e9ffb645034784c246e41e95e6c"
+  },
+  "native/control/yfcc__k10__default_cagra.ids": {
+    "bytes": 163840,
+    "sha256": "58f49b3fe48842b92d6625ac8790d5d5c100620469b972847e74974a9203a686"
+  },
+  "native/integrated/em__k100__default_cagra.distances": {
+    "bytes": 819200,
+    "sha256": "a6e39333b8332294152487c7c2d1781378c4ecfb16674ff8417694e004c4521a"
+  },
+  "native/integrated/em__k100__default_cagra.ids": {
+    "bytes": 1638400,
+    "sha256": "849d628cf61a6037be9d5c82a8ddd0dc269d9bf00b77f6148dcb59a06d6e358e"
+  },
+  "native/integrated/em__k10__default_cagra.distances": {
+    "bytes": 81920,
+    "sha256": "0b1a931b781b271033deee2016cb582ac532e679a775c9754795554379f8705d"
+  },
+  "native/integrated/em__k10__default_cagra.ids": {
+    "bytes": 163840,
+    "sha256": "5451d0740919b4b6c86cd00f843267ad1120b09580f92b287cb8ed01115503d9"
+  },
+  "native/integrated/emis__k100__default_cagra.distances": {
+    "bytes": 819200,
+    "sha256": "23280337b3f54fb48a6e8cfa466af953cb5cac531d07e8bb4ff2e9eae89b7b5b"
+  },
+  "native/integrated/emis__k100__default_cagra.ids": {
+    "bytes": 1638400,
+    "sha256": "799fe4b2918451fbe5a5d57d6cde236183a982ee9bd2be9bd3d1ec403409db06"
+  },
+  "native/integrated/emis__k10__default_cagra.distances": {
+    "bytes": 81920,
+    "sha256": "0a907b6dc884834edcdce1983f3a3568be4cf477fd06ca9945f90f0c45d6886a"
+  },
+  "native/integrated/emis__k10__default_cagra.ids": {
+    "bytes": 163840,
+    "sha256": "0c0941a78f58db8d715a29fa573f6f1da603bb5cf5f09ae1b6562a395055c9de"
+  },
+  "native/integrated/r__k100__default_cagra.distances": {
+    "bytes": 819200,
+    "sha256": "be524f3c69b63c92849aa3092424927c856fef2e75e4175e47527b1e61a6bff9"
+  },
+  "native/integrated/r__k100__default_cagra.ids": {
+    "bytes": 1638400,
+    "sha256": "2a8c36843a58771d88de84cffe5f2407d196bb6a5d7ae733c27250b4099b943a"
+  },
+  "native/integrated/r__k10__default_cagra.distances": {
+    "bytes": 81920,
+    "sha256": "2635e06b2c7c33787e04789b53f19f1dd08bac082af621bfbb49af559482284f"
+  },
+  "native/integrated/r__k10__default_cagra.ids": {
+    "bytes": 163840,
+    "sha256": "aa70bf86ecd23706e6a6bb849be189aca6dbe6f68ea5f10b9406fbbff60e7ace"
+  },
+  "native/integrated/synthetic_low_0p0001_random__k10__default_cagra.distances": {
+    "bytes": 81920,
+    "sha256": "45a37715ccc5e0891e3272fa5834d87046be40eb38df3ed8a7ac3a989abc003e"
+  },
+  "native/integrated/synthetic_low_0p0001_random__k10__default_cagra.ids": {
+    "bytes": 163840,
+    "sha256": "06a8994344441a00b45e6f75792e4a36e0d69e57fbd7048fdc73736087884473"
+  },
+  "native/integrated/synthetic_low_0p0003_random__k10__default_cagra.distances": {
+    "bytes": 81920,
+    "sha256": "062aa6b33a82d0660852dd9eb360a999679e74355e62fd0add9f33ef9aed164a"
+  },
+  "native/integrated/synthetic_low_0p0003_random__k10__default_cagra.ids": {
+    "bytes": 163840,
+    "sha256": "02c2bf2e9d619b2d1cf5f4ff43351134d64ab7ab9185b5e9218eea26ab2d30e9"
+  },
+  "native/integrated/synthetic_low_0p001_random__k10__default_cagra.distances": {
+    "bytes": 81920,
+    "sha256": "8d26cc4bd656cc3d0265a8b21172c2fb07ca54712f27521038a0fd198e71b3e6"
+  },
+  "native/integrated/synthetic_low_0p001_random__k10__default_cagra.ids": {
+    "bytes": 163840,
+    "sha256": "a7b15368ec5b063295b142874f09f1229ae4ebc43ddaa83276e15aa025703322"
+  },
+  "native/integrated/synthetic_low_0p003_random__k10__default_cagra.distances": {
+    "bytes": 81920,
+    "sha256": "e38e882a488113627283c4b0ec1e34b3dfe656ad910e1de3e6f5c8e25c58c398"
+  },
+  "native/integrated/synthetic_low_0p003_random__k10__default_cagra.ids": {
+    "bytes": 163840,
+    "sha256": "2aec0210a19fb230dedae9f0a6b355700f8fedf30c5a7a8ee91ef7365ddc919f"
+  },
+  "native/integrated/synthetic_low_0p01_random__k10__default_cagra.distances": {
+    "bytes": 81920,
+    "sha256": "4de4f323c08a8148f2bad8ec25628c05b8fe8781fda5d0a78e90312a0c3417a5"
+  },
+  "native/integrated/synthetic_low_0p01_random__k10__default_cagra.ids": {
+    "bytes": 163840,
+    "sha256": "9bf50d5318e4934289639138974ea1ef82b7c8b6837412e45b6d3bdea160083b"
+  },
+  "native/integrated/yfcc__k100__default_cagra.distances": {
+    "bytes": 819200,
+    "sha256": "eef9bb2b9d8b4f72fda9e118a3e150513e81f19d0e92314404f233a50567275e"
+  },
+  "native/integrated/yfcc__k100__default_cagra.ids": {
+    "bytes": 1638400,
+    "sha256": "525491e5af4abbe2f04e527bbb6648e7d68ab24f00995e1f84446b6553dc668c"
+  },
+  "native/integrated/yfcc__k10__default_cagra.distances": {
+    "bytes": 81920,
+    "sha256": "aca29796f8c15a17d59b0de136e6ea668dd9b5d59ac36e9e153069777d1e4634"
+  },
+  "native/integrated/yfcc__k10__default_cagra.ids": {
+    "bytes": 163840,
+    "sha256": "f84bf4250ca2ac13e5bacf35381f86b9b2ef0f6569693b0e7b7ea3dffc7da8e3"
+  }
+}

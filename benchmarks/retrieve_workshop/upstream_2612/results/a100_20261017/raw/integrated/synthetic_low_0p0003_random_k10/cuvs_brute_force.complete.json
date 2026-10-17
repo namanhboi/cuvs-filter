@@ -1,0 +1,29 @@
+{
+  "signature": {
+    "config_sha256": "05a9ba3dfe4f184a64459d99b85f17c56fa699399a6e5fb25f8114b79e0a6d48",
+    "binary_sha256": "65e20b81fb0a73caf7d7cb96836b7930c6424827a65cd3f519b6534ffc62a536",
+    "library_sha256": "dd1387b3033b4127ea94f6706a7b20a59650e5142f4a88abfdd7e099d2ef41e6",
+    "manifest_sha256": "e06bec7e40ab7f495614a00d517a1b8ea864c2b339b17a59538dafd85756cd93"
+  },
+  "command": [
+    "micromamba",
+    "run",
+    "-p",
+    "/data/cuvs-upstream-envs/cuvs-2612",
+    "/data/cuvs-upstream-integration/cpp/build/bench/ann/CUVS_BRUTE_FORCE_ANN_BENCH",
+    "--search",
+    "--mode=throughput",
+    "--threads=1",
+    "--data_prefix=/data/retrieve_data",
+    "--index_prefix=/data/retrieve_data",
+    "--benchmark_repetitions=3",
+    "--benchmark_min_time=0.10s",
+    "--benchmark_min_warmup_time=0.10",
+    "--benchmark_enable_random_interleaving=true",
+    "--benchmark_report_aggregates_only=false",
+    "--benchmark_out_format=json",
+    "--benchmark_out=/data/cuvs-upstream-validation/benchmarks/raw/integrated/synthetic_low_0p0003_random_k10/cuvs_brute_force.json",
+    "/data/cuvs-upstream-validation/benchmarks/configs/integrated/synthetic_low_0p0003_random_k10/cuvs_brute_force.json"
+  ],
+  "raw_sha256": "5068aab76985b84ee8567fe4737aef1e45b2b0276d6bca5b82969492d01b72d1"
+}

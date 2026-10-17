@@ -12,19 +12,19 @@
 
 namespace cuvs::neighbors::cagra::detail {
 
-/** Internal bridge used only by the staged multi-seed FAVOR benchmark experiment. */
+/** Count passing source IDs once before a bitset-filtered benchmark search. */
 template <typename T>
-CUVS_EXPORT std::uint64_t benchmark_count_favor_bitset_matches(
+CUVS_EXPORT std::uint64_t benchmark_count_cagra_bitset_matches(
   raft::resources const& res,
   cagra::index<T, std::uint32_t> const& index,
   cuvs::neighbors::filtering::base_filter const& sample_filter);
 
 /**
- * Run FAVOR with an already-computed filtering_rate. Unlike the public search dispatcher, this
- * does not count the bitset again.
+ * Retired FAVOR compatibility bridge. Always reports an error.
  */
 template <typename T>
-CUVS_EXPORT void benchmark_search_favor_with_known_filtering_rate(
+[[deprecated("FAVOR is retired")]] CUVS_EXPORT void
+benchmark_search_favor_with_known_filtering_rate(
   raft::resources const& res,
   cagra::search_params const& params,
   cagra::index<T, std::uint32_t> const& index,
@@ -33,9 +33,9 @@ CUVS_EXPORT void benchmark_search_favor_with_known_filtering_rate(
   raft::device_matrix_view<float, std::int64_t, raft::row_major> distances,
   cuvs::neighbors::filtering::base_filter const& sample_filter);
 
-/** Benchmark-only UDF sampler; outputs remain private device arrays. */
+/** Retired FAVOR sampler compatibility bridge. Always reports an error. */
 template <typename T>
-CUVS_EXPORT void benchmark_estimate_favor_udf_filtering_rates(
+[[deprecated("FAVOR is retired")]] CUVS_EXPORT void benchmark_estimate_favor_udf_filtering_rates(
   raft::resources const& res,
   cagra::index<T, std::uint32_t> const& index,
   std::uint32_t num_queries,
@@ -45,11 +45,11 @@ CUVS_EXPORT void benchmark_estimate_favor_udf_filtering_rates(
   std::uint32_t sample_offset = 0);
 
 /**
- * Run the private SINGLE_CTA UDF path. FAVOR requires sampled query-local rates; default CAGRA
- * requires a null rate pointer and never estimates selectivity.
+ * Run the private SINGLE_CTA UDF path with optional passing-result accumulation.
+ * The rate pointer must be null; Base and Retain never estimate per-query selectivity.
  */
 template <typename T>
-CUVS_EXPORT void benchmark_search_favor_udf_with_sampled_rates(
+CUVS_EXPORT void benchmark_search_udf_with_result_accumulator(
   raft::resources const& res,
   cagra::search_params const& params,
   cagra::index<T, std::uint32_t> const& index,

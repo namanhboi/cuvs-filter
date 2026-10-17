@@ -48,14 +48,30 @@ def git(repo: Path, *arguments: str) -> str:
     ).stdout.strip()
 
 
+def compatible_controls(record: dict) -> dict:
+    """Read both frozen FAVOR-era control names and current shared-control names."""
+    result = dict(record)
+    for key, value in record.items():
+        if key.startswith("search_diagnostics_"):
+            result.setdefault(key.replace("search_diagnostics_", "favor_diagnostics_", 1), value)
+        elif key == "passing_result_accumulator":
+            result.setdefault("favor_udf_passing_accumulator", value)
+    return result
+
+
 def variant_from_label(label: str) -> str:
-    match = re.search(r'(?:^|#)favor_diagnostics_variant="([^"]+)"', label)
-    return match.group(1) if match else ""
+    return label_value(label, "favor_diagnostics_variant")
 
 
 def label_value(label: str, key: str) -> str:
-    match = re.search(rf'(?:^|#){re.escape(key)}="([^"]+)"', label)
-    return match.group(1) if match else ""
+    candidates = [key]
+    if key.startswith("favor_diagnostics_"):
+        candidates.append(key.replace("favor_diagnostics_", "search_diagnostics_", 1))
+    for candidate in candidates:
+        match = re.search(rf'(?:^|#){re.escape(candidate)}="([^"]+)"', label)
+        if match:
+            return match.group(1)
+    return ""
 
 
 def validate_config(
@@ -81,6 +97,7 @@ def validate_config(
     searches = indexes[0].get("search_params", [])
     result: dict[str, dict] = {}
     for position, search in enumerate(searches):
+        search = compatible_controls(search)
         variant = str(search.get("favor_diagnostics_variant", ""))
         if variant not in VARIANTS:
             continue
@@ -142,6 +159,7 @@ def raw_records(path: Path) -> dict[str, dict[str, object]]:
 
 
 def finite(row: dict[str, object], key: str) -> float:
+    row = compatible_controls(row)
     value = float(row.get(key, math.nan))
     if not math.isfinite(value):
         raise ValueError(f"missing/nonfinite raw counter {key}")

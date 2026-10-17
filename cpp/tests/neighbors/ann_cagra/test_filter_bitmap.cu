@@ -4,11 +4,13 @@
  */
 
 #include <cuvs/core/bitmap.hpp>
+#include <cuvs/core/roaring_allowlist.hpp>
 #include <cuvs/neighbors/cagra.hpp>
 
 #include "../../../bench/ann/src/common/output_set_metrics.hpp"
 #include "../../../src/neighbors/cagra_benchmark.hpp"
 #include "../../../src/neighbors/detail/cagra/navix_bitmap_seeds.cuh"
+#include "../../../src/neighbors/detail/cagra/navix_roaring_seeds.cuh"
 #include "../../../src/neighbors/detail/cagra/sample_filter_utils.cuh"
 
 #include <raft/core/bitset.cuh>
@@ -19,7 +21,7 @@
 #include <raft/random/rng.cuh>
 #include <raft/util/integer_utils.hpp>
 
-#include <rmm/cuda_stream_view.hpp>
+#include <cuda/stream_ref>
 #include <rmm/device_uvector.hpp>
 
 #include <gtest/gtest.h>
@@ -140,7 +142,10 @@ class CagraBitmapFilterTest : public ::testing::TestWithParam<cagra::search_algo
     index_params.intermediate_graph_degree = 2 * graph_degree();
     index_params.graph_build_params =
       cagra::graph_build_params::nn_descent_params(index_params.intermediate_graph_degree);
-    index.emplace(cagra::build(res, index_params, raft::make_const_mdspan(dataset->view())));
+    index.emplace(cagra::build(res,
+                               index_params,
+                               cuvs::neighbors::make_device_padded_dataset_view(
+                                 res, raft::make_const_mdspan(dataset->view()))));
     raft::resource::sync_stream(res);
   }
 
@@ -214,6 +219,22 @@ class CagraBitmapFilterDegree64Test : public CagraBitmapFilterTest {
  protected:
   std::uint32_t graph_degree() const override { return 64; }
 };
+
+TEST_P(CagraBitmapFilterTest, RejectsRetiredFavorMode)
+{
+  auto search_params        = params();
+  search_params.filter_mode = cagra::filtering_mode::FAVOR;
+  cuvs::neighbors::filtering::none_sample_filter filter;
+  EXPECT_THROW(search_dynamic(res, filter, search_params), raft::logic_error);
+}
+
+TEST_P(CagraBitmapFilterTest, RejectsRetiredFavorEstimatorAndSidecars)
+{
+  cagra::favor_delta_d_params retired;
+  EXPECT_THROW(cagra::compute_favor_delta_d(res, retired, *index), raft::logic_error);
+  EXPECT_THROW(cagra::save_favor_delta_d(res, "", retired, *index, 1.0f), raft::logic_error);
+  EXPECT_THROW(cagra::load_favor_delta_d(res, "", retired, *index), raft::logic_error);
+}
 
 TEST_P(CagraBitmapFilterTest, AllPassingMatchesBitsetAcrossTopKBoundaries)
 {
@@ -351,7 +372,7 @@ TEST_P(CagraBitmapFilterTest, DefaultAccumulatorBitmapMatchesEquivalentUdfExactl
         0,
         true);
     } else {
-      detail::benchmark_search_favor_udf_with_sampled_rates<float>(
+      detail::benchmark_search_udf_with_result_accumulator<float>(
         res,
         search_params,
         *index,
@@ -511,7 +532,7 @@ TEST_P(CagraBitmapFilterTest, PayloadTracksContentPointerAndNonDefaultStream)
   // different stream. The search path itself is responsible for ordering its cached payload.
   raft::resource::sync_stream(res);
   raft::device_resources alternate_res;
-  raft::resource::set_cuda_stream(alternate_res, rmm::cuda_stream_per_thread);
+  raft::resource::set_cuda_stream(alternate_res, cuda::stream_ref{cudaStreamPerThread});
   auto alternate_result = search_dynamic(alternate_res, second_filter, params(k, 0.5f));
   expect_same(even_result, alternate_result);
 }
@@ -1380,10 +1401,12 @@ TEST(CagraBitmapSeededHighDimTest, DeepFilteredSearchKeepsCompactionDecisionCTAU
       graph(row, edge) = static_cast<std::uint32_t>((row + edge + 1) % rows);
     }
   }
-  cagra::index<float, std::uint32_t> high_dim_index(resources,
-                                                    cuvs::distance::DistanceType::L2Expanded,
-                                                    raft::make_const_mdspan(dataset.view()),
-                                                    raft::make_const_mdspan(graph.view()));
+  cagra::index<float, std::uint32_t> high_dim_index(
+    resources,
+    cuvs::distance::DistanceType::L2Expanded,
+    cuvs::neighbors::make_device_padded_dataset_view(resources,
+                                                     raft::make_const_mdspan(dataset.view())),
+    raft::make_const_mdspan(graph.view()));
 
   device_bitmap bitmap(resources, batch_size, rows, [](auto query_id, auto source_id) {
     const auto modulus = query_id % 17 == 0 ? 37 : 3;
@@ -1444,6 +1467,224 @@ TEST(CagraBitmapSeededHighDimTest, DeepFilteredSearchKeepsCompactionDecisionCTAU
     }
   }
 }
+
+class CagraRoaringFilterTest : public CagraBitmapFilterTest {};
+
+class device_roaring {
+ public:
+  template <typename Predicate>
+  device_roaring(raft::resources const& res,
+                 std::int64_t rows,
+                 std::int64_t cols,
+                 Predicate predicate)
+  {
+    std::vector<cuvs::core::roaring_allowlist_view> views;
+    owners_.reserve(rows);
+    for (std::int64_t query = 0; query < rows; ++query) {
+      std::vector<std::uint32_t> ids;
+      for (std::int64_t node = 0; node < cols; ++node) {
+        if (predicate(query, node)) { ids.push_back(static_cast<std::uint32_t>(node)); }
+      }
+      owners_.push_back(cuvs::core::roaring_allowlist::from_ids(
+        res,
+        cols,
+        raft::make_host_vector_view<const std::uint32_t, std::int64_t>(ids.data(), ids.size()),
+        true));
+      raft::resource::sync_stream(res);
+      views.push_back(owners_.back().view());
+    }
+    filter_.emplace(res, views);
+  }
+  auto filter() const -> cuvs::neighbors::filtering::roaring_bitmap_filter const&
+  {
+    return *filter_;
+  }
+
+ private:
+  std::vector<cuvs::core::roaring_allowlist> owners_;
+  std::optional<cuvs::neighbors::filtering::roaring_bitmap_filter> filter_;
+};
+
+TEST_P(CagraRoaringFilterTest, BaseRetainAndNavixMatchDenseAcrossOffsetsAndTopK)
+{
+  constexpr std::uint32_t offset = 2;
+  auto predicate                 = [](std::int64_t query, std::int64_t node) {
+    if (query == offset) { return false; }
+    if (query == offset + 1) { return node == 0 || node == 31 || node == 768; }
+    if (query == offset + 2) { return true; }
+    return (node * 7 + query * 11) % 13 < 4;
+  };
+  device_bitmap bitmap(res, kQueries + offset, kRows, predicate);
+  auto dense = bitmap.filter();
+  device_roaring roaring(res, kQueries + offset, kRows, predicate);
+  for (auto result_k : {std::int64_t{10}, std::int64_t{100}}) {
+    auto search_params = params(result_k, 0.0f);
+    for (int method = 0; method != 5; ++method) {
+      auto run = [&](cuvs::neighbors::filtering::base_filter const& filter) {
+        auto neighbors =
+          raft::make_device_matrix<std::int64_t, std::int64_t>(res, kQueries, result_k);
+        auto distances = raft::make_device_matrix<float, std::int64_t>(res, kQueries, result_k);
+        auto stream    = raft::resource::get_cuda_stream(res);
+        if (method == 2) {
+          constexpr std::uint32_t seed_cap = 10;
+          rmm::device_uvector<std::uint32_t> seeds(kQueries * seed_cap, stream);
+          rmm::device_uvector<std::uint32_t> counts(kQueries, stream);
+          detail::benchmark_search_navix_bitmap_seeded<float>(
+            res,
+            search_params,
+            *index,
+            raft::make_const_mdspan(queries->view()),
+            neighbors.view(),
+            distances.view(),
+            filter,
+            offset,
+            seeds.data(),
+            counts.data(),
+            nullptr,
+            seed_cap,
+            0);
+        } else if (method >= 3) {
+          constexpr std::uint32_t seed_cap = 10;
+          rmm::device_uvector<std::uint32_t> seeds(kQueries * seed_cap, stream);
+          rmm::device_uvector<std::uint32_t> counts(kQueries, stream);
+          detail::benchmark_search_bitmap_seeded<float>(res,
+                                                        search_params,
+                                                        *index,
+                                                        raft::make_const_mdspan(queries->view()),
+                                                        neighbors.view(),
+                                                        distances.view(),
+                                                        filter,
+                                                        offset,
+                                                        seeds.data(),
+                                                        counts.data(),
+                                                        nullptr,
+                                                        method == 4,
+                                                        seed_cap);
+        } else {
+          detail::benchmark_search_bitmap_with_query_offset<float>(
+            res,
+            search_params,
+            *index,
+            raft::make_const_mdspan(queries->view()),
+            neighbors.view(),
+            distances.view(),
+            filter,
+            offset,
+            method == 1);
+        }
+        bitmap_search_result<std::int64_t> result{std::vector<std::int64_t>(neighbors.size()),
+                                                  std::vector<float>(distances.size())};
+        raft::copy(result.neighbors.data(), neighbors.data_handle(), neighbors.size(), stream);
+        raft::copy(result.distances.data(), distances.data_handle(), distances.size(), stream);
+        raft::resource::sync_stream(res);
+        return result;
+      };
+      SCOPED_TRACE(::testing::Message() << "k=" << result_k << ", method=" << method);
+      expect_same(run(dense), run(roaring.filter()));
+    }
+  }
+}
+
+TEST_P(CagraRoaringFilterTest, PassingSeedsMatchDenseWithAndWithoutSourceRemapping)
+{
+  constexpr std::uint32_t offset = 2, stride = 10;
+  auto predicate = [](std::int64_t query, std::int64_t node) {
+    if (query == offset) { return false; }
+    if (query == offset + 1) { return node == 0 || node == 31 || node == 768; }
+    return (node * 7 + query * 11) % 13 < 4;
+  };
+  device_bitmap bitmap(res, kQueries + offset, kRows, predicate);
+  auto dense = bitmap.filter();
+  device_roaring roaring(res, kQueries + offset, kRows, predicate);
+  auto stream = raft::resource::get_cuda_stream(res);
+  std::vector<std::uint32_t> source_ids(kRows);
+  for (std::uint32_t node = 0; node < kRows; ++node) {
+    source_ids[node] = kRows - node - 1;
+  }
+  rmm::device_uvector<std::uint32_t> mapping(kRows, stream);
+  raft::copy(mapping.data(), source_ids.data(), source_ids.size(), stream);
+  for (bool remap : {false, true}) {
+    auto run = [&](auto const& filter) {
+      rmm::device_uvector<std::uint32_t> ids(kQueries * stride, stream);
+      rmm::device_uvector<std::uint32_t> counts(kQueries, stream);
+      detail::select_navix_bitmap_seeds(res,
+                                        filter,
+                                        remap ? mapping.data() : nullptr,
+                                        offset,
+                                        kQueries,
+                                        kRows,
+                                        stride,
+                                        ids.data(),
+                                        counts.data());
+      std::vector<std::uint32_t> host_ids(ids.size()), host_counts(counts.size());
+      raft::copy(host_ids.data(), ids.data(), ids.size(), stream);
+      raft::copy(host_counts.data(), counts.data(), counts.size(), stream);
+      raft::resource::sync_stream(res);
+      std::vector<std::vector<std::uint32_t>> result(kQueries);
+      for (std::size_t q = 0; q < kQueries; ++q) {
+        result[q].assign(host_ids.begin() + q * stride,
+                         host_ids.begin() + q * stride + host_counts[q]);
+      }
+      return result;
+    };
+    EXPECT_EQ(run(dense), run(roaring.filter()));
+  }
+}
+
+TEST_P(CagraRoaringFilterTest, PassingSeedsEnumerateMixedContainersAndRespectGraphBounds)
+{
+  constexpr std::uint32_t rows = 6, columns = 131077, offset = 1, stride = 5000;
+  auto predicate = [](std::uint32_t query, std::uint32_t node) {
+    if (query == 1) { return true; }                       // Bitmap containers.
+    if (query == 2) { return node % 17 == 0; }             // Array containers across keys.
+    if (query == 3) { return node < 3 || node >= 65536; }  // Odd array before bitmap payload.
+    if (query == 4) { return false; }
+    return node >= 131068;  // Partial final word and underfill.
+  };
+  device_bitmap bitmap(res, rows, columns, predicate);
+  auto dense = bitmap.filter();
+  device_roaring roaring(res, rows, columns, predicate);
+  auto stream = raft::resource::get_cuda_stream(res);
+  for (std::uint32_t graph_rows : {columns, columns - 2}) {
+    auto run = [&](auto const& filter) {
+      rmm::device_uvector<std::uint32_t> ids((rows - offset) * stride, stream);
+      rmm::device_uvector<std::uint32_t> counts(rows - offset, stream);
+      detail::select_navix_bitmap_seeds(res,
+                                        filter,
+                                        static_cast<std::uint32_t const*>(nullptr),
+                                        offset,
+                                        rows - offset,
+                                        graph_rows,
+                                        stride,
+                                        ids.data(),
+                                        counts.data());
+      std::vector<std::uint32_t> host_ids(ids.size()), host_counts(counts.size());
+      raft::copy(host_ids.data(), ids.data(), ids.size(), stream);
+      raft::copy(host_counts.data(), counts.data(), counts.size(), stream);
+      raft::resource::sync_stream(res);
+      return std::make_pair(std::move(host_ids), std::move(host_counts));
+    };
+    auto [dense_ids, dense_counts]     = run(dense);
+    auto [roaring_ids, roaring_counts] = run(roaring.filter());
+    EXPECT_EQ(dense_counts, roaring_counts);
+    for (std::uint32_t query = offset; query < rows; ++query) {
+      std::vector<std::uint32_t> expected;
+      for (std::uint32_t node = 0; node < graph_rows && expected.size() < stride; ++node) {
+        if (predicate(query, node)) { expected.push_back(node); }
+      }
+      auto local = query - offset;
+      ASSERT_EQ(roaring_counts[local], expected.size());
+      for (std::uint32_t rank = 0; rank < expected.size(); ++rank) {
+        EXPECT_EQ(roaring_ids[local * stride + rank], expected[rank]);
+        EXPECT_EQ(dense_ids[local * stride + rank], expected[rank]);
+      }
+    }
+  }
+}
+
+INSTANTIATE_TEST_CASE_P(CagraRoaringFilters,
+                        CagraRoaringFilterTest,
+                        ::testing::Values(cagra::search_algo::SINGLE_CTA));
 
 INSTANTIATE_TEST_CASE_P(CagraBitmapFilters,
                         CagraBitmapFilterTest,

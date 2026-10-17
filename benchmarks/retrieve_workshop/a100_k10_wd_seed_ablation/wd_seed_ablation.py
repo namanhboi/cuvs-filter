@@ -1250,12 +1250,12 @@ def generate_diagnostics(root: Path, data_root: Path) -> None:
     for variant, (policy, coordinates) in variants.items():
         itopk, width, iterations = coordinates
         diagnostic = {
-            "favor_diagnostics_output": str(
+            "search_diagnostics_output": str(
                 (root / "diagnostics" / variant).resolve()
             ),
-            "favor_diagnostics_groundtruth": groundtruth,
-            "favor_diagnostics_dataset": "yfcc10m-a100-k10-wd-seed-ablation",
-            "favor_diagnostics_variant": variant,
+            "search_diagnostics_groundtruth": groundtruth,
+            "search_diagnostics_dataset": "yfcc10m-a100-k10-wd-seed-ablation",
+            "search_diagnostics_variant": variant,
         }
         create_group(
             root,

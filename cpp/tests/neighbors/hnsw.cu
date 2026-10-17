@@ -5,8 +5,11 @@
 
 #include "../test_utils.cuh"
 #include "ann_utils.cuh"
+#include "cagra_padded_build_helpers.cuh"
 
 #include <cstdint>
+#include <cuda/stream>
+#include <cuvs/neighbors/cagra.hpp>
 #include <cuvs/neighbors/hnsw.hpp>
 #include <raft/core/host_mdspan.hpp>
 #include <raft/core/resource/cuda_stream.hpp>
@@ -19,6 +22,7 @@
 #include <cstddef>
 #include <iostream>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace cuvs::neighbors::hnsw {
@@ -93,8 +97,10 @@ class AnnHNSWTest : public ::testing::TestWithParam<AnnHNSWInputs> {
 
       auto database_view = raft::make_device_matrix_view<const DataT, int64_t>(
         (const DataT*)database.data(), ps.n_rows, ps.dim);
+      cuvs::neighbors::test::padded_device_matrix_for_cagra<DataT> padded(handle_, database_view);
 
-      auto index = cuvs::neighbors::cagra::build(handle_, index_params, database_view);
+      auto index = cuvs::neighbors::cagra::build(handle_, index_params, padded.view);
+      index      = cuvs::neighbors::cagra::update_dataset(handle_, std::move(index), padded.view);
       raft::resource::sync_stream(handle_);
 
       cuvs::neighbors::hnsw::search_params search_params;
@@ -154,7 +160,7 @@ class AnnHNSWTest : public ::testing::TestWithParam<AnnHNSWInputs> {
 
  private:
   raft::resources handle_;
-  rmm::cuda_stream_view stream_;
+  cuda::stream_ref stream_;
   AnnHNSWInputs ps;
   rmm::device_uvector<DataT> database;
   rmm::device_uvector<DataT> queries;

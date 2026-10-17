@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2023-2026, NVIDIA CORPORATION.
+ * SPDX-FileCopyrightText: Copyright (c) 2023-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
 #pragma once
@@ -416,15 +416,20 @@ struct search
                               workspace,
                               sort,
                               hints,
-                              stream);
+                              stream.get());
     }
 
     if (ldIK > numElements) {
       if (input_keys_storage.size() != sizeBatch * numElements) {
         input_keys_storage.resize(sizeBatch * numElements, stream);
       }
-      batched_memcpy(
-        input_keys_storage.data(), numElements, inputKeys, ldIK, numElements, sizeBatch, stream);
+      batched_memcpy(input_keys_storage.data(),
+                     numElements,
+                     inputKeys,
+                     ldIK,
+                     numElements,
+                     sizeBatch,
+                     stream.get());
       inputKeys = input_keys_storage.data();
     }
 
@@ -433,8 +438,13 @@ struct search
         input_values_storage.resize(sizeBatch * numElements, stream);
       }
 
-      batched_memcpy(
-        input_values_storage.data(), numElements, inputVals, ldIV, numElements, sizeBatch, stream);
+      batched_memcpy(input_values_storage.data(),
+                     numElements,
+                     inputVals,
+                     ldIV,
+                     numElements,
+                     sizeBatch,
+                     stream.get());
       inputVals = input_values_storage.data();
     }
 
@@ -458,11 +468,13 @@ struct search
       sort);
 
     if (ldOK > topK) {
-      batched_memcpy(outputKeys, ldOK, output_keys_storage.data(), topK, topK, sizeBatch, stream);
+      batched_memcpy(
+        outputKeys, ldOK, output_keys_storage.data(), topK, topK, sizeBatch, stream.get());
     }
 
     if (ldOV > topK) {
-      batched_memcpy(outputVals, ldOV, output_values_storage.data(), topK, topK, sizeBatch, stream);
+      batched_memcpy(
+        outputVals, ldOV, output_values_storage.data(), topK, topK, sizeBatch, stream.get());
     }
   }
 
@@ -480,7 +492,7 @@ struct search
     SAMPLE_FILTER_T sample_filter)
   {
     // Init hashmap
-    cudaStream_t stream      = raft::resource::get_cuda_stream(res);
+    cudaStream_t stream      = raft::resource::get_cuda_stream(res).get();
     const uint32_t hash_size = hashmap::get_size(hash_bitlen);
     set_value_batch(
       hashmap.data(), hash_size, utils::get_max_value<INDEX_T>(), hash_size, num_queries, stream);
@@ -512,9 +524,13 @@ struct search
                       hashmap.data(),
                       hash_bitlen,
                       stream,
-                      static_cast<IndexT>(this->dataset_size));
+                      // Bound random seed selection to the graph size, not the dataset size.
+                      // During iterative / CAGRA-Q build the graph is smaller than the dataset,
+                      // so using dataset_size here selects seeds that index past the graph end
+                      // (out-of-bounds access). See https://github.com/NVIDIA/cuvs/pull/1780.
+                      static_cast<IndexT>(graph.extent(0)));
 
-    std::shared_ptr<AlgorithmLauncher> compute_distance_to_child_nodes_launcher =
+    std::shared_ptr<rtcx::algorithm_launcher> compute_distance_to_child_nodes_launcher =
       make_cagra_multi_kernel_jit_launcher<DATA_T,
                                            INDEX_T,
                                            DISTANCE_T,
@@ -612,7 +628,7 @@ struct search
                         result_buffer_allocation_size,
                         stream);
 
-      std::shared_ptr<AlgorithmLauncher> apply_filter_launcher =
+      std::shared_ptr<rtcx::algorithm_launcher> apply_filter_launcher =
         make_cagra_apply_filter_jit_launcher<DATA_T,
                                              INDEX_T,
                                              DISTANCE_T,

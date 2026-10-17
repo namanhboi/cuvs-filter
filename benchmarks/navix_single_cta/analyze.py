@@ -72,7 +72,9 @@ def load_points(raw_dir: Path) -> list[Point]:
             label = str(row.get("label", ""))
             mode = label_value(label, "navix_mode")
             scheduler = label_value(label, "navix_scheduler", "tiled" if mode else "")
-            accumulator = bool(round(float(row.get("favor_udf_passing_accumulator", 0))))
+            accumulator = bool(round(float(row.get(
+                "passing_result_accumulator", row.get("favor_udf_passing_accumulator", 0)
+            ))))
             method = (
                 f"NaviX ({mode})"
                 if mode

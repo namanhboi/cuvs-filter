@@ -1,0 +1,18 @@
+{
+  "manifest_sha256": "e06bec7e40ab7f495614a00d517a1b8ea864c2b339b17a59538dafd85756cd93",
+  "repositories": {
+    "old": "0b3a56692631a186b875a1542930d7e773a75e69",
+    "integrated": "fa84b012a7d262a408d5c2ecdd2149ae82baf15a",
+    "control": "3721d31fb98ba927417f42fbe3f93ab9ff15ed8e"
+  },
+  "binaries": {
+    "/home/ubuntu/cuvs-filter/cpp/build/bench/ann/CUVS_CAGRA_ANN_BENCH": "9ef87a4f3dafd6dccfa7c2a57a9c89a775b820795fe21718f846fd73b3c8d134",
+    "/home/ubuntu/cuvs-filter/cpp/build/bench/ann/CUVS_IVF_FLAT_ANN_BENCH": "ad0e0f309501efa0582a9ec0371cfa25230dfaac87bfe01dc1bec42936da0a43",
+    "/home/ubuntu/cuvs-filter/cpp/build/bench/ann/CUVS_BRUTE_FORCE_ANN_BENCH": "1e7f274681947f3b73df80bd3a8a7a52301bcc3b2f44214ceec542ee26ca495b",
+    "/home/ubuntu/cuvs-filter/cpp/build/libcuvs.so": "69a79db04bfb3f2756ea2bde44f4c2f6e55c2e542c376888a6a9843e972d8c00",
+    "/data/cuvs-upstream-integration/cpp/build/bench/ann/CUVS_CAGRA_ANN_BENCH": "307fb47372137a56d40001edf2fbfabc6b8e455d551e884bbafdd3bc04df2df5",
+    "/data/cuvs-upstream-integration/cpp/build/bench/ann/CUVS_IVF_FLAT_ANN_BENCH": "dfc25f47736aef58819f6a70dbb5fdbc49a3a009267ea8e5bbe0774cad65c197",
+    "/data/cuvs-upstream-integration/cpp/build/bench/ann/CUVS_BRUTE_FORCE_ANN_BENCH": "65e20b81fb0a73caf7d7cb96836b7930c6424827a65cd3f519b6534ffc62a536",
+    "/data/cuvs-upstream-integration/cpp/build/libcuvs.so": "dd1387b3033b4127ea94f6706a7b20a59650e5142f4a88abfdd7e099d2ef41e6"
+  }
+}

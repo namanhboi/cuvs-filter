@@ -1,0 +1,3932 @@
+{
+  "schema_version": 1,
+  "query_count": 2048,
+  "repetitions": 3,
+  "minimum_time": "0.10s",
+  "minimum_warmup": "0.10",
+  "jobs": [
+    {
+      "id": "old/yfcc_k10/cuvs_cagra",
+      "variant": "old",
+      "cases": [
+        "yfcc__k10__default_cagra",
+        "yfcc__k10__default_cagra_accumulator",
+        "yfcc__k10__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/yfcc_k10/cuvs_cagra.json",
+      "config_sha256": "a8f319bb854f08b0ee1b82eb5c95387213feaa307c1a657fa1754c7fdde3590c"
+    },
+    {
+      "id": "integrated/yfcc_k10/cuvs_cagra",
+      "variant": "integrated",
+      "cases": [
+        "yfcc__k10__default_cagra",
+        "yfcc__k10__default_cagra_accumulator",
+        "yfcc__k10__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/yfcc_k10/cuvs_cagra.json",
+      "config_sha256": "8ce6eb4c6e126ba5f95185a6cc4d880c7d1422fe4f5068ad6a2202196dc30dae"
+    },
+    {
+      "id": "roaring/yfcc_k10/cuvs_cagra",
+      "variant": "roaring",
+      "cases": [
+        "yfcc__k10__default_cagra",
+        "yfcc__k10__default_cagra_accumulator",
+        "yfcc__k10__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/roaring/yfcc_k10/cuvs_cagra.json",
+      "config_sha256": "6bc9c658a5c4d8f5dd14b40978a56608b269f4a7fe13c31247d1ea7cbf48ba47"
+    },
+    {
+      "id": "old/em_k10/cuvs_cagra",
+      "variant": "old",
+      "cases": [
+        "em__k10__default_cagra",
+        "em__k10__default_cagra_accumulator",
+        "em__k10__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/em_k10/cuvs_cagra.json",
+      "config_sha256": "692a09c9745ad66ad944a87761718fe1f38098650d2f1411b2a79dcb170e81d8"
+    },
+    {
+      "id": "integrated/em_k10/cuvs_cagra",
+      "variant": "integrated",
+      "cases": [
+        "em__k10__default_cagra",
+        "em__k10__default_cagra_accumulator",
+        "em__k10__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/em_k10/cuvs_cagra.json",
+      "config_sha256": "01c614f126cca515c9dc4965a051f5361904e1f030ce2a12f0eb9208e2fcc4b3"
+    },
+    {
+      "id": "roaring/em_k10/cuvs_cagra",
+      "variant": "roaring",
+      "cases": [
+        "em__k10__default_cagra",
+        "em__k10__default_cagra_accumulator",
+        "em__k10__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/roaring/em_k10/cuvs_cagra.json",
+      "config_sha256": "5f2d8088faa237d659ede1dabec8ebe10b146b994f0513d88fd5999fa284b671"
+    },
+    {
+      "id": "old/emis_k10/cuvs_cagra",
+      "variant": "old",
+      "cases": [
+        "emis__k10__default_cagra",
+        "emis__k10__default_cagra_accumulator",
+        "emis__k10__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/emis_k10/cuvs_cagra.json",
+      "config_sha256": "4d8bbac0ca98389389edb6f32b19fb2b71d38368f75682102b18df96b76ea11a"
+    },
+    {
+      "id": "integrated/emis_k10/cuvs_cagra",
+      "variant": "integrated",
+      "cases": [
+        "emis__k10__default_cagra",
+        "emis__k10__default_cagra_accumulator",
+        "emis__k10__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/emis_k10/cuvs_cagra.json",
+      "config_sha256": "9f849da01e8d4b8750f207ce135fd92a7e6d048ae71e6fe15f5931b7b1969e89"
+    },
+    {
+      "id": "roaring/emis_k10/cuvs_cagra",
+      "variant": "roaring",
+      "cases": [
+        "emis__k10__default_cagra",
+        "emis__k10__default_cagra_accumulator",
+        "emis__k10__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/roaring/emis_k10/cuvs_cagra.json",
+      "config_sha256": "94f8e2e7c6bd0df71bbd4e976c1f4dc3f13e72bf15ae6300442417e51e90b93f"
+    },
+    {
+      "id": "old/r_k10/cuvs_cagra",
+      "variant": "old",
+      "cases": [
+        "r__k10__default_cagra",
+        "r__k10__default_cagra_accumulator",
+        "r__k10__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/r_k10/cuvs_cagra.json",
+      "config_sha256": "f1e576d44637a5f3f5452b15376913cec5a5aa2881d609f63c5a4314bb498416"
+    },
+    {
+      "id": "integrated/r_k10/cuvs_cagra",
+      "variant": "integrated",
+      "cases": [
+        "r__k10__default_cagra",
+        "r__k10__default_cagra_accumulator",
+        "r__k10__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/r_k10/cuvs_cagra.json",
+      "config_sha256": "e0be1b477e888158289559ed80d33b530605e1e7776b80fb3a3ca9d12089993b"
+    },
+    {
+      "id": "roaring/r_k10/cuvs_cagra",
+      "variant": "roaring",
+      "cases": [
+        "r__k10__default_cagra",
+        "r__k10__default_cagra_accumulator",
+        "r__k10__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/roaring/r_k10/cuvs_cagra.json",
+      "config_sha256": "30019d2134c913464ea554961c1db5f9aa208247d2c9a729d6bc9c9dcf3f5618"
+    },
+    {
+      "id": "old/yfcc_k100/cuvs_cagra",
+      "variant": "old",
+      "cases": [
+        "yfcc__k100__default_cagra",
+        "yfcc__k100__default_cagra_accumulator",
+        "yfcc__k100__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/yfcc_k100/cuvs_cagra.json",
+      "config_sha256": "8b57c9a708b024d22e5e18522237df012b338d1da945df17bf879e64a3e4b1a0"
+    },
+    {
+      "id": "integrated/yfcc_k100/cuvs_cagra",
+      "variant": "integrated",
+      "cases": [
+        "yfcc__k100__default_cagra",
+        "yfcc__k100__default_cagra_accumulator",
+        "yfcc__k100__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/yfcc_k100/cuvs_cagra.json",
+      "config_sha256": "4e7f3e28e54665702bb47e44f014ee68d43f515e5f135951be1c5c4f3ffa7cbc"
+    },
+    {
+      "id": "roaring/yfcc_k100/cuvs_cagra",
+      "variant": "roaring",
+      "cases": [
+        "yfcc__k100__default_cagra",
+        "yfcc__k100__default_cagra_accumulator",
+        "yfcc__k100__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/roaring/yfcc_k100/cuvs_cagra.json",
+      "config_sha256": "0910cb3ee457ffd25cb89bcc14b5e763f9d9124d130f6ce92cf4fabc526d5c4f"
+    },
+    {
+      "id": "old/em_k100/cuvs_cagra",
+      "variant": "old",
+      "cases": [
+        "em__k100__default_cagra",
+        "em__k100__default_cagra_accumulator",
+        "em__k100__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/em_k100/cuvs_cagra.json",
+      "config_sha256": "a32d8f7b246896944e098e84557f4d7ac9c347f15669ae0875008a8e66fbefba"
+    },
+    {
+      "id": "integrated/em_k100/cuvs_cagra",
+      "variant": "integrated",
+      "cases": [
+        "em__k100__default_cagra",
+        "em__k100__default_cagra_accumulator",
+        "em__k100__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/em_k100/cuvs_cagra.json",
+      "config_sha256": "7e09f75d53590505bdd04a159c8e2d352c060604d8829a83a85e6bbd93c4b376"
+    },
+    {
+      "id": "roaring/em_k100/cuvs_cagra",
+      "variant": "roaring",
+      "cases": [
+        "em__k100__default_cagra",
+        "em__k100__default_cagra_accumulator",
+        "em__k100__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/roaring/em_k100/cuvs_cagra.json",
+      "config_sha256": "7437afb85c0b5d72d2924794ccb9295a33ccd47f10dcaa68e39c67e5db3fa8c6"
+    },
+    {
+      "id": "old/emis_k100/cuvs_cagra",
+      "variant": "old",
+      "cases": [
+        "emis__k100__default_cagra",
+        "emis__k100__default_cagra_accumulator",
+        "emis__k100__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/emis_k100/cuvs_cagra.json",
+      "config_sha256": "63b4ba83ec232a1db3546d4c60850f5a5bafb873493e2ccf76cd73fd79a2a22d"
+    },
+    {
+      "id": "integrated/emis_k100/cuvs_cagra",
+      "variant": "integrated",
+      "cases": [
+        "emis__k100__default_cagra",
+        "emis__k100__default_cagra_accumulator",
+        "emis__k100__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/emis_k100/cuvs_cagra.json",
+      "config_sha256": "7601dd198e3aba7897c9d6ddf662914547d7c761debeb864c767475e3ef366a6"
+    },
+    {
+      "id": "roaring/emis_k100/cuvs_cagra",
+      "variant": "roaring",
+      "cases": [
+        "emis__k100__default_cagra",
+        "emis__k100__default_cagra_accumulator",
+        "emis__k100__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/roaring/emis_k100/cuvs_cagra.json",
+      "config_sha256": "fb0c51c38bdf8eb6900dc79746f0c4a6875afee187a15ec8827941cd1cdfe5d4"
+    },
+    {
+      "id": "old/r_k100/cuvs_cagra",
+      "variant": "old",
+      "cases": [
+        "r__k100__default_cagra",
+        "r__k100__default_cagra_accumulator",
+        "r__k100__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/r_k100/cuvs_cagra.json",
+      "config_sha256": "10728d504c5b0d687d30daf75a78b6cd4792be90cbd13f6dc84fd6f418e2b1f7"
+    },
+    {
+      "id": "integrated/r_k100/cuvs_cagra",
+      "variant": "integrated",
+      "cases": [
+        "r__k100__default_cagra",
+        "r__k100__default_cagra_accumulator",
+        "r__k100__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/r_k100/cuvs_cagra.json",
+      "config_sha256": "10a0a7d1588dafd28b75b925a94a3c9d8fc82d17e77e3a6b2a8233d537adb4c3"
+    },
+    {
+      "id": "roaring/r_k100/cuvs_cagra",
+      "variant": "roaring",
+      "cases": [
+        "r__k100__default_cagra",
+        "r__k100__default_cagra_accumulator",
+        "r__k100__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/roaring/r_k100/cuvs_cagra.json",
+      "config_sha256": "b3bd46d4c7c0828b1c8971eddb7f6973c0a65d4f578da34425c6ae75f067e495"
+    },
+    {
+      "id": "old/yfcc_k10/cuvs_ivf_flat",
+      "variant": "old",
+      "cases": [
+        "yfcc__k10__ivf_flat"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/yfcc_k10/cuvs_ivf_flat.json",
+      "config_sha256": "0ba45af817c0aa5e977cdd1429fcb98ec3885e45969217da19e9564e1aeceafb"
+    },
+    {
+      "id": "integrated/yfcc_k10/cuvs_ivf_flat",
+      "variant": "integrated",
+      "cases": [
+        "yfcc__k10__ivf_flat"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/yfcc_k10/cuvs_ivf_flat.json",
+      "config_sha256": "9af407734072a429c9707eef2f6c61b329e7e6b139eaebbb4afc93128781b42e"
+    },
+    {
+      "id": "old/yfcc_k100/cuvs_ivf_flat",
+      "variant": "old",
+      "cases": [
+        "yfcc__k100__ivf_flat"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/yfcc_k100/cuvs_ivf_flat.json",
+      "config_sha256": "4b618f7f7292fe946cb2a3746e429b5da7a6f1c102bdde09d06824084dec85da"
+    },
+    {
+      "id": "integrated/yfcc_k100/cuvs_ivf_flat",
+      "variant": "integrated",
+      "cases": [
+        "yfcc__k100__ivf_flat"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/yfcc_k100/cuvs_ivf_flat.json",
+      "config_sha256": "950c1de898ee8724817e5ef75547e5ae4b4e4c6c412ac81e66e82402e5661852"
+    },
+    {
+      "id": "old/em_k10/cuvs_ivf_flat",
+      "variant": "old",
+      "cases": [
+        "em__k10__ivf_flat"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/em_k10/cuvs_ivf_flat.json",
+      "config_sha256": "2b5cc0513acf4d2ac4b475d4303b0f85c7ede027ac5dfed72387943d69f6daaa"
+    },
+    {
+      "id": "integrated/em_k10/cuvs_ivf_flat",
+      "variant": "integrated",
+      "cases": [
+        "em__k10__ivf_flat"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/em_k10/cuvs_ivf_flat.json",
+      "config_sha256": "2e0f94f3ea9b282b8398553a6210d56f303785cd4b573dd4f7f5d450df8c3dc3"
+    },
+    {
+      "id": "old/em_k100/cuvs_ivf_flat",
+      "variant": "old",
+      "cases": [
+        "em__k100__ivf_flat"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/em_k100/cuvs_ivf_flat.json",
+      "config_sha256": "c19651aa4ba9382bd9e5e86d2b7cb436e732e78e650ddeb8709faa87d98c5fc2"
+    },
+    {
+      "id": "integrated/em_k100/cuvs_ivf_flat",
+      "variant": "integrated",
+      "cases": [
+        "em__k100__ivf_flat"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/em_k100/cuvs_ivf_flat.json",
+      "config_sha256": "89bcb83af040d26bb17967ec23393a2724506fa0254f0592c9eb91e24674ed91"
+    },
+    {
+      "id": "old/emis_k10/cuvs_ivf_flat",
+      "variant": "old",
+      "cases": [
+        "emis__k10__ivf_flat"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/emis_k10/cuvs_ivf_flat.json",
+      "config_sha256": "6ce3d77ed20832c50d32ce62bf800ea01d77bdcda9ea45bf4ef6a7f68e23a73e"
+    },
+    {
+      "id": "integrated/emis_k10/cuvs_ivf_flat",
+      "variant": "integrated",
+      "cases": [
+        "emis__k10__ivf_flat"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/emis_k10/cuvs_ivf_flat.json",
+      "config_sha256": "7dc954f49ad4b9db668214ca37a579763c1c07a7b8671948a0a36e557aea3e5b"
+    },
+    {
+      "id": "old/emis_k100/cuvs_ivf_flat",
+      "variant": "old",
+      "cases": [
+        "emis__k100__ivf_flat"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/emis_k100/cuvs_ivf_flat.json",
+      "config_sha256": "a25f5c7fa04ca391bf6107a712a4b5dc8ea621933b7615d1bfab03a1534c7a51"
+    },
+    {
+      "id": "integrated/emis_k100/cuvs_ivf_flat",
+      "variant": "integrated",
+      "cases": [
+        "emis__k100__ivf_flat"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/emis_k100/cuvs_ivf_flat.json",
+      "config_sha256": "7a8b72ded1f3cfc1e62ad3ed8d64a489870fc26563b9f9af4b8a8849630e3748"
+    },
+    {
+      "id": "old/r_k10/cuvs_ivf_flat",
+      "variant": "old",
+      "cases": [
+        "r__k10__ivf_flat"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/r_k10/cuvs_ivf_flat.json",
+      "config_sha256": "a1bb1629dcf9571e83a020d5177502de188a03e903c080313e48c8d2044f526b"
+    },
+    {
+      "id": "integrated/r_k10/cuvs_ivf_flat",
+      "variant": "integrated",
+      "cases": [
+        "r__k10__ivf_flat"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/r_k10/cuvs_ivf_flat.json",
+      "config_sha256": "974e5008bf52154449831b67d2b307619a53330f06704acab14dfbd00853cd9c"
+    },
+    {
+      "id": "old/r_k100/cuvs_ivf_flat",
+      "variant": "old",
+      "cases": [
+        "r__k100__ivf_flat"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/r_k100/cuvs_ivf_flat.json",
+      "config_sha256": "098d8cb9300ef87ec749c1c0168801408a7beee05a293a4db0157a454589259f"
+    },
+    {
+      "id": "integrated/r_k100/cuvs_ivf_flat",
+      "variant": "integrated",
+      "cases": [
+        "r__k100__ivf_flat"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/r_k100/cuvs_ivf_flat.json",
+      "config_sha256": "6245d6fe21eb6a2e147df87f71ec406add77e406e66750db635b978ba01632ed"
+    },
+    {
+      "id": "old/synthetic_low_0p0001_random_k10/cuvs_cagra",
+      "variant": "old",
+      "cases": [
+        "synthetic_low_0p0001_random__k10__default_cagra",
+        "synthetic_low_0p0001_random__k10__default_cagra_accumulator",
+        "synthetic_low_0p0001_random__k10__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/synthetic_low_0p0001_random_k10/cuvs_cagra.json",
+      "config_sha256": "e8178cf3dee5f4c5462ddbcee0705ca2f236f3815cbd04afe88d033f4877f5b4"
+    },
+    {
+      "id": "integrated/synthetic_low_0p0001_random_k10/cuvs_cagra",
+      "variant": "integrated",
+      "cases": [
+        "synthetic_low_0p0001_random__k10__default_cagra",
+        "synthetic_low_0p0001_random__k10__default_cagra_accumulator",
+        "synthetic_low_0p0001_random__k10__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/synthetic_low_0p0001_random_k10/cuvs_cagra.json",
+      "config_sha256": "b3e5842c13caa78f4b5f10a343ac22b80976eccd68e46a7a3521dacff1b50ae8"
+    },
+    {
+      "id": "roaring/synthetic_low_0p0001_random_k10/cuvs_cagra",
+      "variant": "roaring",
+      "cases": [
+        "synthetic_low_0p0001_random__k10__default_cagra",
+        "synthetic_low_0p0001_random__k10__default_cagra_accumulator",
+        "synthetic_low_0p0001_random__k10__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/roaring/synthetic_low_0p0001_random_k10/cuvs_cagra.json",
+      "config_sha256": "e404ce3f2eb441483eddbc75a68bf2e73c72d4bcc11c7fae1e5523b173eeb959"
+    },
+    {
+      "id": "old/synthetic_low_0p0001_random_k10/cuvs_ivf_flat",
+      "variant": "old",
+      "cases": [
+        "synthetic_low_0p0001_random__k10__ivf_flat"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/synthetic_low_0p0001_random_k10/cuvs_ivf_flat.json",
+      "config_sha256": "5195e203ba64bf0a664b9a55357fc47f28f3715b994840dddd7c2a12368b9392"
+    },
+    {
+      "id": "integrated/synthetic_low_0p0001_random_k10/cuvs_ivf_flat",
+      "variant": "integrated",
+      "cases": [
+        "synthetic_low_0p0001_random__k10__ivf_flat"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/synthetic_low_0p0001_random_k10/cuvs_ivf_flat.json",
+      "config_sha256": "6cad623c24821fd02df7ad5e2b8532acb57827917788d71dd3192b6ab816cde3"
+    },
+    {
+      "id": "old/synthetic_low_0p0001_random_k10/cuvs_brute_force",
+      "variant": "old",
+      "cases": [
+        "synthetic_low_0p0001_random__k10__exact"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/synthetic_low_0p0001_random_k10/cuvs_brute_force.json",
+      "config_sha256": "6091503912a7b585cf91c0902758a523c5a1664ce4332b7af97cd0d969df1735"
+    },
+    {
+      "id": "integrated/synthetic_low_0p0001_random_k10/cuvs_brute_force",
+      "variant": "integrated",
+      "cases": [
+        "synthetic_low_0p0001_random__k10__exact"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/synthetic_low_0p0001_random_k10/cuvs_brute_force.json",
+      "config_sha256": "6091503912a7b585cf91c0902758a523c5a1664ce4332b7af97cd0d969df1735"
+    },
+    {
+      "id": "old/synthetic_low_0p0003_random_k10/cuvs_cagra",
+      "variant": "old",
+      "cases": [
+        "synthetic_low_0p0003_random__k10__default_cagra",
+        "synthetic_low_0p0003_random__k10__default_cagra_accumulator",
+        "synthetic_low_0p0003_random__k10__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/synthetic_low_0p0003_random_k10/cuvs_cagra.json",
+      "config_sha256": "6123736140c3f69fd3ef13317efd0777dd96345a8a6bb44a50df2b3352b7fce9"
+    },
+    {
+      "id": "integrated/synthetic_low_0p0003_random_k10/cuvs_cagra",
+      "variant": "integrated",
+      "cases": [
+        "synthetic_low_0p0003_random__k10__default_cagra",
+        "synthetic_low_0p0003_random__k10__default_cagra_accumulator",
+        "synthetic_low_0p0003_random__k10__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/synthetic_low_0p0003_random_k10/cuvs_cagra.json",
+      "config_sha256": "72041f773f135a607d79b470bfe6a5bd3ea443355196ea4b091ae2791bccf9f8"
+    },
+    {
+      "id": "roaring/synthetic_low_0p0003_random_k10/cuvs_cagra",
+      "variant": "roaring",
+      "cases": [
+        "synthetic_low_0p0003_random__k10__default_cagra",
+        "synthetic_low_0p0003_random__k10__default_cagra_accumulator",
+        "synthetic_low_0p0003_random__k10__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/roaring/synthetic_low_0p0003_random_k10/cuvs_cagra.json",
+      "config_sha256": "57c4877f4fe22b02cb96c837759d405e2903d5f016292c8e5ab05bb296f95466"
+    },
+    {
+      "id": "old/synthetic_low_0p0003_random_k10/cuvs_ivf_flat",
+      "variant": "old",
+      "cases": [
+        "synthetic_low_0p0003_random__k10__ivf_flat"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/synthetic_low_0p0003_random_k10/cuvs_ivf_flat.json",
+      "config_sha256": "0c5b1d3e0dc66c939ad95a8b6b79e5d4b2a60fa5055cd5c480fedac47da38c4e"
+    },
+    {
+      "id": "integrated/synthetic_low_0p0003_random_k10/cuvs_ivf_flat",
+      "variant": "integrated",
+      "cases": [
+        "synthetic_low_0p0003_random__k10__ivf_flat"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/synthetic_low_0p0003_random_k10/cuvs_ivf_flat.json",
+      "config_sha256": "a75fd525111f8e7eda253ea392576c6c0d09f7368271a291d9e5396ac9fa0954"
+    },
+    {
+      "id": "old/synthetic_low_0p0003_random_k10/cuvs_brute_force",
+      "variant": "old",
+      "cases": [
+        "synthetic_low_0p0003_random__k10__exact"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/synthetic_low_0p0003_random_k10/cuvs_brute_force.json",
+      "config_sha256": "05a9ba3dfe4f184a64459d99b85f17c56fa699399a6e5fb25f8114b79e0a6d48"
+    },
+    {
+      "id": "integrated/synthetic_low_0p0003_random_k10/cuvs_brute_force",
+      "variant": "integrated",
+      "cases": [
+        "synthetic_low_0p0003_random__k10__exact"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/synthetic_low_0p0003_random_k10/cuvs_brute_force.json",
+      "config_sha256": "05a9ba3dfe4f184a64459d99b85f17c56fa699399a6e5fb25f8114b79e0a6d48"
+    },
+    {
+      "id": "old/synthetic_low_0p001_random_k10/cuvs_cagra",
+      "variant": "old",
+      "cases": [
+        "synthetic_low_0p001_random__k10__default_cagra",
+        "synthetic_low_0p001_random__k10__default_cagra_accumulator",
+        "synthetic_low_0p001_random__k10__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/synthetic_low_0p001_random_k10/cuvs_cagra.json",
+      "config_sha256": "02ed6d96dd5dc46b842ba09a1f675b284b29ef59ef40a3227ffc2709893f4b66"
+    },
+    {
+      "id": "integrated/synthetic_low_0p001_random_k10/cuvs_cagra",
+      "variant": "integrated",
+      "cases": [
+        "synthetic_low_0p001_random__k10__default_cagra",
+        "synthetic_low_0p001_random__k10__default_cagra_accumulator",
+        "synthetic_low_0p001_random__k10__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/synthetic_low_0p001_random_k10/cuvs_cagra.json",
+      "config_sha256": "490848269719a8e2e7ae5b86c07c4c0a17e7d694c372be44567e7ffa1159ecdc"
+    },
+    {
+      "id": "roaring/synthetic_low_0p001_random_k10/cuvs_cagra",
+      "variant": "roaring",
+      "cases": [
+        "synthetic_low_0p001_random__k10__default_cagra",
+        "synthetic_low_0p001_random__k10__default_cagra_accumulator",
+        "synthetic_low_0p001_random__k10__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/roaring/synthetic_low_0p001_random_k10/cuvs_cagra.json",
+      "config_sha256": "792a259236cd3812eb7ab4d360d4ed906dcde7d47bc3ddca1404bc1b44205feb"
+    },
+    {
+      "id": "old/synthetic_low_0p001_random_k10/cuvs_ivf_flat",
+      "variant": "old",
+      "cases": [
+        "synthetic_low_0p001_random__k10__ivf_flat"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/synthetic_low_0p001_random_k10/cuvs_ivf_flat.json",
+      "config_sha256": "65ef73abb723265f96e0fe34a2c87d8d7967a5e11190bd279557c29306201efc"
+    },
+    {
+      "id": "integrated/synthetic_low_0p001_random_k10/cuvs_ivf_flat",
+      "variant": "integrated",
+      "cases": [
+        "synthetic_low_0p001_random__k10__ivf_flat"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/synthetic_low_0p001_random_k10/cuvs_ivf_flat.json",
+      "config_sha256": "39fcb2daa2ad6e211c6ade104b2d05713ba8e56c1bd26e7644c62504ed24bef7"
+    },
+    {
+      "id": "old/synthetic_low_0p001_random_k10/cuvs_brute_force",
+      "variant": "old",
+      "cases": [
+        "synthetic_low_0p001_random__k10__exact"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/synthetic_low_0p001_random_k10/cuvs_brute_force.json",
+      "config_sha256": "b8bf19169e7ad2a430fc93f990acd8871346d67f481aebadfad6ef32a15a9335"
+    },
+    {
+      "id": "integrated/synthetic_low_0p001_random_k10/cuvs_brute_force",
+      "variant": "integrated",
+      "cases": [
+        "synthetic_low_0p001_random__k10__exact"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/synthetic_low_0p001_random_k10/cuvs_brute_force.json",
+      "config_sha256": "b8bf19169e7ad2a430fc93f990acd8871346d67f481aebadfad6ef32a15a9335"
+    },
+    {
+      "id": "old/synthetic_low_0p003_random_k10/cuvs_cagra",
+      "variant": "old",
+      "cases": [
+        "synthetic_low_0p003_random__k10__default_cagra",
+        "synthetic_low_0p003_random__k10__default_cagra_accumulator",
+        "synthetic_low_0p003_random__k10__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/synthetic_low_0p003_random_k10/cuvs_cagra.json",
+      "config_sha256": "7aedb3a4927ac10452e300befe7a304f0804e73ba90c65f1d700c38176947f95"
+    },
+    {
+      "id": "integrated/synthetic_low_0p003_random_k10/cuvs_cagra",
+      "variant": "integrated",
+      "cases": [
+        "synthetic_low_0p003_random__k10__default_cagra",
+        "synthetic_low_0p003_random__k10__default_cagra_accumulator",
+        "synthetic_low_0p003_random__k10__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/synthetic_low_0p003_random_k10/cuvs_cagra.json",
+      "config_sha256": "5d549064b0a42091d6f7008c020f3dcec55eab664133b6c262cacaf0b79e3213"
+    },
+    {
+      "id": "roaring/synthetic_low_0p003_random_k10/cuvs_cagra",
+      "variant": "roaring",
+      "cases": [
+        "synthetic_low_0p003_random__k10__default_cagra",
+        "synthetic_low_0p003_random__k10__default_cagra_accumulator",
+        "synthetic_low_0p003_random__k10__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/roaring/synthetic_low_0p003_random_k10/cuvs_cagra.json",
+      "config_sha256": "84445f08b58d2ad76fb16a30b148fd9f0346fdd0a656627e713ddae359392020"
+    },
+    {
+      "id": "old/synthetic_low_0p003_random_k10/cuvs_ivf_flat",
+      "variant": "old",
+      "cases": [
+        "synthetic_low_0p003_random__k10__ivf_flat"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/synthetic_low_0p003_random_k10/cuvs_ivf_flat.json",
+      "config_sha256": "7876ff8ee47fcfe6f28302d991515495ded2975bfacca92978eec7a329cdd71e"
+    },
+    {
+      "id": "integrated/synthetic_low_0p003_random_k10/cuvs_ivf_flat",
+      "variant": "integrated",
+      "cases": [
+        "synthetic_low_0p003_random__k10__ivf_flat"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/synthetic_low_0p003_random_k10/cuvs_ivf_flat.json",
+      "config_sha256": "4f3e79966c061959f1841ddb4129793520e97defd4f704abb2533311857395ea"
+    },
+    {
+      "id": "old/synthetic_low_0p003_random_k10/cuvs_brute_force",
+      "variant": "old",
+      "cases": [
+        "synthetic_low_0p003_random__k10__exact"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/synthetic_low_0p003_random_k10/cuvs_brute_force.json",
+      "config_sha256": "b0a364a1efae646a39625c916ac161a1c6ced99b49addc1b076c946c509bf165"
+    },
+    {
+      "id": "integrated/synthetic_low_0p003_random_k10/cuvs_brute_force",
+      "variant": "integrated",
+      "cases": [
+        "synthetic_low_0p003_random__k10__exact"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/synthetic_low_0p003_random_k10/cuvs_brute_force.json",
+      "config_sha256": "b0a364a1efae646a39625c916ac161a1c6ced99b49addc1b076c946c509bf165"
+    },
+    {
+      "id": "old/synthetic_low_0p01_random_k10/cuvs_cagra",
+      "variant": "old",
+      "cases": [
+        "synthetic_low_0p01_random__k10__default_cagra",
+        "synthetic_low_0p01_random__k10__default_cagra_accumulator",
+        "synthetic_low_0p01_random__k10__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/synthetic_low_0p01_random_k10/cuvs_cagra.json",
+      "config_sha256": "746da359e7c107fccdb713637488a4392f1f5011c6f26fa9b603d6edc16b2659"
+    },
+    {
+      "id": "integrated/synthetic_low_0p01_random_k10/cuvs_cagra",
+      "variant": "integrated",
+      "cases": [
+        "synthetic_low_0p01_random__k10__default_cagra",
+        "synthetic_low_0p01_random__k10__default_cagra_accumulator",
+        "synthetic_low_0p01_random__k10__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/synthetic_low_0p01_random_k10/cuvs_cagra.json",
+      "config_sha256": "33eae1d5d07e5d0b2876a2588ef29a68c4063ee80335c6bcf44ffef020a41f02"
+    },
+    {
+      "id": "roaring/synthetic_low_0p01_random_k10/cuvs_cagra",
+      "variant": "roaring",
+      "cases": [
+        "synthetic_low_0p01_random__k10__default_cagra",
+        "synthetic_low_0p01_random__k10__default_cagra_accumulator",
+        "synthetic_low_0p01_random__k10__navix_reference"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/roaring/synthetic_low_0p01_random_k10/cuvs_cagra.json",
+      "config_sha256": "542413f5197f33d3b7ffc5171822ad4a14e625dcdb142cc5994a07f6144de0ea"
+    },
+    {
+      "id": "old/synthetic_low_0p01_random_k10/cuvs_ivf_flat",
+      "variant": "old",
+      "cases": [
+        "synthetic_low_0p01_random__k10__ivf_flat"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/synthetic_low_0p01_random_k10/cuvs_ivf_flat.json",
+      "config_sha256": "1daea005cb06948ac251693cfb09b1a93202156392db3503082ce988613b0b38"
+    },
+    {
+      "id": "integrated/synthetic_low_0p01_random_k10/cuvs_ivf_flat",
+      "variant": "integrated",
+      "cases": [
+        "synthetic_low_0p01_random__k10__ivf_flat"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/synthetic_low_0p01_random_k10/cuvs_ivf_flat.json",
+      "config_sha256": "c0d67806c3a18e00c569799b60cf6156d77b05ee7c55db063884d408d8a644c1"
+    },
+    {
+      "id": "old/synthetic_low_0p01_random_k10/cuvs_brute_force",
+      "variant": "old",
+      "cases": [
+        "synthetic_low_0p01_random__k10__exact"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/old/synthetic_low_0p01_random_k10/cuvs_brute_force.json",
+      "config_sha256": "7fb14e6f19027ea0b7ad343088b13ae63be28296ab2c3e57cf663ab860c30108"
+    },
+    {
+      "id": "integrated/synthetic_low_0p01_random_k10/cuvs_brute_force",
+      "variant": "integrated",
+      "cases": [
+        "synthetic_low_0p01_random__k10__exact"
+      ],
+      "config": "/data/cuvs-upstream-validation/benchmarks/configs/integrated/synthetic_low_0p01_random_k10/cuvs_brute_force.json",
+      "config_sha256": "7fb14e6f19027ea0b7ad343088b13ae63be28296ab2c3e57cf663ab860c30108"
+    }
+  ],
+  "native": [
+    {
+      "id": "yfcc__k10__default_cagra",
+      "config": "/data/cuvs-upstream-validation/benchmarks/native/configs/yfcc__k10__default_cagra.json"
+    },
+    {
+      "id": "em__k10__default_cagra",
+      "config": "/data/cuvs-upstream-validation/benchmarks/native/configs/em__k10__default_cagra.json"
+    },
+    {
+      "id": "emis__k10__default_cagra",
+      "config": "/data/cuvs-upstream-validation/benchmarks/native/configs/emis__k10__default_cagra.json"
+    },
+    {
+      "id": "r__k10__default_cagra",
+      "config": "/data/cuvs-upstream-validation/benchmarks/native/configs/r__k10__default_cagra.json"
+    },
+    {
+      "id": "yfcc__k100__default_cagra",
+      "config": "/data/cuvs-upstream-validation/benchmarks/native/configs/yfcc__k100__default_cagra.json"
+    },
+    {
+      "id": "em__k100__default_cagra",
+      "config": "/data/cuvs-upstream-validation/benchmarks/native/configs/em__k100__default_cagra.json"
+    },
+    {
+      "id": "emis__k100__default_cagra",
+      "config": "/data/cuvs-upstream-validation/benchmarks/native/configs/emis__k100__default_cagra.json"
+    },
+    {
+      "id": "r__k100__default_cagra",
+      "config": "/data/cuvs-upstream-validation/benchmarks/native/configs/r__k100__default_cagra.json"
+    },
+    {
+      "id": "synthetic_low_0p0001_random__k10__default_cagra",
+      "config": "/data/cuvs-upstream-validation/benchmarks/native/configs/synthetic_low_0p0001_random__k10__default_cagra.json"
+    },
+    {
+      "id": "synthetic_low_0p0003_random__k10__default_cagra",
+      "config": "/data/cuvs-upstream-validation/benchmarks/native/configs/synthetic_low_0p0003_random__k10__default_cagra.json"
+    },
+    {
+      "id": "synthetic_low_0p001_random__k10__default_cagra",
+      "config": "/data/cuvs-upstream-validation/benchmarks/native/configs/synthetic_low_0p001_random__k10__default_cagra.json"
+    },
+    {
+      "id": "synthetic_low_0p003_random__k10__default_cagra",
+      "config": "/data/cuvs-upstream-validation/benchmarks/native/configs/synthetic_low_0p003_random__k10__default_cagra.json"
+    },
+    {
+      "id": "synthetic_low_0p01_random__k10__default_cagra",
+      "config": "/data/cuvs-upstream-validation/benchmarks/native/configs/synthetic_low_0p01_random__k10__default_cagra.json"
+    }
+  ],
+  "sources": [
+    {
+      "source": "/data/retrieve_workshop_runs/a100_maxq2048_20260824T065013Z/matched_recall/configs/final_candidates/yfcc/shard_00.json",
+      "source_sha256": "663c78c6cbcb0827ec901a44c7bd44dbed6ed663b3458854199ecb11f70eb898",
+      "config": {
+        "dataset": {
+          "name": "retrieve-yfcc-throughput-q00000-02048",
+          "base_file": "yfcc-10M/base.10M.u8bin",
+          "query_file": "/data/retrieve_data/navix_bitmap/yfcc/throughput_10000/shard_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap/yfcc/throughput_10000/shard_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "uint8",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap/yfcc/throughput_10000/shard_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "yfcc-10M/cagra_g64_ig128.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 512,
+                "search_width": 1,
+                "max_iterations": 7569,
+                "favor_udf_passing_accumulator": false,
+                "require_identity_source_indices": true,
+                "bitmap_method": "default_cagra"
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "yfcc",
+      "k": 10,
+      "method": "default_cagra",
+      "selection": "frozen_paper",
+      "paper_recall": "0.64666",
+      "id": "yfcc__k10__default_cagra"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_maxq2048_20260824T065013Z/matched_recall/configs/final_candidates/yfcc/shard_00.json",
+      "source_sha256": "663c78c6cbcb0827ec901a44c7bd44dbed6ed663b3458854199ecb11f70eb898",
+      "config": {
+        "dataset": {
+          "name": "retrieve-yfcc-throughput-q00000-02048",
+          "base_file": "yfcc-10M/base.10M.u8bin",
+          "query_file": "/data/retrieve_data/navix_bitmap/yfcc/throughput_10000/shard_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap/yfcc/throughput_10000/shard_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "uint8",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap/yfcc/throughput_10000/shard_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "yfcc-10M/cagra_g64_ig128.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 32,
+                "search_width": 2,
+                "max_iterations": 340,
+                "favor_udf_passing_accumulator": true,
+                "require_identity_source_indices": true,
+                "bitmap_method": "default_cagra_accumulator"
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "yfcc",
+      "k": 10,
+      "method": "default_cagra_accumulator",
+      "selection": "frozen_paper",
+      "paper_recall": "0.80009",
+      "id": "yfcc__k10__default_cagra_accumulator"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_maxq2048_20260824T065013Z/matched_recall/configs/final_candidates/em/shard_00.json",
+      "source_sha256": "f540fbfab07e491d5c799d8ec6cfb3d188128c7e885ed2a92cd69d0909000a9a",
+      "config": {
+        "dataset": {
+          "name": "retrieve-em-throughput-q00000-02048",
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap/arxiv-large/em/throughput_10000/shard_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap/arxiv-large/em/throughput_10000/shard_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap/arxiv-large/em/throughput_10000/shard_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 74,
+                "search_width": 1,
+                "max_iterations": 0,
+                "favor_udf_passing_accumulator": false,
+                "require_identity_source_indices": true,
+                "bitmap_method": "default_cagra"
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "em",
+      "k": 10,
+      "method": "default_cagra",
+      "selection": "frozen_paper",
+      "paper_recall": "0.95019",
+      "id": "em__k10__default_cagra"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_maxq2048_20260824T065013Z/matched_recall/configs/final_candidates/em/shard_00.json",
+      "source_sha256": "f540fbfab07e491d5c799d8ec6cfb3d188128c7e885ed2a92cd69d0909000a9a",
+      "config": {
+        "dataset": {
+          "name": "retrieve-em-throughput-q00000-02048",
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap/arxiv-large/em/throughput_10000/shard_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap/arxiv-large/em/throughput_10000/shard_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap/arxiv-large/em/throughput_10000/shard_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 52,
+                "search_width": 1,
+                "max_iterations": 0,
+                "favor_udf_passing_accumulator": true,
+                "require_identity_source_indices": true,
+                "bitmap_method": "default_cagra_accumulator"
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "em",
+      "k": 10,
+      "method": "default_cagra_accumulator",
+      "selection": "frozen_paper",
+      "paper_recall": "0.95069",
+      "id": "em__k10__default_cagra_accumulator"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_maxq2048_20260824T065013Z/matched_recall/configs/final_candidates/emis/shard_00.json",
+      "source_sha256": "b4b6766d181cb16dd7a5aa5fdbdab9bc75ec1ecfafe7885fb087d4d5b52c76a0",
+      "config": {
+        "dataset": {
+          "name": "retrieve-emis-throughput-q00000-02048",
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap/arxiv-large/emis/throughput_10000/shard_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap/arxiv-large/emis/throughput_10000/shard_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap/arxiv-large/emis/throughput_10000/shard_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 512,
+                "search_width": 1,
+                "max_iterations": 7569,
+                "favor_udf_passing_accumulator": false,
+                "require_identity_source_indices": true,
+                "bitmap_method": "default_cagra"
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "emis",
+      "k": 10,
+      "method": "default_cagra",
+      "selection": "frozen_paper",
+      "paper_recall": "0.71163",
+      "id": "emis__k10__default_cagra"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_maxq2048_20260824T065013Z/matched_recall/configs/final_candidates/emis/shard_00.json",
+      "source_sha256": "b4b6766d181cb16dd7a5aa5fdbdab9bc75ec1ecfafe7885fb087d4d5b52c76a0",
+      "config": {
+        "dataset": {
+          "name": "retrieve-emis-throughput-q00000-02048",
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap/arxiv-large/emis/throughput_10000/shard_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap/arxiv-large/emis/throughput_10000/shard_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap/arxiv-large/emis/throughput_10000/shard_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 32,
+                "search_width": 2,
+                "max_iterations": 2475,
+                "favor_udf_passing_accumulator": true,
+                "require_identity_source_indices": true,
+                "bitmap_method": "default_cagra_accumulator"
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "emis",
+      "k": 10,
+      "method": "default_cagra_accumulator",
+      "selection": "frozen_paper",
+      "paper_recall": "0.95001",
+      "id": "emis__k10__default_cagra_accumulator"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_maxq2048_20260824T065013Z/matched_recall/configs/final_candidates/r/shard_00.json",
+      "source_sha256": "934a385e521332fba382e4bd8484259531d7f3276ded52970bfc151327091ecc",
+      "config": {
+        "dataset": {
+          "name": "retrieve-r-throughput-q00000-02048",
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap/arxiv-large/r/throughput_10000/shard_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap/arxiv-large/r/throughput_10000/shard_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap/arxiv-large/r/throughput_10000/shard_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 146,
+                "search_width": 2,
+                "max_iterations": 0,
+                "favor_udf_passing_accumulator": false,
+                "require_identity_source_indices": true,
+                "bitmap_method": "default_cagra"
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "r",
+      "k": 10,
+      "method": "default_cagra",
+      "selection": "frozen_paper",
+      "paper_recall": "0.95008",
+      "id": "r__k10__default_cagra"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_maxq2048_20260824T065013Z/matched_recall/configs/final_candidates/r/shard_00.json",
+      "source_sha256": "934a385e521332fba382e4bd8484259531d7f3276ded52970bfc151327091ecc",
+      "config": {
+        "dataset": {
+          "name": "retrieve-r-throughput-q00000-02048",
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap/arxiv-large/r/throughput_10000/shard_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap/arxiv-large/r/throughput_10000/shard_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap/arxiv-large/r/throughput_10000/shard_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 68,
+                "search_width": 2,
+                "max_iterations": 0,
+                "favor_udf_passing_accumulator": true,
+                "require_identity_source_indices": true,
+                "bitmap_method": "default_cagra_accumulator"
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "r",
+      "k": 10,
+      "method": "default_cagra_accumulator",
+      "selection": "frozen_paper",
+      "paper_recall": "0.95001",
+      "id": "r__k10__default_cagra_accumulator"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_k10_wd_all_20260826T233255Z/matched_recall/configs/final_candidates/yfcc/shard_00.json",
+      "source_sha256": "93124f9f192f2e048d612c191d8e60a51e19ea7435d91f8cab582cb1bf59a215",
+      "config": {
+        "dataset": {
+          "name": "retrieve-yfcc-throughput-q00000-02048",
+          "base_file": "yfcc-10M/base.10M.u8bin",
+          "query_file": "/data/retrieve_data/navix_bitmap/yfcc/throughput_10000/shard_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap/yfcc/throughput_10000/shard_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "uint8",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap/yfcc/throughput_10000/shard_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "yfcc-10M/cagra_g64_ig128.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 27,
+                "search_width": 1,
+                "max_iterations": 0,
+                "favor_udf_passing_accumulator": false,
+                "require_identity_source_indices": true,
+                "bitmap_method": "navix_reference",
+                "navix_mode": "adaptive_kuzu",
+                "navix_scheduler": "tiled",
+                "navix_bitmap_seeds": true,
+                "navix_kernel_variant": "reference",
+                "navix_seed_cap": 64
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "yfcc",
+      "k": 10,
+      "method": "navix_reference",
+      "selection": "frozen_paper",
+      "paper_recall": "0.80112",
+      "id": "yfcc__k10__navix_reference"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_k10_wd_all_20260826T233255Z/matched_recall/configs/final_candidates/em/shard_00.json",
+      "source_sha256": "14de7a95b644d60fbf6917f47ed8ae12c64e1dcbff58f5fb5abe39cd399e35b6",
+      "config": {
+        "dataset": {
+          "name": "retrieve-em-throughput-q00000-02048",
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap/arxiv-large/em/throughput_10000/shard_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap/arxiv-large/em/throughput_10000/shard_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap/arxiv-large/em/throughput_10000/shard_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 29,
+                "search_width": 1,
+                "max_iterations": 0,
+                "favor_udf_passing_accumulator": false,
+                "require_identity_source_indices": true,
+                "bitmap_method": "navix_reference",
+                "navix_mode": "adaptive_kuzu",
+                "navix_scheduler": "tiled",
+                "navix_bitmap_seeds": true,
+                "navix_kernel_variant": "reference",
+                "navix_seed_cap": 64
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "em",
+      "k": 10,
+      "method": "navix_reference",
+      "selection": "frozen_paper",
+      "paper_recall": "0.95113",
+      "id": "em__k10__navix_reference"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_k10_wd_all_20260826T233255Z/matched_recall/configs/final_candidates/emis/shard_00.json",
+      "source_sha256": "b895b9284d3eade3e12530260aca8f7609b502aff7c60418f1b414da605a3323",
+      "config": {
+        "dataset": {
+          "name": "retrieve-emis-throughput-q00000-02048",
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap/arxiv-large/emis/throughput_10000/shard_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap/arxiv-large/emis/throughput_10000/shard_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap/arxiv-large/emis/throughput_10000/shard_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 54,
+                "search_width": 2,
+                "max_iterations": 0,
+                "favor_udf_passing_accumulator": false,
+                "require_identity_source_indices": true,
+                "bitmap_method": "navix_reference",
+                "navix_mode": "adaptive_kuzu",
+                "navix_scheduler": "tiled",
+                "navix_bitmap_seeds": true,
+                "navix_kernel_variant": "reference",
+                "navix_seed_cap": 128
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "emis",
+      "k": 10,
+      "method": "navix_reference",
+      "selection": "frozen_paper",
+      "paper_recall": "0.95061",
+      "id": "emis__k10__navix_reference"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_k10_wd_all_20260826T233255Z/matched_recall/configs/final_candidates/r/shard_00.json",
+      "source_sha256": "020dee3249dd6d6f92db7087651dd4ef46bb90558bfb881d532863c3f4eb2d26",
+      "config": {
+        "dataset": {
+          "name": "retrieve-r-throughput-q00000-02048",
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap/arxiv-large/r/throughput_10000/shard_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap/arxiv-large/r/throughput_10000/shard_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap/arxiv-large/r/throughput_10000/shard_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 29,
+                "search_width": 1,
+                "max_iterations": 0,
+                "favor_udf_passing_accumulator": false,
+                "require_identity_source_indices": true,
+                "bitmap_method": "navix_reference",
+                "navix_mode": "adaptive_kuzu",
+                "navix_scheduler": "tiled",
+                "navix_bitmap_seeds": true,
+                "navix_kernel_variant": "reference",
+                "navix_seed_cap": 64
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "r",
+      "k": 10,
+      "method": "navix_reference",
+      "selection": "frozen_paper",
+      "paper_recall": "0.95132",
+      "id": "r__k10__navix_reference"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_k100_20260825T232747Z/matched_recall/configs/final_candidates/yfcc/shard_00.json",
+      "source_sha256": "c07fc4af34c1dd7dfcb5863881bf2df3fbb739210d9c49b644a0b210edf753a6",
+      "config": {
+        "dataset": {
+          "name": "retrieve-yfcc-throughput-q00000-02048",
+          "base_file": "yfcc-10M/base.10M.u8bin",
+          "query_file": "/data/retrieve_data/navix_bitmap_k100/yfcc/throughput_10000/shard_00_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap_k100/yfcc/throughput_10000/shard_00_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "uint8",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap_k100/yfcc/throughput_10000/shard_00_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 100
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "yfcc-10M/cagra_g64_ig128.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 512,
+                "search_width": 1,
+                "max_iterations": 7569,
+                "favor_udf_passing_accumulator": false,
+                "require_identity_source_indices": true,
+                "bitmap_method": "default_cagra",
+                "k": 100
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "yfcc",
+      "k": 100,
+      "method": "default_cagra",
+      "selection": "frozen_paper",
+      "paper_recall": "0.3352768395506517",
+      "id": "yfcc__k100__default_cagra"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_k100_20260825T232747Z/matched_recall/configs/final_candidates/yfcc/shard_00.json",
+      "source_sha256": "c07fc4af34c1dd7dfcb5863881bf2df3fbb739210d9c49b644a0b210edf753a6",
+      "config": {
+        "dataset": {
+          "name": "retrieve-yfcc-throughput-q00000-02048",
+          "base_file": "yfcc-10M/base.10M.u8bin",
+          "query_file": "/data/retrieve_data/navix_bitmap_k100/yfcc/throughput_10000/shard_00_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap_k100/yfcc/throughput_10000/shard_00_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "uint8",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap_k100/yfcc/throughput_10000/shard_00_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 100
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "yfcc-10M/cagra_g64_ig128.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 100,
+                "search_width": 1,
+                "max_iterations": 7569,
+                "favor_udf_passing_accumulator": true,
+                "require_identity_source_indices": true,
+                "bitmap_method": "default_cagra_accumulator",
+                "k": 100
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "yfcc",
+      "k": 100,
+      "method": "default_cagra_accumulator",
+      "selection": "frozen_paper",
+      "paper_recall": "0.7818499336986163",
+      "id": "yfcc__k100__default_cagra_accumulator"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_k100_wd_20260827T031138Z/matched_recall/configs/final_candidates/yfcc/shard_00.json",
+      "source_sha256": "4cce4758b0d24908753ed5771214d190b9fdde7b51efbe4e55030928c80c1653",
+      "config": {
+        "dataset": {
+          "name": "retrieve-yfcc-throughput-q00000-02048",
+          "base_file": "yfcc-10M/base.10M.u8bin",
+          "query_file": "/data/retrieve_data/navix_bitmap_k100/yfcc/throughput_10000/shard_00_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap_k100/yfcc/throughput_10000/shard_00_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "uint8",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap_k100/yfcc/throughput_10000/shard_00_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 100
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "yfcc-10M/cagra_g64_ig128.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 100,
+                "search_width": 2,
+                "max_iterations": 25,
+                "favor_udf_passing_accumulator": false,
+                "require_identity_source_indices": true,
+                "bitmap_method": "navix_reference",
+                "k": 100,
+                "navix_mode": "adaptive_kuzu",
+                "navix_scheduler": "tiled",
+                "navix_bitmap_seeds": true,
+                "navix_kernel_variant": "reference",
+                "navix_seed_cap": 128
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "yfcc",
+      "k": 100,
+      "method": "navix_reference",
+      "selection": "frozen_paper",
+      "paper_recall": "0.8009537391478396",
+      "id": "yfcc__k100__navix_reference"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_k100_20260825T232747Z/matched_recall/configs/final_candidates/em/shard_00.json",
+      "source_sha256": "d92ed838667387c1e724b8891241802d7ca1bebe418d070d11268dc9f2356232",
+      "config": {
+        "dataset": {
+          "name": "retrieve-em-throughput-q00000-02048",
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/em/throughput_10000/shard_00_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/em/throughput_10000/shard_00_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/em/throughput_10000/shard_00_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 100
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 512,
+                "search_width": 2,
+                "max_iterations": 351,
+                "favor_udf_passing_accumulator": false,
+                "require_identity_source_indices": true,
+                "bitmap_method": "default_cagra",
+                "k": 100
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "em",
+      "k": 100,
+      "method": "default_cagra",
+      "selection": "frozen_paper",
+      "paper_recall": "0.950016",
+      "id": "em__k100__default_cagra"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_k100_20260825T232747Z/matched_recall/configs/final_candidates/em/shard_00.json",
+      "source_sha256": "d92ed838667387c1e724b8891241802d7ca1bebe418d070d11268dc9f2356232",
+      "config": {
+        "dataset": {
+          "name": "retrieve-em-throughput-q00000-02048",
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/em/throughput_10000/shard_00_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/em/throughput_10000/shard_00_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/em/throughput_10000/shard_00_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 100
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 200,
+                "search_width": 2,
+                "max_iterations": 0,
+                "favor_udf_passing_accumulator": true,
+                "require_identity_source_indices": true,
+                "bitmap_method": "default_cagra_accumulator",
+                "k": 100
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "em",
+      "k": 100,
+      "method": "default_cagra_accumulator",
+      "selection": "frozen_paper",
+      "paper_recall": "0.950175",
+      "id": "em__k100__default_cagra_accumulator"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_k100_wd_20260827T031138Z/matched_recall/configs/final_candidates/em/shard_00.json",
+      "source_sha256": "e39bbde17188b57af6b29a401969e19ca11ee503a7e51fa4d26cc85b6b8abdea",
+      "config": {
+        "dataset": {
+          "name": "retrieve-em-throughput-q00000-02048",
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/em/throughput_10000/shard_00_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/em/throughput_10000/shard_00_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/em/throughput_10000/shard_00_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 100
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 100,
+                "search_width": 1,
+                "max_iterations": 73,
+                "favor_udf_passing_accumulator": false,
+                "require_identity_source_indices": true,
+                "bitmap_method": "navix_reference",
+                "k": 100,
+                "navix_mode": "adaptive_kuzu",
+                "navix_scheduler": "tiled",
+                "navix_bitmap_seeds": true,
+                "navix_kernel_variant": "reference",
+                "navix_seed_cap": 64
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "em",
+      "k": 100,
+      "method": "navix_reference",
+      "selection": "frozen_paper",
+      "paper_recall": "0.950959",
+      "id": "em__k100__navix_reference"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_k100_20260825T232747Z/matched_recall/configs/final_candidates/emis/shard_00.json",
+      "source_sha256": "64fde437c362dba5da65ba590658e9e503409ccced4972e8ab8c4987df81029c",
+      "config": {
+        "dataset": {
+          "name": "retrieve-emis-throughput-q00000-02048",
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/emis/throughput_10000/shard_00_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/emis/throughput_10000/shard_00_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/emis/throughput_10000/shard_00_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 100
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 512,
+                "search_width": 1,
+                "max_iterations": 7569,
+                "favor_udf_passing_accumulator": false,
+                "require_identity_source_indices": true,
+                "bitmap_method": "default_cagra",
+                "k": 100
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "emis",
+      "k": 100,
+      "method": "default_cagra",
+      "selection": "frozen_paper",
+      "paper_recall": "0.480898",
+      "id": "emis__k100__default_cagra"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_k100_20260825T232747Z/matched_recall/configs/final_candidates/emis/shard_00.json",
+      "source_sha256": "64fde437c362dba5da65ba590658e9e503409ccced4972e8ab8c4987df81029c",
+      "config": {
+        "dataset": {
+          "name": "retrieve-emis-throughput-q00000-02048",
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/emis/throughput_10000/shard_00_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/emis/throughput_10000/shard_00_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/emis/throughput_10000/shard_00_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 100
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 128,
+                "search_width": 1,
+                "max_iterations": 7569,
+                "favor_udf_passing_accumulator": true,
+                "require_identity_source_indices": true,
+                "bitmap_method": "default_cagra_accumulator",
+                "k": 100
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "emis",
+      "k": 100,
+      "method": "default_cagra_accumulator",
+      "selection": "frozen_paper",
+      "paper_recall": "0.91649",
+      "id": "emis__k100__default_cagra_accumulator"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_k100_wd_20260827T031138Z/matched_recall/configs/final_candidates/emis/shard_00.json",
+      "source_sha256": "a18dc4338baf499f57b341590191a33d5bfd6706343a6cf4199a852cb0bd365d",
+      "config": {
+        "dataset": {
+          "name": "retrieve-emis-throughput-q00000-02048",
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/emis/throughput_10000/shard_00_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/emis/throughput_10000/shard_00_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/emis/throughput_10000/shard_00_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 100
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 100,
+                "search_width": 1,
+                "max_iterations": 0,
+                "favor_udf_passing_accumulator": false,
+                "require_identity_source_indices": true,
+                "bitmap_method": "navix_reference",
+                "k": 100,
+                "navix_mode": "adaptive_kuzu",
+                "navix_scheduler": "tiled",
+                "navix_bitmap_seeds": true,
+                "navix_kernel_variant": "reference",
+                "navix_seed_cap": 64
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "emis",
+      "k": 100,
+      "method": "navix_reference",
+      "selection": "frozen_paper",
+      "paper_recall": "0.951598",
+      "id": "emis__k100__navix_reference"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_k100_20260825T232747Z/matched_recall/configs/final_candidates/r/shard_00.json",
+      "source_sha256": "72a4c99dd810f0470094793c334742d442e6f549b3ec4f0052be534eba054997",
+      "config": {
+        "dataset": {
+          "name": "retrieve-r-throughput-q00000-02048",
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/r/throughput_10000/shard_00_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/r/throughput_10000/shard_00_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/r/throughput_10000/shard_00_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 100
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 512,
+                "search_width": 1,
+                "max_iterations": 7569,
+                "favor_udf_passing_accumulator": false,
+                "require_identity_source_indices": true,
+                "bitmap_method": "default_cagra",
+                "k": 100
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "r",
+      "k": 100,
+      "method": "default_cagra",
+      "selection": "frozen_paper",
+      "paper_recall": "0.936064",
+      "id": "r__k100__default_cagra"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_k100_20260825T232747Z/matched_recall/configs/final_candidates/r/shard_00.json",
+      "source_sha256": "72a4c99dd810f0470094793c334742d442e6f549b3ec4f0052be534eba054997",
+      "config": {
+        "dataset": {
+          "name": "retrieve-r-throughput-q00000-02048",
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/r/throughput_10000/shard_00_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/r/throughput_10000/shard_00_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/r/throughput_10000/shard_00_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 100
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 314,
+                "search_width": 2,
+                "max_iterations": 0,
+                "favor_udf_passing_accumulator": true,
+                "require_identity_source_indices": true,
+                "bitmap_method": "default_cagra_accumulator",
+                "k": 100
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "r",
+      "k": 100,
+      "method": "default_cagra_accumulator",
+      "selection": "frozen_paper",
+      "paper_recall": "0.95022",
+      "id": "r__k100__default_cagra_accumulator"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_k100_wd_20260827T031138Z/matched_recall/configs/final_candidates/r/shard_00.json",
+      "source_sha256": "025439e92807666c10ea6a31074587f52789aa99d9bf55e37030daa11e14d4ac",
+      "config": {
+        "dataset": {
+          "name": "retrieve-r-throughput-q00000-02048",
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/r/throughput_10000/shard_00_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/r/throughput_10000/shard_00_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/r/throughput_10000/shard_00_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 100
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 100,
+                "search_width": 1,
+                "max_iterations": 75,
+                "favor_udf_passing_accumulator": false,
+                "require_identity_source_indices": true,
+                "bitmap_method": "navix_reference",
+                "k": 100,
+                "navix_mode": "adaptive_kuzu",
+                "navix_scheduler": "tiled",
+                "navix_bitmap_seeds": true,
+                "navix_kernel_variant": "reference",
+                "navix_seed_cap": 64
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "r",
+      "k": 100,
+      "method": "navix_reference",
+      "selection": "frozen_paper",
+      "paper_recall": "0.950509",
+      "id": "r__k100__navix_reference"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_ivf_bitmap_20261014T024338Z/configs/final/yfcc_flat_n4096/yfcc_k10/selected/shard_00.json",
+      "source_sha256": "290596fdb9eeee675c748de9dcf8a1ebb296f63d6de6fe1cd3c73e884e601b9d",
+      "config": {
+        "dataset": {
+          "name": "paper-yfcc-k10-q0",
+          "base_file": "/data/retrieve_data/yfcc-10M/base.10M.u8bin",
+          "query_file": "/data/retrieve_data/navix_bitmap/yfcc/throughput_10000/shard_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap/yfcc/throughput_10000/shard_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "uint8",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap/yfcc/throughput_10000/shard_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "k": 10,
+          "batch_size": 2048
+        },
+        "index": [
+          {
+            "name": "ivf-yfcc_flat_n4096_p34_f1",
+            "algo": "cuvs_ivf_flat",
+            "file": "/data/retrieve_workshop_runs/a100_ivf_bitmap_20261014T024338Z/indices/yfcc_flat_n4096.index",
+            "build_param": {
+              "nlist": 4096,
+              "niter": 25,
+              "ratio": 10
+            },
+            "search_params": [
+              {
+                "nprobe": 34,
+                "n_queries": 2048,
+                "k": 10
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "yfcc",
+      "k": 10,
+      "method": "ivf_flat",
+      "selection": "frozen_matched",
+      "id": "yfcc__k10__ivf_flat"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_ivf_bitmap_20261014T024338Z/configs/final/yfcc_flat_n2048/yfcc_k100/selected/shard_00.json",
+      "source_sha256": "c02bb327fd9a01b1f087c494710e7c24acec9a7762e2cc4f044592623ab92da5",
+      "config": {
+        "dataset": {
+          "name": "paper-yfcc-k100-q0",
+          "base_file": "/data/retrieve_data/yfcc-10M/base.10M.u8bin",
+          "query_file": "/data/retrieve_data/navix_bitmap_k100/yfcc/throughput_10000/shard_00_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap_k100/yfcc/throughput_10000/shard_00_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "uint8",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap_k100/yfcc/throughput_10000/shard_00_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "k": 100,
+          "batch_size": 2048
+        },
+        "index": [
+          {
+            "name": "ivf-yfcc_flat_n2048_p99_f1",
+            "algo": "cuvs_ivf_flat",
+            "file": "/data/retrieve_workshop_runs/a100_ivf_bitmap_20261014T024338Z/indices/yfcc_flat_n2048.index",
+            "build_param": {
+              "nlist": 2048,
+              "niter": 25,
+              "ratio": 10
+            },
+            "search_params": [
+              {
+                "nprobe": 99,
+                "n_queries": 2048,
+                "k": 100
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "yfcc",
+      "k": 100,
+      "method": "ivf_flat",
+      "selection": "frozen_matched",
+      "id": "yfcc__k100__ivf_flat"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_ivf_bitmap_20261014T024338Z/configs/calibration/arxiv_flat_n4096/em_k10/refine_00/shard_00.json",
+      "source_sha256": "6c06306d7a86d17aae7a906fdb8afede5343ff3f01b23ee0651129b8d21a2d52",
+      "config": {
+        "dataset": {
+          "name": "paper-em-k10-q0",
+          "base_file": "/data/retrieve_data/arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap/arxiv-large/em/throughput_10000/shard_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap/arxiv-large/em/throughput_10000/shard_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap/arxiv-large/em/throughput_10000/shard_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "k": 10,
+          "batch_size": 2048
+        },
+        "index": [
+          {
+            "name": "ivf-arxiv_flat_n4096_p62_f1",
+            "algo": "cuvs_ivf_flat",
+            "file": "/data/retrieve_workshop_runs/a100_ivf_bitmap_20261014T024338Z/indices/arxiv_flat_n4096.index",
+            "build_param": {
+              "nlist": 4096,
+              "niter": 25,
+              "ratio": 10
+            },
+            "search_params": [
+              {
+                "nprobe": 62,
+                "n_queries": 2048,
+                "k": 10
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "em",
+      "k": 10,
+      "method": "ivf_flat",
+      "selection": "frozen_matched",
+      "id": "em__k10__ivf_flat"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_ivf_bitmap_20261014T024338Z/configs/calibration/arxiv_flat_n4096/em_k100/refine_01/shard_00.json",
+      "source_sha256": "8fa21fe408dfc798772c65c29434a7917af2d28742c7c181f9206b6af236a928",
+      "config": {
+        "dataset": {
+          "name": "paper-em-k100-q0",
+          "base_file": "/data/retrieve_data/arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/em/throughput_10000/shard_00_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/em/throughput_10000/shard_00_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/em/throughput_10000/shard_00_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "k": 100,
+          "batch_size": 2048
+        },
+        "index": [
+          {
+            "name": "ivf-arxiv_flat_n4096_p105_f1",
+            "algo": "cuvs_ivf_flat",
+            "file": "/data/retrieve_workshop_runs/a100_ivf_bitmap_20261014T024338Z/indices/arxiv_flat_n4096.index",
+            "build_param": {
+              "nlist": 4096,
+              "niter": 25,
+              "ratio": 10
+            },
+            "search_params": [
+              {
+                "nprobe": 105,
+                "n_queries": 2048,
+                "k": 100
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "em",
+      "k": 100,
+      "method": "ivf_flat",
+      "selection": "frozen_matched",
+      "id": "em__k100__ivf_flat"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_ivf_bitmap_20261014T024338Z/configs/calibration/arxiv_flat_n4096/emis_k10/refine_01/shard_00.json",
+      "source_sha256": "3cb65b40063e68f4fa24a5e1b700e12a4fbab1c7ab9933a38827481b780bbcc5",
+      "config": {
+        "dataset": {
+          "name": "paper-emis-k10-q0",
+          "base_file": "/data/retrieve_data/arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap/arxiv-large/emis/throughput_10000/shard_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap/arxiv-large/emis/throughput_10000/shard_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap/arxiv-large/emis/throughput_10000/shard_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "k": 10,
+          "batch_size": 2048
+        },
+        "index": [
+          {
+            "name": "ivf-arxiv_flat_n4096_p766_f1",
+            "algo": "cuvs_ivf_flat",
+            "file": "/data/retrieve_workshop_runs/a100_ivf_bitmap_20261014T024338Z/indices/arxiv_flat_n4096.index",
+            "build_param": {
+              "nlist": 4096,
+              "niter": 25,
+              "ratio": 10
+            },
+            "search_params": [
+              {
+                "nprobe": 766,
+                "n_queries": 2048,
+                "k": 10
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "emis",
+      "k": 10,
+      "method": "ivf_flat",
+      "selection": "frozen_matched",
+      "id": "emis__k10__ivf_flat"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_ivf_bitmap_20261014T024338Z/configs/calibration/arxiv_flat_n4096/emis_k100/refine_02/shard_00.json",
+      "source_sha256": "529fa6fe835499d431bd5272df1db344527ebe1c912bff429d763a675f082b47",
+      "config": {
+        "dataset": {
+          "name": "paper-emis-k100-q0",
+          "base_file": "/data/retrieve_data/arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/emis/throughput_10000/shard_00_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/emis/throughput_10000/shard_00_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/emis/throughput_10000/shard_00_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "k": 100,
+          "batch_size": 2048
+        },
+        "index": [
+          {
+            "name": "ivf-arxiv_flat_n4096_p1204_f1",
+            "algo": "cuvs_ivf_flat",
+            "file": "/data/retrieve_workshop_runs/a100_ivf_bitmap_20261014T024338Z/indices/arxiv_flat_n4096.index",
+            "build_param": {
+              "nlist": 4096,
+              "niter": 25,
+              "ratio": 10
+            },
+            "search_params": [
+              {
+                "nprobe": 1204,
+                "n_queries": 2048,
+                "k": 100
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "emis",
+      "k": 100,
+      "method": "ivf_flat",
+      "selection": "frozen_matched",
+      "id": "emis__k100__ivf_flat"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_ivf_bitmap_20261014T024338Z/configs/calibration/arxiv_flat_n4096/r_k10/refine_01/shard_00.json",
+      "source_sha256": "e6db6b3b5f632fcab3636ed89f95be734a710f80bcdfc52dc6b6465c9b12ad48",
+      "config": {
+        "dataset": {
+          "name": "paper-r-k10-q0",
+          "base_file": "/data/retrieve_data/arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap/arxiv-large/r/throughput_10000/shard_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap/arxiv-large/r/throughput_10000/shard_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap/arxiv-large/r/throughput_10000/shard_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "k": 10,
+          "batch_size": 2048
+        },
+        "index": [
+          {
+            "name": "ivf-arxiv_flat_n4096_p58_f1",
+            "algo": "cuvs_ivf_flat",
+            "file": "/data/retrieve_workshop_runs/a100_ivf_bitmap_20261014T024338Z/indices/arxiv_flat_n4096.index",
+            "build_param": {
+              "nlist": 4096,
+              "niter": 25,
+              "ratio": 10
+            },
+            "search_params": [
+              {
+                "nprobe": 58,
+                "n_queries": 2048,
+                "k": 10
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "r",
+      "k": 10,
+      "method": "ivf_flat",
+      "selection": "frozen_matched",
+      "id": "r__k10__ivf_flat"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_ivf_bitmap_20261014T024338Z/configs/calibration/arxiv_flat_n4096/r_k100/refine_01/shard_00.json",
+      "source_sha256": "848eed3d01339fc2db699078ef9785d04f8d6e2979e97e4172bb9e147b1b4c1c",
+      "config": {
+        "dataset": {
+          "name": "paper-r-k100-q0",
+          "base_file": "/data/retrieve_data/arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/r/throughput_10000/shard_00_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/r/throughput_10000/shard_00_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/r/throughput_10000/shard_00_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "k": 100,
+          "batch_size": 2048
+        },
+        "index": [
+          {
+            "name": "ivf-arxiv_flat_n4096_p101_f1",
+            "algo": "cuvs_ivf_flat",
+            "file": "/data/retrieve_workshop_runs/a100_ivf_bitmap_20261014T024338Z/indices/arxiv_flat_n4096.index",
+            "build_param": {
+              "nlist": 4096,
+              "niter": 25,
+              "ratio": 10
+            },
+            "search_params": [
+              {
+                "nprobe": 101,
+                "n_queries": 2048,
+                "k": 100
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "r",
+      "k": 100,
+      "method": "ivf_flat",
+      "selection": "frozen_matched",
+      "id": "r__k100__ivf_flat"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/graph/configs/deep_i4176_synthetic_low_0p0001_random_default_cagra/synthetic_low_0p0001_random/shard_00.json",
+      "source_sha256": "958dc79636bac556a72a9cf26922caf8120213f25ec0809a851cbd6064bac15a",
+      "config": {
+        "dataset": {
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0001_random/shard_00000_02048/filter.bitmap",
+            "kind": "bitmap"
+          },
+          "groundtruth_neighbors_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0001_random/shard_00000_02048/groundtruth.ibin",
+          "name": "retrieve-synthetic_low_0p0001_random-throughput-q00000-02048",
+          "query_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0001_random/shard_00000_02048/query.bin"
+        },
+        "index": [
+          {
+            "algo": "cuvs_cagra",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "name": "cagra-g64-ig128",
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "bitmap_method": "default_cagra",
+                "favor_udf_passing_accumulator": false,
+                "filter_mode": "default",
+                "itopk": 512,
+                "max_iterations": 4092,
+                "max_queries": 2048,
+                "require_identity_source_indices": true,
+                "search_width": 2
+              }
+            ]
+          }
+        ],
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        }
+      },
+      "cohort": "synthetic_low_0p0001_random",
+      "k": 10,
+      "method": "default_cagra",
+      "selection": "max_observed_recall",
+      "id": "synthetic_low_0p0001_random__k10__default_cagra"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/graph/configs/deep_i4176_synthetic_low_0p0001_random_default_cagra_accumulator/synthetic_low_0p0001_random/shard_00.json",
+      "source_sha256": "29271f8ca035fdfabf440496d25f64c15efcd9de875145cd39b6085bb559044a",
+      "config": {
+        "dataset": {
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0001_random/shard_00000_02048/filter.bitmap",
+            "kind": "bitmap"
+          },
+          "groundtruth_neighbors_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0001_random/shard_00000_02048/groundtruth.ibin",
+          "name": "retrieve-synthetic_low_0p0001_random-throughput-q00000-02048",
+          "query_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0001_random/shard_00000_02048/query.bin"
+        },
+        "index": [
+          {
+            "algo": "cuvs_cagra",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "name": "cagra-g64-ig128",
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "bitmap_method": "default_cagra_accumulator",
+                "favor_udf_passing_accumulator": true,
+                "filter_mode": "default",
+                "itopk": 512,
+                "max_iterations": 4092,
+                "max_queries": 2048,
+                "require_identity_source_indices": true,
+                "search_width": 2
+              }
+            ]
+          }
+        ],
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        }
+      },
+      "cohort": "synthetic_low_0p0001_random",
+      "k": 10,
+      "method": "default_cagra_accumulator",
+      "selection": "max_observed_recall",
+      "id": "synthetic_low_0p0001_random__k10__default_cagra_accumulator"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/graph/configs/b0/synthetic_low_0p0001_random/shard_00.json",
+      "source_sha256": "a0fedfceda4bc3cbc6dc5c8dff243db9dfdf1f2da879ab1f2748948eea928aa5",
+      "config": {
+        "dataset": {
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0001_random/shard_00000_02048/filter.bitmap",
+            "kind": "bitmap"
+          },
+          "groundtruth_neighbors_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0001_random/shard_00000_02048/groundtruth.ibin",
+          "name": "retrieve-synthetic_low_0p0001_random-throughput-q00000-02048",
+          "query_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0001_random/shard_00000_02048/query.bin"
+        },
+        "index": [
+          {
+            "algo": "cuvs_cagra",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "name": "cagra-g64-ig128",
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "bitmap_method": "navix_reference",
+                "favor_udf_passing_accumulator": false,
+                "filter_mode": "default",
+                "itopk": 256,
+                "max_iterations": 0,
+                "max_queries": 2048,
+                "navix_bitmap_seeds": true,
+                "navix_kernel_variant": "reference",
+                "navix_mode": "adaptive_kuzu",
+                "navix_scheduler": "tiled",
+                "navix_seed_cap": 128,
+                "require_identity_source_indices": true,
+                "search_width": 2
+              }
+            ]
+          }
+        ],
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        }
+      },
+      "cohort": "synthetic_low_0p0001_random",
+      "k": 10,
+      "method": "navix_reference",
+      "selection": "max_observed_recall",
+      "id": "synthetic_low_0p0001_random__k10__navix_reference"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_ivf_flat_sparse_20261015T025433Z/configs/final/arxiv_flat_n2048/synthetic_low_0p0001_random_k10/selected/shard_00.json",
+      "source_sha256": "3c1bb095781790e00a37349404902cdd32120c26c970a945a7c32acf6c5fcdc7",
+      "config": {
+        "dataset": {
+          "name": "paper-synthetic_low_0p0001_random-k10-q0",
+          "base_file": "/data/retrieve_data/arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0001_random/shard_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0001_random/shard_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0001_random/shard_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "k": 10,
+          "batch_size": 2048
+        },
+        "index": [
+          {
+            "name": "ivf-arxiv_flat_n2048_p471_f1",
+            "algo": "cuvs_ivf_flat",
+            "file": "/data/retrieve_workshop_runs/a100_ivf_bitmap_20261014T024338Z/indices/arxiv_flat_n2048.index",
+            "build_param": {
+              "nlist": 2048,
+              "niter": 25,
+              "ratio": 10
+            },
+            "search_params": [
+              {
+                "nprobe": 471,
+                "n_queries": 2048,
+                "k": 10
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "synthetic_low_0p0001_random",
+      "k": 10,
+      "method": "ivf_flat",
+      "selection": "frozen_matched",
+      "id": "synthetic_low_0p0001_random__k10__ivf_flat"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/exact/configs/synthetic_low_0p0001_random/control.json",
+      "source_sha256": "d2a3253c946de18069ec8e88bab1cf71a148eac3c7b8300a5d2074f046bc8137",
+      "config": {
+        "dataset": {
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0001_random/shard_00000_02048/filter.bitmap",
+            "kind": "bitmap"
+          },
+          "groundtruth_neighbors_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0001_random/shard_00000_02048/groundtruth.ibin",
+          "name": "selectivity-synthetic_low_0p0001_random-exact-control",
+          "query_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0001_random/shard_00000_02048/query.bin"
+        },
+        "index": [
+          {
+            "algo": "cuvs_brute_force",
+            "build_param": {},
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/state/cuvs_brute_force.index",
+            "name": "cuvs-exact-bitmap",
+            "search_params": [
+              {
+                "exact_control": "bitmap_count_csr_search",
+                "native_l2_cutoff_validation": true,
+                "resident_bitmap": true
+              }
+            ]
+          }
+        ],
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        }
+      },
+      "cohort": "synthetic_low_0p0001_random",
+      "k": 10,
+      "method": "exact",
+      "selection": "exact_control",
+      "id": "synthetic_low_0p0001_random__k10__exact"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/graph/configs/b0/synthetic_low_0p0003_random/shard_00.json",
+      "source_sha256": "72e96d3afd260ec84bb7b9a48d1c6fb1f000f90bd163d90bc9c1c05d4818ea8b",
+      "config": {
+        "dataset": {
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0003_random/shard_00000_02048/filter.bitmap",
+            "kind": "bitmap"
+          },
+          "groundtruth_neighbors_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0003_random/shard_00000_02048/groundtruth.ibin",
+          "name": "retrieve-synthetic_low_0p0003_random-throughput-q00000-02048",
+          "query_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0003_random/shard_00000_02048/query.bin"
+        },
+        "index": [
+          {
+            "algo": "cuvs_cagra",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "name": "cagra-g64-ig128",
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "bitmap_method": "default_cagra",
+                "favor_udf_passing_accumulator": false,
+                "filter_mode": "default",
+                "itopk": 512,
+                "max_iterations": 8184,
+                "max_queries": 2048,
+                "require_identity_source_indices": true,
+                "search_width": 1
+              }
+            ]
+          }
+        ],
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        }
+      },
+      "parameter_source": "/home/ubuntu/paper_selectivity_revision/data/selectivity_followup_sources/calibration_points.csv",
+      "parameter_source_sha256": "897c81567cb0d3a0dac09b2eaf24e263a91829b8c87246a946d9bc739dd2aa16",
+      "cohort": "synthetic_low_0p0003_random",
+      "k": 10,
+      "method": "default_cagra",
+      "selection": "max_observed_recall",
+      "id": "synthetic_low_0p0003_random__k10__default_cagra"
+    },
+    {
+      "source": "/data/cuvs-upstream-validation/benchmarks/archived-configs/a100_selectivity_matched_002_20260928T094801Z_results.tar/tight_match/graph/configs/finalists/synthetic_low_0p0003_random/shard_00.json",
+      "source_sha256": "56d1072e4e8f3e4eeeff09e82060e0a906abcf07ab6dd1bf99c8673354577669",
+      "config": {
+        "dataset": {
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0003_random/shard_00000_02048/filter.bitmap",
+            "kind": "bitmap"
+          },
+          "groundtruth_neighbors_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0003_random/shard_00000_02048/groundtruth.ibin",
+          "name": "retrieve-synthetic_low_0p0003_random-throughput-q00000-02048",
+          "query_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0003_random/shard_00000_02048/query.bin"
+        },
+        "index": [
+          {
+            "algo": "cuvs_cagra",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "name": "cagra-g64-ig128",
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "bitmap_method": "default_cagra_accumulator",
+                "favor_udf_passing_accumulator": true,
+                "filter_mode": "default",
+                "itopk": 512,
+                "max_iterations": 5274,
+                "max_queries": 2048,
+                "require_identity_source_indices": true,
+                "search_width": 1
+              }
+            ]
+          }
+        ],
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        }
+      },
+      "cohort": "synthetic_low_0p0003_random",
+      "k": 10,
+      "method": "default_cagra_accumulator",
+      "selection": "frozen_matched",
+      "id": "synthetic_low_0p0003_random__k10__default_cagra_accumulator"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/graph/configs/deep_i522_synthetic_low_0p0003_random_navix_reference/synthetic_low_0p0003_random/shard_00.json",
+      "source_sha256": "43691d66a5869fda5e495f4884470b4d7f935c367c6e5415703066955d99ecd7",
+      "config": {
+        "dataset": {
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0003_random/shard_00000_02048/filter.bitmap",
+            "kind": "bitmap"
+          },
+          "groundtruth_neighbors_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0003_random/shard_00000_02048/groundtruth.ibin",
+          "name": "retrieve-synthetic_low_0p0003_random-throughput-q00000-02048",
+          "query_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0003_random/shard_00000_02048/query.bin"
+        },
+        "index": [
+          {
+            "algo": "cuvs_cagra",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "name": "cagra-g64-ig128",
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "bitmap_method": "navix_reference",
+                "favor_udf_passing_accumulator": false,
+                "filter_mode": "default",
+                "itopk": 512,
+                "max_iterations": 522,
+                "max_queries": 2048,
+                "navix_bitmap_seeds": true,
+                "navix_kernel_variant": "reference",
+                "navix_mode": "adaptive_kuzu",
+                "navix_scheduler": "tiled",
+                "navix_seed_cap": 128,
+                "require_identity_source_indices": true,
+                "search_width": 2
+              }
+            ]
+          }
+        ],
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        }
+      },
+      "cohort": "synthetic_low_0p0003_random",
+      "k": 10,
+      "method": "navix_reference",
+      "selection": "max_observed_recall",
+      "id": "synthetic_low_0p0003_random__k10__navix_reference"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_ivf_flat_sparse_20261015T025433Z/configs/final/arxiv_flat_n4096/synthetic_low_0p0003_random_k10/selected/shard_00.json",
+      "source_sha256": "b78186e9b7ca9b79abc7f4cc8b3e53e95e66eb7f9b91eb43826662f8b75ed830",
+      "config": {
+        "dataset": {
+          "name": "paper-synthetic_low_0p0003_random-k10-q0",
+          "base_file": "/data/retrieve_data/arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0003_random/shard_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0003_random/shard_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0003_random/shard_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "k": 10,
+          "batch_size": 2048
+        },
+        "index": [
+          {
+            "name": "ivf-arxiv_flat_n4096_p557_f1",
+            "algo": "cuvs_ivf_flat",
+            "file": "/data/retrieve_workshop_runs/a100_ivf_bitmap_20261014T024338Z/indices/arxiv_flat_n4096.index",
+            "build_param": {
+              "nlist": 4096,
+              "niter": 25,
+              "ratio": 10
+            },
+            "search_params": [
+              {
+                "nprobe": 557,
+                "n_queries": 2048,
+                "k": 10
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "synthetic_low_0p0003_random",
+      "k": 10,
+      "method": "ivf_flat",
+      "selection": "frozen_matched",
+      "id": "synthetic_low_0p0003_random__k10__ivf_flat"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/exact/configs/synthetic_low_0p0003_random/control.json",
+      "source_sha256": "cc543db8fd30a989385d0c8ca0e02a4190e2054ebbc98269d2878c88237369cb",
+      "config": {
+        "dataset": {
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0003_random/shard_00000_02048/filter.bitmap",
+            "kind": "bitmap"
+          },
+          "groundtruth_neighbors_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0003_random/shard_00000_02048/groundtruth.ibin",
+          "name": "selectivity-synthetic_low_0p0003_random-exact-control",
+          "query_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0003_random/shard_00000_02048/query.bin"
+        },
+        "index": [
+          {
+            "algo": "cuvs_brute_force",
+            "build_param": {},
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/state/cuvs_brute_force.index",
+            "name": "cuvs-exact-bitmap",
+            "search_params": [
+              {
+                "exact_control": "bitmap_count_csr_search",
+                "native_l2_cutoff_validation": true,
+                "resident_bitmap": true
+              }
+            ]
+          }
+        ],
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        }
+      },
+      "cohort": "synthetic_low_0p0003_random",
+      "k": 10,
+      "method": "exact",
+      "selection": "exact_control",
+      "id": "synthetic_low_0p0003_random__k10__exact"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/graph/configs/b0/synthetic_low_0p001_random/shard_00.json",
+      "source_sha256": "b17619cff5c1450fdba05c52750ea89bbdc140b2219451f7ae93f8d3898b7c4b",
+      "config": {
+        "dataset": {
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p001_random/shard_00000_02048/filter.bitmap",
+            "kind": "bitmap"
+          },
+          "groundtruth_neighbors_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p001_random/shard_00000_02048/groundtruth.ibin",
+          "name": "retrieve-synthetic_low_0p001_random-throughput-q00000-02048",
+          "query_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p001_random/shard_00000_02048/query.bin"
+        },
+        "index": [
+          {
+            "algo": "cuvs_cagra",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "name": "cagra-g64-ig128",
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "bitmap_method": "default_cagra",
+                "favor_udf_passing_accumulator": false,
+                "filter_mode": "default",
+                "itopk": 512,
+                "max_iterations": 8184,
+                "max_queries": 2048,
+                "require_identity_source_indices": true,
+                "search_width": 1
+              }
+            ]
+          }
+        ],
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        }
+      },
+      "parameter_source": "/home/ubuntu/paper_selectivity_revision/data/selectivity_followup_sources/calibration_points.csv",
+      "parameter_source_sha256": "897c81567cb0d3a0dac09b2eaf24e263a91829b8c87246a946d9bc739dd2aa16",
+      "cohort": "synthetic_low_0p001_random",
+      "k": 10,
+      "method": "default_cagra",
+      "selection": "max_observed_recall",
+      "id": "synthetic_low_0p001_random__k10__default_cagra"
+    },
+    {
+      "source": "/data/cuvs-upstream-validation/benchmarks/archived-configs/a100_selectivity_matched_002_20260928T094801Z_results.tar/tight_match/graph/configs/finalists/synthetic_low_0p001_random/shard_00.json",
+      "source_sha256": "5b2954ce612f4921772f4cbb500a39b24264d30f02ca3d60755549eacccda58b",
+      "config": {
+        "dataset": {
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p001_random/shard_00000_02048/filter.bitmap",
+            "kind": "bitmap"
+          },
+          "groundtruth_neighbors_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p001_random/shard_00000_02048/groundtruth.ibin",
+          "name": "retrieve-synthetic_low_0p001_random-throughput-q00000-02048",
+          "query_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p001_random/shard_00000_02048/query.bin"
+        },
+        "index": [
+          {
+            "algo": "cuvs_cagra",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "name": "cagra-g64-ig128",
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "bitmap_method": "default_cagra_accumulator",
+                "favor_udf_passing_accumulator": true,
+                "filter_mode": "default",
+                "itopk": 512,
+                "max_iterations": 1076,
+                "max_queries": 2048,
+                "require_identity_source_indices": true,
+                "search_width": 2
+              }
+            ]
+          }
+        ],
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        }
+      },
+      "cohort": "synthetic_low_0p001_random",
+      "k": 10,
+      "method": "default_cagra_accumulator",
+      "selection": "frozen_matched",
+      "id": "synthetic_low_0p001_random__k10__default_cagra_accumulator"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/graph/configs/deep_i522_synthetic_low_0p001_random_navix_reference/synthetic_low_0p001_random/shard_00.json",
+      "source_sha256": "e315112ed0cb7e4ea49fb7243c8db9750a629a91bfc018a8ddd184df2290ec5b",
+      "config": {
+        "dataset": {
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p001_random/shard_00000_02048/filter.bitmap",
+            "kind": "bitmap"
+          },
+          "groundtruth_neighbors_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p001_random/shard_00000_02048/groundtruth.ibin",
+          "name": "retrieve-synthetic_low_0p001_random-throughput-q00000-02048",
+          "query_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p001_random/shard_00000_02048/query.bin"
+        },
+        "index": [
+          {
+            "algo": "cuvs_cagra",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "name": "cagra-g64-ig128",
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "bitmap_method": "navix_reference",
+                "favor_udf_passing_accumulator": false,
+                "filter_mode": "default",
+                "itopk": 512,
+                "max_iterations": 522,
+                "max_queries": 2048,
+                "navix_bitmap_seeds": true,
+                "navix_kernel_variant": "reference",
+                "navix_mode": "adaptive_kuzu",
+                "navix_scheduler": "tiled",
+                "navix_seed_cap": 128,
+                "require_identity_source_indices": true,
+                "search_width": 2
+              }
+            ]
+          }
+        ],
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        }
+      },
+      "cohort": "synthetic_low_0p001_random",
+      "k": 10,
+      "method": "navix_reference",
+      "selection": "max_observed_recall",
+      "id": "synthetic_low_0p001_random__k10__navix_reference"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_ivf_flat_sparse_20261015T025433Z/configs/final/arxiv_flat_n4096/synthetic_low_0p001_random_k10/selected/shard_00.json",
+      "source_sha256": "ef19cf4013956db106cc925275c01b7d027e46552c0ca1f3121db8375115c683",
+      "config": {
+        "dataset": {
+          "name": "paper-synthetic_low_0p001_random-k10-q0",
+          "base_file": "/data/retrieve_data/arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p001_random/shard_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p001_random/shard_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p001_random/shard_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "k": 10,
+          "batch_size": 2048
+        },
+        "index": [
+          {
+            "name": "ivf-arxiv_flat_n4096_p331_f1",
+            "algo": "cuvs_ivf_flat",
+            "file": "/data/retrieve_workshop_runs/a100_ivf_bitmap_20261014T024338Z/indices/arxiv_flat_n4096.index",
+            "build_param": {
+              "nlist": 4096,
+              "niter": 25,
+              "ratio": 10
+            },
+            "search_params": [
+              {
+                "nprobe": 331,
+                "n_queries": 2048,
+                "k": 10
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "synthetic_low_0p001_random",
+      "k": 10,
+      "method": "ivf_flat",
+      "selection": "frozen_matched",
+      "id": "synthetic_low_0p001_random__k10__ivf_flat"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/exact/configs/synthetic_low_0p001_random/control.json",
+      "source_sha256": "226cd4eb0457c01973a1a765db1d47a167730b4f155885335154c6bea4b9dd63",
+      "config": {
+        "dataset": {
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p001_random/shard_00000_02048/filter.bitmap",
+            "kind": "bitmap"
+          },
+          "groundtruth_neighbors_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p001_random/shard_00000_02048/groundtruth.ibin",
+          "name": "selectivity-synthetic_low_0p001_random-exact-control",
+          "query_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p001_random/shard_00000_02048/query.bin"
+        },
+        "index": [
+          {
+            "algo": "cuvs_brute_force",
+            "build_param": {},
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/state/cuvs_brute_force.index",
+            "name": "cuvs-exact-bitmap",
+            "search_params": [
+              {
+                "exact_control": "bitmap_count_csr_search",
+                "native_l2_cutoff_validation": true,
+                "resident_bitmap": true
+              }
+            ]
+          }
+        ],
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        }
+      },
+      "cohort": "synthetic_low_0p001_random",
+      "k": 10,
+      "method": "exact",
+      "selection": "exact_control",
+      "id": "synthetic_low_0p001_random__k10__exact"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/graph/configs/deep_i4176_synthetic_low_0p003_random_default_cagra/synthetic_low_0p003_random/shard_00.json",
+      "source_sha256": "903a8f37d8cd4250d87bb56d166ecc198209d0a2305c287121ef9ceffe8fb5a5",
+      "config": {
+        "dataset": {
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p003_random/shard_00000_02048/filter.bitmap",
+            "kind": "bitmap"
+          },
+          "groundtruth_neighbors_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p003_random/shard_00000_02048/groundtruth.ibin",
+          "name": "retrieve-synthetic_low_0p003_random-throughput-q00000-02048",
+          "query_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p003_random/shard_00000_02048/query.bin"
+        },
+        "index": [
+          {
+            "algo": "cuvs_cagra",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "name": "cagra-g64-ig128",
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "bitmap_method": "default_cagra",
+                "favor_udf_passing_accumulator": false,
+                "filter_mode": "default",
+                "itopk": 512,
+                "max_iterations": 4092,
+                "max_queries": 2048,
+                "require_identity_source_indices": true,
+                "search_width": 2
+              }
+            ]
+          }
+        ],
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        }
+      },
+      "cohort": "synthetic_low_0p003_random",
+      "k": 10,
+      "method": "default_cagra",
+      "selection": "max_observed_recall",
+      "id": "synthetic_low_0p003_random__k10__default_cagra"
+    },
+    {
+      "source": "/data/cuvs-upstream-validation/benchmarks/archived-configs/a100_selectivity_matched_002_20260928T094801Z_results.tar/tight_match/graph/configs/finalists/synthetic_low_0p003_random/shard_00.json",
+      "source_sha256": "24773c997d3022d205493dfd87e219a79309ae1c797ec37708dfb1db8983db69",
+      "config": {
+        "dataset": {
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p003_random/shard_00000_02048/filter.bitmap",
+            "kind": "bitmap"
+          },
+          "groundtruth_neighbors_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p003_random/shard_00000_02048/groundtruth.ibin",
+          "name": "retrieve-synthetic_low_0p003_random-throughput-q00000-02048",
+          "query_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p003_random/shard_00000_02048/query.bin"
+        },
+        "index": [
+          {
+            "algo": "cuvs_cagra",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "name": "cagra-g64-ig128",
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "bitmap_method": "default_cagra_accumulator",
+                "favor_udf_passing_accumulator": true,
+                "filter_mode": "default",
+                "itopk": 512,
+                "max_iterations": 454,
+                "max_queries": 2048,
+                "require_identity_source_indices": true,
+                "search_width": 2
+              }
+            ]
+          }
+        ],
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        }
+      },
+      "cohort": "synthetic_low_0p003_random",
+      "k": 10,
+      "method": "default_cagra_accumulator",
+      "selection": "frozen_matched",
+      "id": "synthetic_low_0p003_random__k10__default_cagra_accumulator"
+    },
+    {
+      "source": "/data/cuvs-upstream-validation/benchmarks/archived-configs/a100_selectivity_matched_002_20260928T094801Z_results.tar/tight_match/graph/configs/finalists/synthetic_low_0p003_random/shard_00.json",
+      "source_sha256": "24773c997d3022d205493dfd87e219a79309ae1c797ec37708dfb1db8983db69",
+      "config": {
+        "dataset": {
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p003_random/shard_00000_02048/filter.bitmap",
+            "kind": "bitmap"
+          },
+          "groundtruth_neighbors_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p003_random/shard_00000_02048/groundtruth.ibin",
+          "name": "retrieve-synthetic_low_0p003_random-throughput-q00000-02048",
+          "query_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p003_random/shard_00000_02048/query.bin"
+        },
+        "index": [
+          {
+            "algo": "cuvs_cagra",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "name": "cagra-g64-ig128",
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "bitmap_method": "navix_reference",
+                "favor_udf_passing_accumulator": false,
+                "filter_mode": "default",
+                "itopk": 102,
+                "max_iterations": 0,
+                "max_queries": 2048,
+                "navix_bitmap_seeds": true,
+                "navix_kernel_variant": "reference",
+                "navix_mode": "adaptive_kuzu",
+                "navix_scheduler": "tiled",
+                "navix_seed_cap": 128,
+                "require_identity_source_indices": true,
+                "search_width": 2
+              }
+            ]
+          }
+        ],
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        }
+      },
+      "cohort": "synthetic_low_0p003_random",
+      "k": 10,
+      "method": "navix_reference",
+      "selection": "frozen_matched",
+      "id": "synthetic_low_0p003_random__k10__navix_reference"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_ivf_flat_sparse_20261015T025433Z/configs/final/arxiv_flat_n4096/synthetic_low_0p003_random_k10/selected/shard_00.json",
+      "source_sha256": "9e1de392483c7fdc8c24426d8e3171251b547744d15e2898a785399fb1b65f73",
+      "config": {
+        "dataset": {
+          "name": "paper-synthetic_low_0p003_random-k10-q0",
+          "base_file": "/data/retrieve_data/arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p003_random/shard_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p003_random/shard_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p003_random/shard_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "k": 10,
+          "batch_size": 2048
+        },
+        "index": [
+          {
+            "name": "ivf-arxiv_flat_n4096_p205_f1",
+            "algo": "cuvs_ivf_flat",
+            "file": "/data/retrieve_workshop_runs/a100_ivf_bitmap_20261014T024338Z/indices/arxiv_flat_n4096.index",
+            "build_param": {
+              "nlist": 4096,
+              "niter": 25,
+              "ratio": 10
+            },
+            "search_params": [
+              {
+                "nprobe": 205,
+                "n_queries": 2048,
+                "k": 10
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "synthetic_low_0p003_random",
+      "k": 10,
+      "method": "ivf_flat",
+      "selection": "frozen_matched",
+      "id": "synthetic_low_0p003_random__k10__ivf_flat"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/exact/configs/synthetic_low_0p003_random/control.json",
+      "source_sha256": "d2585ad69ef455b7312c6ed01d9b95f7a9b985177447103c1ed7f9fce74e3a89",
+      "config": {
+        "dataset": {
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p003_random/shard_00000_02048/filter.bitmap",
+            "kind": "bitmap"
+          },
+          "groundtruth_neighbors_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p003_random/shard_00000_02048/groundtruth.ibin",
+          "name": "selectivity-synthetic_low_0p003_random-exact-control",
+          "query_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p003_random/shard_00000_02048/query.bin"
+        },
+        "index": [
+          {
+            "algo": "cuvs_brute_force",
+            "build_param": {},
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/state/cuvs_brute_force.index",
+            "name": "cuvs-exact-bitmap",
+            "search_params": [
+              {
+                "exact_control": "bitmap_count_csr_search",
+                "native_l2_cutoff_validation": true,
+                "resident_bitmap": true
+              }
+            ]
+          }
+        ],
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        }
+      },
+      "cohort": "synthetic_low_0p003_random",
+      "k": 10,
+      "method": "exact",
+      "selection": "exact_control",
+      "id": "synthetic_low_0p003_random__k10__exact"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/graph/configs/b0/synthetic_low_0p01_random/shard_00.json",
+      "source_sha256": "c1e6309aaf5a0c39166f0bfee2bbc1fad28e723874fdb8684bbc8df066eede43",
+      "config": {
+        "dataset": {
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p01_random/shard_00000_02048/filter.bitmap",
+            "kind": "bitmap"
+          },
+          "groundtruth_neighbors_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p01_random/shard_00000_02048/groundtruth.ibin",
+          "name": "retrieve-synthetic_low_0p01_random-throughput-q00000-02048",
+          "query_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p01_random/shard_00000_02048/query.bin"
+        },
+        "index": [
+          {
+            "algo": "cuvs_cagra",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "name": "cagra-g64-ig128",
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "bitmap_method": "default_cagra",
+                "favor_udf_passing_accumulator": false,
+                "filter_mode": "default",
+                "itopk": 512,
+                "max_iterations": 8184,
+                "max_queries": 2048,
+                "require_identity_source_indices": true,
+                "search_width": 1
+              }
+            ]
+          }
+        ],
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        }
+      },
+      "parameter_source": "/home/ubuntu/paper_selectivity_revision/data/selectivity_followup_sources/calibration_points.csv",
+      "parameter_source_sha256": "897c81567cb0d3a0dac09b2eaf24e263a91829b8c87246a946d9bc739dd2aa16",
+      "cohort": "synthetic_low_0p01_random",
+      "k": 10,
+      "method": "default_cagra",
+      "selection": "max_observed_recall",
+      "id": "synthetic_low_0p01_random__k10__default_cagra"
+    },
+    {
+      "source": "/data/cuvs-upstream-validation/benchmarks/archived-configs/a100_selectivity_matched_002_20260928T094801Z_results.tar/tight_match/graph/configs/finalists/synthetic_low_0p01_random/shard_00.json",
+      "source_sha256": "41f5a4cc9ba951e9a3ce2a1dd072fad47b190a019b1c81040898f78db67197c6",
+      "config": {
+        "dataset": {
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p01_random/shard_00000_02048/filter.bitmap",
+            "kind": "bitmap"
+          },
+          "groundtruth_neighbors_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p01_random/shard_00000_02048/groundtruth.ibin",
+          "name": "retrieve-synthetic_low_0p01_random-throughput-q00000-02048",
+          "query_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p01_random/shard_00000_02048/query.bin"
+        },
+        "index": [
+          {
+            "algo": "cuvs_cagra",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "name": "cagra-g64-ig128",
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "bitmap_method": "default_cagra_accumulator",
+                "favor_udf_passing_accumulator": true,
+                "filter_mode": "default",
+                "itopk": 342,
+                "max_iterations": 0,
+                "max_queries": 2048,
+                "require_identity_source_indices": true,
+                "search_width": 2
+              }
+            ]
+          }
+        ],
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        }
+      },
+      "cohort": "synthetic_low_0p01_random",
+      "k": 10,
+      "method": "default_cagra_accumulator",
+      "selection": "frozen_matched",
+      "id": "synthetic_low_0p01_random__k10__default_cagra_accumulator"
+    },
+    {
+      "source": "/data/cuvs-upstream-validation/benchmarks/archived-configs/a100_selectivity_matched_002_20260928T094801Z_results.tar/tight_match/graph/configs/finalists/synthetic_low_0p01_random/shard_00.json",
+      "source_sha256": "41f5a4cc9ba951e9a3ce2a1dd072fad47b190a019b1c81040898f78db67197c6",
+      "config": {
+        "dataset": {
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p01_random/shard_00000_02048/filter.bitmap",
+            "kind": "bitmap"
+          },
+          "groundtruth_neighbors_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p01_random/shard_00000_02048/groundtruth.ibin",
+          "name": "retrieve-synthetic_low_0p01_random-throughput-q00000-02048",
+          "query_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p01_random/shard_00000_02048/query.bin"
+        },
+        "index": [
+          {
+            "algo": "cuvs_cagra",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "file": "arxiv-for-fanns-large/cagra_g64_ig128.index",
+            "name": "cagra-g64-ig128",
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "bitmap_method": "navix_reference",
+                "favor_udf_passing_accumulator": false,
+                "filter_mode": "default",
+                "itopk": 35,
+                "max_iterations": 0,
+                "max_queries": 2048,
+                "navix_bitmap_seeds": true,
+                "navix_kernel_variant": "reference",
+                "navix_mode": "adaptive_kuzu",
+                "navix_scheduler": "tiled",
+                "navix_seed_cap": 64,
+                "require_identity_source_indices": true,
+                "search_width": 1
+              }
+            ]
+          }
+        ],
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        }
+      },
+      "cohort": "synthetic_low_0p01_random",
+      "k": 10,
+      "method": "navix_reference",
+      "selection": "frozen_matched",
+      "id": "synthetic_low_0p01_random__k10__navix_reference"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_ivf_flat_sparse_20261015T025433Z/configs/final/arxiv_flat_n4096/synthetic_low_0p01_random_k10/selected/shard_00.json",
+      "source_sha256": "a84efb9d8e14d6b090f6621af43da0e5ff8c9cd96dd5845b7d12cdb734b9faa8",
+      "config": {
+        "dataset": {
+          "name": "paper-synthetic_low_0p01_random-k10-q0",
+          "base_file": "/data/retrieve_data/arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p01_random/shard_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p01_random/shard_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p01_random/shard_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "k": 10,
+          "batch_size": 2048
+        },
+        "index": [
+          {
+            "name": "ivf-arxiv_flat_n4096_p134_f1",
+            "algo": "cuvs_ivf_flat",
+            "file": "/data/retrieve_workshop_runs/a100_ivf_bitmap_20261014T024338Z/indices/arxiv_flat_n4096.index",
+            "build_param": {
+              "nlist": 4096,
+              "niter": 25,
+              "ratio": 10
+            },
+            "search_params": [
+              {
+                "nprobe": 134,
+                "n_queries": 2048,
+                "k": 10
+              }
+            ]
+          }
+        ]
+      },
+      "cohort": "synthetic_low_0p01_random",
+      "k": 10,
+      "method": "ivf_flat",
+      "selection": "frozen_matched",
+      "id": "synthetic_low_0p01_random__k10__ivf_flat"
+    },
+    {
+      "source": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/exact/configs/synthetic_low_0p01_random/control.json",
+      "source_sha256": "72d2b56cf08c04c45578dec4bac91931e8a4b232faf80d3bcabe68cd8ad32797",
+      "config": {
+        "dataset": {
+          "base_file": "arxiv-for-fanns-large/base.fbin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p01_random/shard_00000_02048/filter.bitmap",
+            "kind": "bitmap"
+          },
+          "groundtruth_neighbors_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p01_random/shard_00000_02048/groundtruth.ibin",
+          "name": "selectivity-synthetic_low_0p01_random-exact-control",
+          "query_file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p01_random/shard_00000_02048/query.bin"
+        },
+        "index": [
+          {
+            "algo": "cuvs_brute_force",
+            "build_param": {},
+            "file": "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/state/cuvs_brute_force.index",
+            "name": "cuvs-exact-bitmap",
+            "search_params": [
+              {
+                "exact_control": "bitmap_count_csr_search",
+                "native_l2_cutoff_validation": true,
+                "resident_bitmap": true
+              }
+            ]
+          }
+        ],
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        }
+      },
+      "cohort": "synthetic_low_0p01_random",
+      "k": 10,
+      "method": "exact",
+      "selection": "exact_control",
+      "id": "synthetic_low_0p01_random__k10__exact"
+    }
+  ],
+  "inputs": {
+    "/data/retrieve_data/yfcc-10M/base.10M.u8bin": {
+      "bytes": 1920000008,
+      "mtime_ns": 1787481271180690214
+    },
+    "/data/retrieve_data/navix_bitmap/yfcc/throughput_10000/shard_00000_02048/query.bin": {
+      "bytes": 393224,
+      "mtime_ns": 1787487603836570548
+    },
+    "/data/retrieve_data/navix_bitmap/yfcc/throughput_10000/shard_00000_02048/groundtruth.ibin": {
+      "bytes": 81928,
+      "mtime_ns": 1787487603836570548
+    },
+    "/data/retrieve_data/navix_bitmap/yfcc/throughput_10000/shard_00000_02048/filter.bitmap": {
+      "bytes": 2560000040,
+      "mtime_ns": 1787487587428466777
+    },
+    "/data/retrieve_data/arxiv-for-fanns-large/base.fbin": {
+      "bytes": 44814565384,
+      "mtime_ns": 1787487941666825320
+    },
+    "/data/retrieve_data/navix_bitmap/arxiv-large/em/throughput_10000/shard_00000_02048/query.bin": {
+      "bytes": 33554440,
+      "mtime_ns": 1787487973947049952
+    },
+    "/data/retrieve_data/navix_bitmap/arxiv-large/em/throughput_10000/shard_00000_02048/groundtruth.ibin": {
+      "bytes": 81928,
+      "mtime_ns": 1787487973963050063
+    },
+    "/data/retrieve_data/navix_bitmap/arxiv-large/em/throughput_10000/shard_00000_02048/filter.bitmap": {
+      "bytes": 700227624,
+      "mtime_ns": 1787487972223037920
+    },
+    "/data/retrieve_data/navix_bitmap/arxiv-large/emis/throughput_10000/shard_00000_02048/query.bin": {
+      "bytes": 33554440,
+      "mtime_ns": 1787487985919133566
+    },
+    "/data/retrieve_data/navix_bitmap/arxiv-large/emis/throughput_10000/shard_00000_02048/groundtruth.ibin": {
+      "bytes": 81928,
+      "mtime_ns": 1787487985935133678
+    },
+    "/data/retrieve_data/navix_bitmap/arxiv-large/emis/throughput_10000/shard_00000_02048/filter.bitmap": {
+      "bytes": 700227624,
+      "mtime_ns": 1787487983031113387
+    },
+    "/data/retrieve_data/navix_bitmap/arxiv-large/r/throughput_10000/shard_00000_02048/query.bin": {
+      "bytes": 33554440,
+      "mtime_ns": 1787487999219226644
+    },
+    "/data/retrieve_data/navix_bitmap/arxiv-large/r/throughput_10000/shard_00000_02048/groundtruth.ibin": {
+      "bytes": 81928,
+      "mtime_ns": 1787487999235226756
+    },
+    "/data/retrieve_data/navix_bitmap/arxiv-large/r/throughput_10000/shard_00000_02048/filter.bitmap": {
+      "bytes": 700227624,
+      "mtime_ns": 1787487994635194540
+    },
+    "/data/retrieve_data/navix_bitmap_k100/yfcc/throughput_10000/shard_00_00000_02048/query.bin": {
+      "bytes": 393224,
+      "mtime_ns": 1787487603836570548
+    },
+    "/data/retrieve_data/navix_bitmap_k100/yfcc/throughput_10000/shard_00_00000_02048/groundtruth.ibin": {
+      "bytes": 819208,
+      "mtime_ns": 1787694965160743458
+    },
+    "/data/retrieve_data/navix_bitmap_k100/yfcc/throughput_10000/shard_00_00000_02048/filter.bitmap": {
+      "bytes": 2560000040,
+      "mtime_ns": 1787487587428466777
+    },
+    "/data/retrieve_data/navix_bitmap_k100/arxiv-large/em/throughput_10000/shard_00_00000_02048/query.bin": {
+      "bytes": 33554440,
+      "mtime_ns": 1787487973947049952
+    },
+    "/data/retrieve_data/navix_bitmap_k100/arxiv-large/em/throughput_10000/shard_00_00000_02048/groundtruth.ibin": {
+      "bytes": 819208,
+      "mtime_ns": 1787694966336796219
+    },
+    "/data/retrieve_data/navix_bitmap_k100/arxiv-large/em/throughput_10000/shard_00_00000_02048/filter.bitmap": {
+      "bytes": 700227624,
+      "mtime_ns": 1787487972223037920
+    },
+    "/data/retrieve_data/navix_bitmap_k100/arxiv-large/emis/throughput_10000/shard_00_00000_02048/query.bin": {
+      "bytes": 33554440,
+      "mtime_ns": 1787487985919133566
+    },
+    "/data/retrieve_data/navix_bitmap_k100/arxiv-large/emis/throughput_10000/shard_00_00000_02048/groundtruth.ibin": {
+      "bytes": 819208,
+      "mtime_ns": 1787694967260837696
+    },
+    "/data/retrieve_data/navix_bitmap_k100/arxiv-large/emis/throughput_10000/shard_00_00000_02048/filter.bitmap": {
+      "bytes": 700227624,
+      "mtime_ns": 1787487983031113387
+    },
+    "/data/retrieve_data/navix_bitmap_k100/arxiv-large/r/throughput_10000/shard_00_00000_02048/query.bin": {
+      "bytes": 33554440,
+      "mtime_ns": 1787487999219226644
+    },
+    "/data/retrieve_data/navix_bitmap_k100/arxiv-large/r/throughput_10000/shard_00_00000_02048/groundtruth.ibin": {
+      "bytes": 819208,
+      "mtime_ns": 1787694968164878296
+    },
+    "/data/retrieve_data/navix_bitmap_k100/arxiv-large/r/throughput_10000/shard_00_00000_02048/filter.bitmap": {
+      "bytes": 700227624,
+      "mtime_ns": 1787487994635194540
+    },
+    "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0001_random/shard_00000_02048/query.bin": {
+      "bytes": 33554440,
+      "mtime_ns": 1790579723543008387
+    },
+    "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0001_random/shard_00000_02048/groundtruth.ibin": {
+      "bytes": 81928,
+      "mtime_ns": 1790579750551023779
+    },
+    "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0001_random/shard_00000_02048/filter.bitmap": {
+      "bytes": 700227624,
+      "mtime_ns": 1790579719667006256
+    },
+    "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0003_random/shard_00000_02048/query.bin": {
+      "bytes": 33554440,
+      "mtime_ns": 1790579727959010845
+    },
+    "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0003_random/shard_00000_02048/groundtruth.ibin": {
+      "bytes": 81928,
+      "mtime_ns": 1790579757603027947
+    },
+    "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p0003_random/shard_00000_02048/filter.bitmap": {
+      "bytes": 700227624,
+      "mtime_ns": 1790579724571008956
+    },
+    "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p001_random/shard_00000_02048/query.bin": {
+      "bytes": 33554440,
+      "mtime_ns": 1790579732835013582
+    },
+    "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p001_random/shard_00000_02048/groundtruth.ibin": {
+      "bytes": 81928,
+      "mtime_ns": 1790579764567032124
+    },
+    "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p001_random/shard_00000_02048/filter.bitmap": {
+      "bytes": 700227624,
+      "mtime_ns": 1790579729007011432
+    },
+    "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p003_random/shard_00000_02048/query.bin": {
+      "bytes": 33554440,
+      "mtime_ns": 1790579738235016650
+    },
+    "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p003_random/shard_00000_02048/groundtruth.ibin": {
+      "bytes": 81928,
+      "mtime_ns": 1790579771631036425
+    },
+    "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p003_random/shard_00000_02048/filter.bitmap": {
+      "bytes": 700227624,
+      "mtime_ns": 1790579734175014340
+    },
+    "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p01_random/shard_00000_02048/query.bin": {
+      "bytes": 33554440,
+      "mtime_ns": 1790579744179020065
+    },
+    "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p01_random/shard_00000_02048/groundtruth.ibin": {
+      "bytes": 81928,
+      "mtime_ns": 1790579779503041284
+    },
+    "/data/retrieve_workshop_runs/a100_selectivity_20260928T070431Z/data/synthetic_low_0p01_random/shard_00000_02048/filter.bitmap": {
+      "bytes": 700227624,
+      "mtime_ns": 1790579740671018045
+    }
+  },
+  "old_repo": "/home/ubuntu/cuvs-filter",
+  "integrated_repo": "/data/cuvs-upstream-integration",
+  "control_repo": "/data/cuvs-upstream-control",
+  "validation_dir": "/data/cuvs-upstream-validation",
+  "environment": "/data/cuvs-upstream-envs/cuvs-2612"
+}

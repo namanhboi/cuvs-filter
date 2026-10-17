@@ -1010,12 +1010,12 @@ def generate_diagnostics(root: Path, data_root: Path) -> None:
         row = selected[cap]
         variant = f"seed_{cap}"
         diagnostic = {
-            "favor_diagnostics_output": str(
+            "search_diagnostics_output": str(
                 (root / "diagnostics" / variant).resolve()
             ),
-            "favor_diagnostics_groundtruth": groundtruth,
-            "favor_diagnostics_dataset": "yfcc10m-a100-k100-seed-ablation",
-            "favor_diagnostics_variant": variant,
+            "search_diagnostics_groundtruth": groundtruth,
+            "search_diagnostics_dataset": "yfcc10m-a100-k100-seed-ablation",
+            "search_diagnostics_variant": variant,
         }
         point = {
             "itopk": int(row["itopk"]),

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2025-2026, NVIDIA CORPORATION.
+ * SPDX-FileCopyrightText: Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -11,16 +11,18 @@
 #include <cuvs/detail/jit_lto/cagra/cagra_fragments.hpp>
 
 #include "compute_distance.hpp"  // For dataset_descriptor_host
-#include "favor_search_diagnostics.hpp"
 #include "hashmap.hpp"
 #include "jit_lto_kernels/cagra_jit_launcher_factory.hpp"
 #include "jit_lto_kernels/kernel_def.hpp"
+#include "multi_partition_desc.hpp"
 #include "sample_filter_utils.cuh"  // For CagraSampleFilterWithQueryIdOffset
-#include "search_plan.cuh"          // For search_params
+#include "search_diagnostics.hpp"
+#include "search_plan.cuh"  // For search_params
 #include "search_single_cta_kernel_launcher_common.cuh"
 #include "shared_launcher_jit.hpp"  // For shared JIT helper functions
 
 #include <raft/util/integer_utils.hpp>
+#include <raft/util/kernel_launch.hpp>
 #include <raft/util/pow2_utils.cuh>
 
 #include <rmm/cuda_stream.hpp>
@@ -28,13 +30,13 @@
 #include <rmm/mr/cuda_memory_resource.hpp>
 #include <rmm/mr/pinned_host_memory_resource.hpp>
 
-#include <cuvs/detail/jit_lto/AlgorithmLauncher.hpp>
 #include <cuvs/distance/distance.hpp>
 #include <raft/core/device_mdspan.hpp>
 #include <raft/core/logger.hpp>
 #include <raft/core/resource/cuda_stream.hpp>
 #include <raft/core/resource/device_properties.hpp>
 #include <raft/core/resources.hpp>
+#include <rtcx/algorithm_launcher.hpp>
 
 #include <algorithm>
 #include <array>
@@ -82,7 +84,11 @@ std::uint64_t cagra_sample_filter_type_id(const SampleFilterT& sample_filter)
 {
   using DecayedFilter = std::decay_t<SampleFilterT>;
   if constexpr (is_udf_filter<DecayedFilter>::value) {
+    return 3;
+  } else if constexpr (is_bloom_filter<DecayedFilter>::value) {
     return 2;
+  } else if constexpr (is_roaring_bitmap_filter<DecayedFilter>::value) {
+    return 4;
   } else if constexpr (is_bitset_filter<DecayedFilter>::value) {
     return 1;
   } else if constexpr (is_bitmap_filter<DecayedFilter>::value) {
@@ -482,7 +488,7 @@ struct alignas(kCacheLineBytes) launcher_jit_t {
   }
 };
 
-// JIT persistent runner - uses AlgorithmLauncher instead of kernel function pointer
+// JIT persistent runner - uses rtcx::algorithm_launcher instead of kernel function pointer
 template <typename DataT,
           typename IndexT,
           typename DistanceT,
@@ -495,7 +501,7 @@ struct alignas(kCacheLineBytes) persistent_runner_jit_t : public persistent_runn
   // Must match job_desc_t<job_desc_traits<...>> in kernel_def.hpp / persistent kernel.
   using job_desc_type = job_desc_t<job_desc_traits<DataT, IndexT, DistanceT>>;
 
-  std::shared_ptr<AlgorithmLauncher> launcher;
+  std::shared_ptr<rtcx::algorithm_launcher> launcher;
   uint32_t block_size;
   dataset_descriptor_host<DataT, IndexT, DistanceT> dd_host;
   rmm::device_uvector<worker_handle_t> worker_handles;
@@ -547,7 +553,7 @@ struct alignas(kCacheLineBytes) persistent_runner_jit_t : public persistent_runn
     const dataset_descriptor_host<DataT, IndexT, DistanceT>& dataset_desc,
     bool topk_by_bitonic_sort,
     bool bitonic_sort_and_merge_multi_warps,
-    SampleFilterT sample_filter) -> std::shared_ptr<AlgorithmLauncher>
+    SampleFilterT sample_filter) -> std::shared_ptr<rtcx::algorithm_launcher>
   {
     auto launcher = make_cagra_single_cta_jit_launcher<DataT,
                                                        IndexT,
@@ -665,8 +671,9 @@ struct alignas(kCacheLineBytes) persistent_runner_jit_t : public persistent_runn
     // Get the device descriptor pointer - kernel will use the concrete type from template
     const auto* dev_desc = dataset_desc.get().dev_ptr(stream);
 
-    // Cast size_t/int64_t parameters to match kernel signature exactly
-    // The dispatch mechanism uses void* pointers, so parameter sizes must match exactly
+    // These arguments are wider than the kernel parameters they feed; the casts record the
+    // intentional narrowing. graph.extent() and hash_bitlen are int64_t, and the iteration and
+    // hash sizes are size_t.
     const uint32_t graph_degree_u32              = static_cast<uint32_t>(graph.extent(1));
     const uint32_t hash_bitlen_u32               = static_cast<uint32_t>(hash_bitlen);
     const uint32_t small_hash_bitlen_u32         = static_cast<uint32_t>(small_hash_bitlen);
@@ -675,41 +682,42 @@ struct alignas(kCacheLineBytes) persistent_runner_jit_t : public persistent_runn
     const uint32_t search_width_u32              = static_cast<uint32_t>(search_width);
     const uint32_t min_iterations_u32            = static_cast<uint32_t>(min_iterations);
     const uint32_t max_iterations_u32            = static_cast<uint32_t>(max_iterations);
-    const unsigned num_random_samplings_u        = static_cast<unsigned>(num_random_samplings);
 
     const IndexT* seed_ptr_arg            = nullptr;
     uint32_t* num_executed_iterations_arg = nullptr;
-    // Launch the persistent kernel via AlgorithmLauncher
-    // The persistent kernel now takes the descriptor pointer directly
-    launcher->dispatch_cooperative<
-      single_cta_search::search_single_cta_p_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>(
-      stream,
+    // The persistent kernel synchronizes across the whole grid, hence the cooperative launch; its
+    // grid size comes from the occupancy query in calc_coop_grid_size.
+    raft::launch_kernel(
+      {stream, static_cast<std::size_t>(smem_size), false, {raft::cooperative()}},
       gs,
       bs,
-      static_cast<std::size_t>(smem_size),
+      raft::kernel_ref<single_cta_search::
+                         search_single_cta_p_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>{
+        launcher->get_kernel()},
       worker_handles_ptr,
       job_descriptors_ptr,
       completion_counters_ptr,
       graph.data_handle(),
-      graph_degree_u32,  // Cast int64_t to uint32_t
+      graph_degree_u32,
       source_indices_ptr,
-      num_random_samplings_u,  // Cast uint32_t to unsigned for consistency
-      rand_xor_mask,           // uint64_t matches kernel (8 bytes)
+      num_random_samplings,
+      rand_xor_mask,
       seed_ptr_arg,
       num_seeds,
       hashmap_ptr,
       max_candidates,
       max_itopk,
-      itopk_size_u32,      // Cast size_t to uint32_t
-      search_width_u32,    // Cast size_t to uint32_t
-      min_iterations_u32,  // Cast size_t to uint32_t
-      max_iterations_u32,  // Cast size_t to uint32_t
+      itopk_size_u32,
+      search_width_u32,
+      min_iterations_u32,
+      max_iterations_u32,
       num_executed_iterations_arg,
-      hash_bitlen_u32,                // Cast int64_t to uint32_t
-      small_hash_bitlen_u32,          // Cast size_t to uint32_t
-      small_hash_reset_interval_u32,  // Cast size_t to uint32_t
-      query_id_offset,                // Offset to add to query_id when calling filter
+      hash_bitlen_u32,
+      small_hash_bitlen_u32,
+      small_hash_reset_interval_u32,
+      query_id_offset,
       dev_desc,
+      static_cast<IndexT>(graph.extent(0)),
       filter_payload);
 
     last_touch.store(std::chrono::system_clock::now(), std::memory_order_relaxed);
@@ -796,9 +804,9 @@ void select_and_run(
   const IndexT* dev_seed_ptr,         // [num_queries, num_seeds]
   uint32_t* num_executed_iterations,  // [num_queries,]
   const search_params& ps,
-  float favor_raw_delta_d,
-  uint32_t favor_adaptive_start_iteration,
-  uint32_t favor_adaptive_prefix_size,
+  float /* retired FAVOR delta */,
+  uint32_t /* retired FAVOR adaptive start */,
+  uint32_t /* retired FAVOR adaptive prefix */,
   uint32_t topk,
   uint32_t num_itopk_candidates,
   uint32_t block_size,  //
@@ -811,6 +819,7 @@ void select_and_run(
   SampleFilterT sample_filter,
   cudaStream_t stream)
 {
+  RAFT_EXPECTS(ps.filter_mode == filtering_mode::DEFAULT, "FAVOR is retired");
   const SourceIndexT* source_indices_ptr =
     source_indices.has_value() ? source_indices->data_handle() : nullptr;
 
@@ -818,11 +827,11 @@ void select_and_run(
   const uint32_t query_id_offset = filter_payload.query_id_offset;
   constexpr bool navix           = cagra_filter_uses_navix<SampleFilterT>::value;
   constexpr bool bitmap_seeded   = cagra_filter_uses_bitmap_seeds<SampleFilterT>::value;
-  constexpr bool passing_accumulator =
-    cagra_filter_uses_passing_accumulator<SampleFilterT>::value;
+  constexpr bool passing_accumulator = cagra_filter_uses_passing_accumulator<SampleFilterT>::value;
   if constexpr (bitmap_seeded) {
-    RAFT_EXPECTS(filter_payload.filter_kind == cagra_sample_filter<SourceIndexT>::kind_bitmap,
-                 "bitmap-seeded CAGRA requires a bitmap filter payload");
+    RAFT_EXPECTS(filter_payload.filter_kind == cagra_sample_filter<SourceIndexT>::kind_bitmap ||
+                   filter_payload.filter_kind == cagra_sample_filter<SourceIndexT>::kind_roaring,
+                 "Passing-seeded CAGRA requires a bitmap or Roaring filter payload");
     RAFT_EXPECTS(
       filter_payload.navix_bitmap_seeds != 0 && filter_payload.navix_seed_ids != nullptr &&
         filter_payload.navix_seed_counts != nullptr && filter_payload.navix_seed_stride != 0,
@@ -876,22 +885,20 @@ void select_and_run(
       ->launch(topk_indices_ptr, topk_distances_ptr, queries_ptr, num_queries, topk);
     return;
   } else {
-    const bool favor       = ps.filter_mode == filtering_mode::FAVOR;
-    const bool diagnostics = favor_search_diagnostics::get_active_context() != nullptr;
+    const bool diagnostics = search_diagnostics::get_active_context() != nullptr;
     static_assert(!(navix && passing_accumulator),
                   "NaviX deliberately has no passing-result accumulator");
     static_assert(!(navix && bitmap_seeded),
                   "NaviX and default-CAGRA bitmap seeding use separate filter traits");
     if constexpr (navix) {
-      RAFT_EXPECTS(!favor, "NaviX is a separate default-mode traversal specialization");
       RAFT_EXPECTS(graph.extent(1) == 32 || graph.extent(1) == 64,
                    "NaviX SINGLE_CTA requires graph degree 32 or 64");
     }
     if (diagnostics) {
       RAFT_LOG_INFO("Selecting dedicated SINGLE_CTA %s diagnostic fragment",
-                    navix ? "NaviX" : (favor ? "FAVOR" : "default-filter"));
+                    navix ? "NaviX" : "default-filter");
     }
-    std::shared_ptr<AlgorithmLauncher> launcher =
+    std::shared_ptr<rtcx::algorithm_launcher> launcher =
       make_cagra_single_cta_jit_launcher<DataT,
                                          IndexT,
                                          DistanceT,
@@ -902,7 +909,7 @@ void select_and_run(
         bitonic_sort_and_merge_multi_warps,
         false /* persistent */,
         make_cagra_sample_filter_udf_fragment<SourceIndexT>(sample_filter),
-        favor,
+        false /* retired FAVOR */,
         diagnostics,
         navix,
         bitmap_seeded,
@@ -924,7 +931,6 @@ void select_and_run(
       if (log_cagra_resources) {
         const char* method = navix                 ? "navix"
                              : passing_accumulator ? "retain"
-                             : favor               ? "favor"
                                                    : "base";
         std::fprintf(stderr,
                      "CAGRA_KERNEL_RESOURCES {\"method\":\"%s\",\"diagnostics\":%s,"
@@ -962,8 +968,9 @@ void select_and_run(
     // Get the device descriptor pointer - dev_ptr() initializes it if needed
     const auto* dev_desc = dataset_desc.dev_ptr(stream);
 
-    // Cast size_t/int64_t parameters to match kernel signature exactly
-    // The dispatch mechanism uses void* pointers, so parameter sizes must match exactly
+    // These arguments are wider than the kernel parameters they feed; the casts record the
+    // intentional narrowing. graph.extent() and hash_bitlen are int64_t, and the ps sizes and
+    // small_hash_* values are size_t.
     const uint32_t graph_degree_u32              = static_cast<uint32_t>(graph.extent(1));
     const uint32_t hash_bitlen_u32               = static_cast<uint32_t>(hash_bitlen);
     const uint32_t small_hash_bitlen_u32         = static_cast<uint32_t>(small_hash_bitlen);
@@ -972,8 +979,6 @@ void select_and_run(
     const uint32_t search_width_u32              = static_cast<uint32_t>(ps.search_width);
     const uint32_t min_iterations_u32            = static_cast<uint32_t>(ps.min_iterations);
     const uint32_t max_iterations_u32            = static_cast<uint32_t>(ps.max_iterations);
-    const uint32_t favor_adaptive_start_iteration_u32 = favor_adaptive_start_iteration;
-    const uint32_t favor_adaptive_prefix_size_u32     = favor_adaptive_prefix_size;
     const unsigned num_random_samplings_u = static_cast<unsigned>(ps.num_random_samplings);
 
     dim3 grid(1, num_queries, 1);
@@ -993,136 +998,61 @@ void select_and_run(
       RAFT_CUDA_TRY(cudaGetDevice(&device_id));
       RAFT_CUDA_TRY(cudaDeviceGetAttribute(
         &max_threads_per_sm, cudaDevAttrMaxThreadsPerMultiProcessor, device_id));
-      favor_search_diagnostics::set_launch_metrics(
-        {block_size,
-         smem_size,
-         static_cast<std::uint32_t>(active_blocks_per_sm),
-         static_cast<std::uint32_t>(max_threads_per_sm)});
+      search_diagnostics::set_launch_metrics({block_size,
+                                              smem_size,
+                                              static_cast<std::uint32_t>(active_blocks_per_sm),
+                                              static_cast<std::uint32_t>(max_threads_per_sm)});
     }
 
     if constexpr (navix) {
       const auto navix_policy = cagra_filter_navix_policy(sample_filter);
       auto kernel_launcher    = [&]() -> void {
-        launcher
-          ->dispatch<search_single_cta_navix_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>(
-            stream,
-            grid,
-            block,
-            static_cast<std::size_t>(smem_size),
-            topk_indices_ptr,
-            topk_distances_ptr,
-            topk,
-            queries_ptr,
-            graph.data_handle(),
-            graph_degree_u32,
-            source_indices_ptr,
-            num_random_samplings_u,
-            ps.rand_xor_mask,
-            dev_seed_ptr,
-            num_seeds,
-            hashmap_ptr,
-            max_candidates,
-            max_itopk,
-            itopk_size_u32,
-            search_width_u32,
-            min_iterations_u32,
-            max_iterations_u32,
-            num_executed_iterations,
-            hash_bitlen_u32,
-            small_hash_bitlen_u32,
-            small_hash_reset_interval_u32,
-            query_id_offset,
-            dev_desc,
-            static_cast<IndexT>(graph.extent(0)),
-            filter_payload,
-            navix_policy);
+        raft::launch_kernel(
+          {stream, static_cast<std::size_t>(static_cast<std::size_t>(smem_size))},
+          grid,
+          block,
+          raft::kernel_ref<
+               search_single_cta_navix_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>{
+            launcher->get_kernel()},
+          topk_indices_ptr,
+          topk_distances_ptr,
+          topk,
+          queries_ptr,
+          graph.data_handle(),
+          graph_degree_u32,
+          source_indices_ptr,
+          num_random_samplings_u,
+          ps.rand_xor_mask,
+          dev_seed_ptr,
+          num_seeds,
+          hashmap_ptr,
+          max_candidates,
+          max_itopk,
+          itopk_size_u32,
+          search_width_u32,
+          min_iterations_u32,
+          max_iterations_u32,
+          num_executed_iterations,
+          hash_bitlen_u32,
+          small_hash_bitlen_u32,
+          small_hash_reset_interval_u32,
+          query_id_offset,
+          dev_desc,
+          static_cast<IndexT>(graph.extent(0)),
+          filter_payload,
+          navix_policy);
       };
       cuvs::neighbors::detail::safely_launch_kernel_with_smem_size<
         search_single_cta_navix_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>(
         smem_size, kernel_launcher, launcher->get_kernel());
-    } else if (favor) {
-      constexpr std::uint32_t favor_retire_rejected_parent_mask = std::uint32_t{1} << 31;
-      constexpr std::uint32_t favor_automatic_retention_mask    = std::uint32_t{1} << 30;
-      auto favor_penalty_mode_value = static_cast<std::uint32_t>(ps.favor_penalty);
-      const auto selectivity        = 1.0f - ps.filtering_rate;
-      const bool retire_rejected_parents =
-        ps.favor_penalty == favor_penalty_mode::CAGRA_RETENTION_SAFE &&
-        ps.favor_retention_fraction == 0.0f &&
-        selectivity * static_cast<float>(ps.itopk_size) < static_cast<float>(topk);
-      if (retire_rejected_parents) {
-        favor_penalty_mode_value |= favor_retire_rejected_parent_mask;
-        RAFT_LOG_DEBUG(
-          "FAVOR sparse automatic retention enables default-CAGRA rejected-parent retirement "
-          "(selectivity=%g, itopk=%lu, k=%u).",
-          selectivity,
-          ps.itopk_size,
-          topk);
-      }
-      if (ps.favor_retention_fraction == 0.0f && filter_payload.filtering_rates != nullptr) {
-        favor_penalty_mode_value |= favor_automatic_retention_mask;
-      }
-      // Scalar bitset modes retain the historical host-precomputed reference penalty. Query-local
-      // UDF mode instead needs raw delta-d so each CTA can derive its own reference ceiling from
-      // the sampled rate. The automatic-retention transport bit tells the kernel which value it
-      // received without changing the public search parameters or kernel signature.
-      const auto favor_penalty_distance =
-        (favor_penalty_mode_value & favor_automatic_retention_mask) != 0 ? favor_raw_delta_d
-                                                                         : ps.favor_delta_d;
-      const auto favor_retention_fraction =
-        ps.favor_retention_fraction == 0.0f
-          ? favor_automatic_retention_fraction(ps.filtering_rate, ps.itopk_size, topk)
-          : ps.favor_retention_fraction;
-      auto kernel_launcher = [&]() -> void {
-        launcher
-          ->dispatch<search_single_cta_favor_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>(
-            stream,
-            grid,
-            block,
-            static_cast<std::size_t>(smem_size),
-            topk_indices_ptr,
-            topk_distances_ptr,
-            topk,
-            queries_ptr,
-            graph.data_handle(),
-            graph_degree_u32,
-            source_indices_ptr,
-            num_random_samplings_u,
-            ps.rand_xor_mask,
-            dev_seed_ptr,
-            num_seeds,
-            hashmap_ptr,
-            max_candidates,
-            max_itopk,
-            itopk_size_u32,
-            search_width_u32,
-            min_iterations_u32,
-            max_iterations_u32,
-            num_executed_iterations,
-            hash_bitlen_u32,
-            small_hash_bitlen_u32,
-            small_hash_reset_interval_u32,
-            query_id_offset,
-            dev_desc,
-            static_cast<IndexT>(graph.extent(0)),
-            filter_payload,
-            ps.filtering_rate,
-            favor_penalty_distance,
-            favor_penalty_mode_value,
-            ps.favor_penalty_lambda,
-            favor_retention_fraction,
-            favor_adaptive_start_iteration_u32,
-            favor_adaptive_prefix_size_u32);
-      };
-      cuvs::neighbors::detail::safely_launch_kernel_with_smem_size<
-        search_single_cta_favor_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>(
-        smem_size, kernel_launcher, launcher->get_kernel());
     } else {
       auto kernel_launcher = [&]() -> void {
-        launcher->dispatch<search_single_cta_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>(
-          stream,
+        raft::launch_kernel(
+          {stream, static_cast<std::size_t>(static_cast<std::size_t>(smem_size))},
           grid,
           block,
-          static_cast<std::size_t>(smem_size),
+          raft::kernel_ref<search_single_cta_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>{
+            launcher->get_kernel()},
           topk_indices_ptr,
           topk_distances_ptr,
           topk,
@@ -1157,6 +1087,106 @@ void select_and_run(
 
     RAFT_CUDA_TRY(cudaPeekAtLastError());
   }
+}
+
+// Multi-partition launcher. Drives `search_single_cta_mp` with a 3D grid
+// (1, num_queries, num_partitions). `ref_dataset_desc` is used only for JIT tag dispatch and
+// must be representative of every partition's descriptor. Per-partition device descriptors and
+// graphs are read from `partition_descs` by the kernel itself.
+template <typename DataT,
+          typename IndexT,
+          typename DistanceT,
+          typename SourceIndexT,
+          typename SampleFilterT>
+void select_and_run_multi_partition(
+  const dataset_descriptor_host<DataT, IndexT, DistanceT>& ref_dataset_desc,
+  const multi_partition_desc_t<DataT, IndexT, DistanceT>* partition_descs,
+  uint32_t num_partitions,
+  const DataT* queries_ptr,
+  uint32_t num_queries,
+  IndexT* intermediate_neighbors_ptr,
+  DistanceT* intermediate_distances_ptr,
+  const search_params& ps,
+  uint32_t topk,
+  uint32_t num_itopk_candidates,
+  uint32_t block_size,
+  uint32_t smem_size,
+  int64_t hash_bitlen,
+  IndexT* hashmap_ptr,
+  size_t small_hash_bitlen,
+  size_t small_hash_reset_interval,
+  SampleFilterT sample_filter,
+  cudaStream_t stream)
+{
+  // The per-partition bitset views live in the partition descriptors (filled in cagra_search.cuh).
+  const uint32_t query_id_offset = cagra_filter_query_id_offset(sample_filter);
+
+  auto config             = compute_launch_config(num_itopk_candidates, ps.itopk_size, block_size);
+  uint32_t max_candidates = config.max_candidates;
+  uint32_t max_itopk      = config.max_itopk;
+  bool topk_by_bitonic_sort               = config.topk_by_bitonic_sort;
+  bool bitonic_sort_and_merge_multi_warps = config.bitonic_sort_and_merge_multi_warps;
+
+  std::shared_ptr<rtcx::algorithm_launcher> launcher =
+    make_cagra_single_cta_mp_jit_launcher<DataT,
+                                          IndexT,
+                                          DistanceT,
+                                          SourceIndexT,
+                                          sample_filter_jit_tag_t<SampleFilterT>>(
+      ref_dataset_desc, topk_by_bitonic_sort, bitonic_sort_and_merge_multi_warps);
+  if (!launcher) { RAFT_FAIL("Failed to get JIT launcher for CAGRA mp search kernel"); }
+
+  // hash_bitlen is int64_t and the remaining values are size_t; the casts record the intentional
+  // narrowing to the kernel's uint32_t parameters.
+  const uint32_t hash_bitlen_u32               = static_cast<uint32_t>(hash_bitlen);
+  const uint32_t small_hash_bitlen_u32         = static_cast<uint32_t>(small_hash_bitlen);
+  const uint32_t small_hash_reset_interval_u32 = static_cast<uint32_t>(small_hash_reset_interval);
+  const uint32_t itopk_size_u32                = static_cast<uint32_t>(ps.itopk_size);
+  const uint32_t search_width_u32              = static_cast<uint32_t>(ps.search_width);
+  const uint32_t min_iterations_u32            = static_cast<uint32_t>(ps.min_iterations);
+  const uint32_t max_iterations_u32            = static_cast<uint32_t>(ps.max_iterations);
+
+  dim3 grid(1, num_queries, num_partitions);
+  dim3 block(block_size, 1, 1);
+
+  RAFT_LOG_DEBUG("Launching mp JIT kernel: %u threads, %u queries, %u partitions, %u smem",
+                 block_size,
+                 num_queries,
+                 num_partitions,
+                 smem_size);
+
+  using kernel_t = search_single_cta_mp_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>;
+  auto kernel    = raft::kernel_ref<kernel_t>{launcher->get_kernel()};
+
+  cuvs::neighbors::detail::safely_launch_kernel_with_smem_size<kernel_t>(
+    smem_size,
+    [&] {
+      raft::launch_kernel({stream, static_cast<std::size_t>(smem_size)},
+                          grid,
+                          block,
+                          kernel,
+                          partition_descs,
+                          queries_ptr,
+                          intermediate_neighbors_ptr,
+                          intermediate_distances_ptr,
+                          topk,
+                          ps.num_random_samplings,
+                          ps.rand_xor_mask,
+                          0u,  // num_seeds
+                          hashmap_ptr,
+                          max_candidates,
+                          max_itopk,
+                          itopk_size_u32,
+                          search_width_u32,
+                          min_iterations_u32,
+                          max_iterations_u32,
+                          static_cast<std::uint32_t*>(nullptr),  // num_executed_iterations
+                          hash_bitlen_u32,
+                          small_hash_bitlen_u32,
+                          small_hash_reset_interval_u32,
+                          query_id_offset);
+    },
+    kernel.handle);
 }
 
 // get_runner for JIT persistent runners (similar to non-JIT version)

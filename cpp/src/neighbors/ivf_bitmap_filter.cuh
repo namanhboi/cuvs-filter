@@ -80,7 +80,10 @@ void normalize_ivf_bitmap_results(raft::resources const& res,
     if (count == 0) { return; }
     const auto blocks = static_cast<uint32_t>(std::min<uint64_t>((count + 255) / 256, 65535));
     const auto empty_distance = std::numeric_limits<float>::max();
-    normalize_ivf_bitmap_results_kernel<<<blocks, 256, 0, raft::resource::get_cuda_stream(res)>>>(
+    normalize_ivf_bitmap_results_kernel<<<blocks,
+                                          256,
+                                          0,
+                                          raft::resource::get_cuda_stream(res).get()>>>(
       filter.view(), neighbors, distances, count, k, query_offset, empty_distance);
     RAFT_CUDA_TRY(cudaPeekAtLastError());
   }

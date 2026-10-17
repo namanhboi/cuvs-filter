@@ -238,8 +238,9 @@ void check_large_pq_candidate_pools()
       rmm::device_uvector<int64_t> ids(count * candidates, stream);
       rmm::device_uvector<float> distances(count * candidates, stream);
       // Poison outputs with plausible IDs and distances to expose unwritten selection slots.
-      RAFT_CUDA_TRY(cudaMemsetAsync(ids.data(), 0, ids.size() * sizeof(int64_t), stream));
-      RAFT_CUDA_TRY(cudaMemsetAsync(distances.data(), 0, distances.size() * sizeof(float), stream));
+      RAFT_CUDA_TRY(cudaMemsetAsync(ids.data(), 0, ids.size() * sizeof(int64_t), stream.get()));
+      RAFT_CUDA_TRY(
+        cudaMemsetAsync(distances.data(), 0, distances.size() * sizeof(float), stream.get()));
       ivf_pq::search_params params;
       params.n_probes                = probes;
       params.filter_query_offset     = offset;
@@ -367,7 +368,7 @@ TEST(IvfBitmapFilterDevice, MapsSourceIdsAndCanonicalizesMissingResults)
   const int64_t* list = ids.data();
   raft::copy(lists.data(), &list, 1, stream);
   raft::copy(bitmap.data(), words.data(), words.size(), stream);
-  evaluate_bitmap_filter<<<1, 64, 0, stream>>>(lists.data(), bitmap.data(), output.data());
+  evaluate_bitmap_filter<<<1, 64, 0, stream.get()>>>(lists.data(), bitmap.data(), output.data());
   std::vector<uint8_t> actual(64);
   raft::copy(actual.data(), output.data(), actual.size(), stream);
   raft::resource::sync_stream(res);

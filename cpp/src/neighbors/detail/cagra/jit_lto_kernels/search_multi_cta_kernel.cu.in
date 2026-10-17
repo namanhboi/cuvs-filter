@@ -44,7 +44,7 @@ extern "C" __global__ __launch_bounds__(1024, 1) void search_multi_cta(
   const std::uint32_t query_id_offset,
   cagra_sample_filter_t filter_payload)
 {
-  search_kernel_jit<false, data_t, index_t, distance_t, source_index_t>(result_indices_ptr,
+  search_kernel_jit<data_t, index_t, distance_t, source_index_t>(result_indices_ptr,
                                                                         result_distances_ptr,
                                                                         dataset_desc,
                                                                         queries_ptr,

@@ -78,7 +78,7 @@ def default_accumulator(itopk: int, width: int, iterations: int, threads: int = 
         "itopk": itopk,
         "search_width": width,
         "max_iterations": iterations,
-        "favor_udf_passing_accumulator": True,
+        "passing_result_accumulator": True,
     }
     if threads:
         result["thread_block_size"] = threads
@@ -101,7 +101,7 @@ def navix(
         "itopk": itopk,
         "search_width": width,
         "max_iterations": iterations,
-        "favor_udf_passing_accumulator": False,
+        "passing_result_accumulator": False,
         "navix_mode": mode,
         "navix_scheduler": scheduler,
     }

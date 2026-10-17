@@ -145,7 +145,7 @@ prepare_yfcc_phase() {
   local phase=$1 limit=$2 shard=$3
   local output="${data_root}/navix_bitmap/yfcc/${phase}_${limit}"
   test -f "${output}/manifest.json" && return
-  "${python_bin}" "${repo_dir}/benchmarks/favor/navix_bitmap/prepare_bitmaps.py" sparse \
+  "${python_bin}" "${repo_dir}/benchmarks/retrieve_workshop/navix_bitmap/prepare_bitmaps.py" sparse \
     --base-metadata "${data_root}/yfcc-10M/base.metadata.10M.spmat" \
     --query-metadata "${data_root}/yfcc-10M/query.metadata.public.100K.spmat" \
     --query-vectors "${data_root}/yfcc-10M/query.public.100K.u8bin" \

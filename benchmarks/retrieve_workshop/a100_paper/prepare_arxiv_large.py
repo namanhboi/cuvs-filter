@@ -23,12 +23,12 @@ import numpy as np
 SCRIPT_DIR = Path(__file__).resolve().parent
 RETRIEVE_DIR = SCRIPT_DIR.parent
 sys.path.insert(0, str(RETRIEVE_DIR / "gpu_graph"))
-sys.path.insert(0, str(RETRIEVE_DIR.parent / "favor" / "navix_bitmap"))
-sys.path.insert(0, str(RETRIEVE_DIR.parent / "favor" / "arxiv_udf"))
+sys.path.insert(0, str(RETRIEVE_DIR / "navix_bitmap"))
+sys.path.insert(0, str(RETRIEVE_DIR / "data_tools"))
 
 from convert_fvecs_to_fbin import convert, geometry
 from prepare_bitmaps import BitmapWriter
-from prepare_workloads import read_ivec_first_k
+from prepare_arxiv_workloads import read_ivec_first_k
 
 EXPECTED_ROWS = 2_735_264
 EXPECTED_DIM = 4096
