@@ -125,3 +125,39 @@ Each output is reread independently and its components compared with the source.
 A `.json` manifest records component and full-file SHA-256 values. Existing outputs
 are never overwritten. Wire-format verification is followed by native cuVS loading
 and GPU correctness tests before a converted index is used for benchmark comparisons.
+
+## Frozen representative replay
+
+On the validation host, after configuring both isolated builds:
+
+```bash
+python benchmarks/retrieve_workshop/upstream_2612/validate.py prepare
+python benchmarks/retrieve_workshop/upstream_2612/validate.py compile-native
+python benchmarks/retrieve_workshop/upstream_2612/validate.py hash-inputs
+python benchmarks/retrieve_workshop/upstream_2612/validate.py run --wait
+python benchmarks/retrieve_workshop/upstream_2612/validate.py analyze
+```
+
+Paths can be supplied as command-line options. Outputs default to
+`/data/cuvs-upstream-validation/benchmarks`. `prepare` refuses to replace an
+existing manifest. It selects 32 primary cases and 25 sparse cases from frozen
+measurements, then groups them into 75 cuVS-bench processes. Every measured case
+uses the original first 2,048-query shard and three repetitions. The sparse CAGRA
+cases use recorded matched settings or the maximum observed recall; omitted
+calibration JSON is reconstructed only from archived scalar settings and a frozen
+method/width template, with both sources recorded. This performs no tuning.
+
+The runner waits for the recorded build, GPU-test, index-conversion, and native
+probe compilation prerequisites. It runs the native upstream Roaring/UDF/BBQ
+smoke suites, reruns old binaries, measures integrated dense and CAGRA Roaring
+paths, and compares public CAGRA search with an independently compiled upstream
+control on 13 datasets/result widths. Both native probes use their own checkout's
+headers and library ABI. Native probe timing is compared only with native probe
+timing, separately from the cuVS-bench comparisons.
+
+A shared GPU lock prevents overlapping workloads. Input checksums, executable
+and library hashes, environments, exact configurations, raw repetitions, and
+comparison tables are recorded. Completed benchmark files are reused only when
+their configuration, binary, library, and manifest signatures still match.
+Threshold flags remain explicit and require investigation; this runner never
+pushes, modifies saved paper results, or updates `main`.
