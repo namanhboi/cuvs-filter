@@ -600,6 +600,28 @@ def execute(command: list, cwd: Path, log: Path, lock_fd: int) -> None:
         )
 
 
+def correctness_suite(command, executable, library, output, cwd, lock_fd):
+    """Resume a passed suite only with identical code, arguments, and results."""
+    signature = {
+        "command": command,
+        "executable_sha256": sha(executable),
+        "library_sha256": sha(library),
+    }
+    marker = output.with_suffix(".complete.json")
+    reusable = False
+    if output.exists() and marker.exists():
+        recorded = json.loads(marker.read_text())
+        reusable = recorded.get("signature") == signature and recorded.get(
+            "output_sha256"
+        ) == sha(output)
+    if not reusable:
+        execute(command, cwd, output.with_suffix(".log"), lock_fd)
+    tests = json.loads(output.read_text())
+    if tests["tests"] == 0 or tests.get("failures", 0):
+        raise ValueError("empty or failing native GPU smoke suite")
+    save(marker, {"signature": signature, "output_sha256": sha(output)})
+
+
 def compile_native(args) -> None:
     """Compile each public-API probe with its own checkout's headers and ABI."""
     validation = args.validation_dir
@@ -805,10 +827,14 @@ def run(args) -> None:
                 ]
                 if target == "NEIGHBORS_ANN_CAGRA_FLOAT_UINT32_TEST":
                     command.append("--gtest_filter=*MultiPartition*")
-                execute(command, root, out.with_suffix(".log"), lock.fileno())
-                tests = json.loads(out.read_text())
-                if tests["tests"] == 0 or tests.get("failures", 0):
-                    raise ValueError("empty or failing native GPU smoke suite")
+                correctness_suite(
+                    command,
+                    repositories[variant] / "cpp/build/gtests" / target,
+                    repositories[variant] / "cpp/build/libcuvs.so",
+                    out,
+                    root,
+                    lock.fileno(),
+                )
         progress["status"] = "benchmarking"
         save(root / "progress.json", progress)
         for job in manifest["jobs"]:

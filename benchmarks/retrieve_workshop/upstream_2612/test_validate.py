@@ -3,11 +3,61 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import validate
 
 
 class ValidationContractTest(unittest.TestCase):
+    def test_correctness_resume_requires_unchanged_library_and_results(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            binary, library, output = (
+                root / "binary",
+                root / "library",
+                root / "tests.json",
+            )
+            binary.write_bytes(b"code")
+            library.write_bytes(b"library")
+
+            def run(*args):
+                output.write_text('{"tests": 2, "failures": 0}')
+
+            with patch.object(validate, "execute", side_effect=run) as execute:
+
+                def check():
+                    validate.correctness_suite(
+                        [str(binary)], binary, library, output, root, 0
+                    )
+
+                check()
+                check()
+                self.assertEqual(execute.call_count, 1)
+                library.write_bytes(b"new library")
+                check()
+                self.assertEqual(execute.call_count, 2)
+                output.write_text('{"tests": 2, "failures": 1}')
+                check()
+                self.assertEqual(execute.call_count, 3)
+
+    def test_failed_correctness_suite_is_never_marked_complete(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            binary, output = root / "binary", root / "tests.json"
+            binary.write_bytes(b"code")
+            with patch.object(validate, "execute"):
+                for result in ({"tests": 0}, {"tests": 2, "failures": 1}):
+                    output.write_text(json.dumps(result))
+                    with self.assertRaisesRegex(
+                        ValueError, "empty or failing"
+                    ):
+                        validate.correctness_suite(
+                            [str(binary)], binary, binary, output, root, 0
+                        )
+                    self.assertFalse(
+                        output.with_suffix(".complete.json").exists()
+                    )
+
     def config(self):
         return {
             "dataset": {
