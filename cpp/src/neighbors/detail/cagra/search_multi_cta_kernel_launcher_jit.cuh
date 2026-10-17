@@ -62,15 +62,13 @@ void select_and_run(const dataset_descriptor_host<DataT, IndexT, DistanceT>& dat
   RAFT_EXPECTS(ps.filter_mode == filtering_mode::DEFAULT, "FAVOR is retired");
   const auto filter_payload      = extract_cagra_sample_filter<SourceIndexT>(sample_filter, stream);
   const uint32_t query_id_offset = filter_payload.query_id_offset;
-  const bool favor               = ps.filter_mode == filtering_mode::FAVOR;
-
   std::shared_ptr<rtcx::algorithm_launcher> launcher =
     make_cagra_multi_cta_jit_launcher<DataT,
                                       IndexT,
                                       DistanceT,
                                       SourceIndexT,
                                       sample_filter_jit_tag_t<SampleFilterT>>(
-      dataset_desc, make_cagra_sample_filter_udf_fragment<SourceIndexT>(sample_filter), favor);
+      dataset_desc, make_cagra_sample_filter_udf_fragment<SourceIndexT>(sample_filter));
 
   if (!launcher) { RAFT_FAIL("Failed to get JIT launcher"); }
 
@@ -115,92 +113,41 @@ void select_and_run(const dataset_descriptor_host<DataT, IndexT, DistanceT>& dat
   const uint32_t min_iterations_u32        = static_cast<uint32_t>(ps.min_iterations);
   const uint32_t max_iterations_u32        = static_cast<uint32_t>(ps.max_iterations);
 
-  if (favor) {
-    const auto favor_penalty_mode_value = static_cast<std::uint32_t>(ps.favor_penalty);
-    const auto favor_local_gap_multiplier =
-      favor_penalty_coefficient(ps.filtering_rate, configured_itopk_size) * ps.favor_penalty_lambda;
-    const auto favor_retention_fraction =
-      ps.favor_retention_fraction == 0.0f
-        ? favor_automatic_retention_fraction(ps.filtering_rate, configured_itopk_size, topk)
-        : ps.favor_retention_fraction;
-    auto kernel_launcher = [&]() -> void {
-      raft::launch_kernel(
-        {stream, static_cast<std::size_t>(smem_size)},
-        grid_dims,
-        block_dims,
-        raft::kernel_ref<
-          multi_cta_search::
-            search_multi_cta_favor_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>{
-          launcher->get_kernel()},
-        topk_indices_ptr,
-        topk_distances_ptr,
-        dev_desc,
-        queries_ptr,
-        graph.data_handle(),
-        max_elements,
-        graph_degree_u32,
-        source_indices_ptr,
-        num_random_samplings_u,
-        ps.rand_xor_mask,
-        dev_seed_ptr,
-        num_seeds,
-        visited_hash_bitlen,
-        traversed_hashmap_ptr,
-        traversed_hash_bitlen_u32,
-        itopk_size_u32,
-        min_iterations_u32,
-        max_iterations_u32,
-        num_executed_iterations,
-        static_cast<IndexT>(graph.extent(0)),
-        query_id_offset,
-        filter_payload,
-        ps.filtering_rate,
-        ps.favor_delta_d,
-        favor_penalty_mode_value,
-        favor_local_gap_multiplier,
-        configured_itopk_size,
-        favor_retention_fraction);
-    };
-    cuvs::neighbors::detail::safely_launch_kernel_with_smem_size<
-      multi_cta_search::
-        search_multi_cta_favor_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>(
-      smem_size, kernel_launcher, launcher->get_kernel());
-  } else {
-    auto kernel_launcher = [&]() -> void {
-      raft::launch_kernel(
-        {stream, static_cast<std::size_t>(smem_size)},
-        grid_dims,
-        block_dims,
-        raft::kernel_ref<
-          multi_cta_search::search_multi_cta_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>{
-          launcher->get_kernel()},
-        topk_indices_ptr,
-        topk_distances_ptr,
-        dev_desc,
-        queries_ptr,
-        graph.data_handle(),
-        max_elements,
-        graph_degree_u32,
-        source_indices_ptr,
-        num_random_samplings_u,
-        ps.rand_xor_mask,
-        dev_seed_ptr,
-        num_seeds,
-        visited_hash_bitlen,
-        traversed_hashmap_ptr,
-        traversed_hash_bitlen_u32,
-        itopk_size_u32,
-        min_iterations_u32,
-        max_iterations_u32,
-        num_executed_iterations,
-        static_cast<IndexT>(graph.extent(0)),
-        query_id_offset,
-        filter_payload);
-    };
-    cuvs::neighbors::detail::safely_launch_kernel_with_smem_size<
-      multi_cta_search::search_multi_cta_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>>(
-      smem_size, kernel_launcher, launcher->get_kernel());
-  }
+  using kernel_t =
+    multi_cta_search::search_multi_cta_kernel_func_t<DataT, IndexT, DistanceT, SourceIndexT>;
+  auto kernel = raft::kernel_ref<kernel_t>{launcher->get_kernel()};
+
+  cuvs::neighbors::detail::safely_launch_kernel_with_smem_size<kernel_t>(
+    smem_size,
+    [&] {
+      raft::launch_kernel({stream, smem_size},
+                          grid_dims,
+                          block_dims,
+                          kernel,
+                          topk_indices_ptr,
+                          topk_distances_ptr,
+                          dev_desc,
+                          queries_ptr,
+                          graph.data_handle(),
+                          max_elements,
+                          graph_degree_u32,
+                          source_indices_ptr,
+                          ps.num_random_samplings,
+                          ps.rand_xor_mask,
+                          dev_seed_ptr,
+                          num_seeds,
+                          visited_hash_bitlen,
+                          traversed_hashmap_ptr,
+                          traversed_hash_bitlen_u32,
+                          itopk_size_u32,
+                          min_iterations_u32,
+                          max_iterations_u32,
+                          num_executed_iterations,
+                          static_cast<IndexT>(graph.extent(0)),
+                          query_id_offset,
+                          filter_payload);
+    },
+    kernel.handle);
 }
 
 // Multi-partition launcher. Drives `search_multi_cta_mp` with a 3D grid
