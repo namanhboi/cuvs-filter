@@ -1,0 +1,622 @@
+{
+  "cases": [
+    {
+      "id": "yfcc_k10",
+      "workload": "yfcc",
+      "k": 10,
+      "target": 0.8,
+      "config": {
+        "dataset": {
+          "name": "batch1-yfcc-k10-shard0",
+          "base_file": "/data/retrieve_data/yfcc-10M/base.10M.u8bin",
+          "query_file": "/data/retrieve_data/navix_bitmap/yfcc/throughput_10000/shard_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap/yfcc/throughput_10000/shard_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "uint8",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap/yfcc/throughput_10000/shard_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "/data/cuvs-upstream-validation/indices/yfcc_cagra.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 27,
+                "search_width": 1,
+                "max_iterations": 0,
+                "require_identity_source_indices": true,
+                "bitmap_method": "navix_reference",
+                "navix_mode": "adaptive_kuzu",
+                "navix_scheduler": "tiled",
+                "navix_bitmap_seeds": true,
+                "navix_kernel_variant": "reference",
+                "navix_seed_cap": 64,
+                "validation_case_id": "yfcc__k10__navix_reference",
+                "rand_xor_mask": 1213332,
+                "hashmap_max_fill_rate": 0.5,
+                "passing_result_accumulator": false,
+                "filter_representation": "bitmap"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "em_k10",
+      "workload": "em",
+      "k": 10,
+      "target": 0.95,
+      "config": {
+        "dataset": {
+          "name": "batch1-em-k10-shard0",
+          "base_file": "/data/retrieve_data/arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap/arxiv-large/em/throughput_10000/shard_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap/arxiv-large/em/throughput_10000/shard_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap/arxiv-large/em/throughput_10000/shard_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "/data/cuvs-upstream-validation/indices/arxiv_cagra.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 29,
+                "search_width": 1,
+                "max_iterations": 0,
+                "require_identity_source_indices": true,
+                "bitmap_method": "navix_reference",
+                "navix_mode": "adaptive_kuzu",
+                "navix_scheduler": "tiled",
+                "navix_bitmap_seeds": true,
+                "navix_kernel_variant": "reference",
+                "navix_seed_cap": 64,
+                "validation_case_id": "em__k10__navix_reference",
+                "rand_xor_mask": 1213332,
+                "hashmap_max_fill_rate": 0.5,
+                "passing_result_accumulator": false,
+                "filter_representation": "bitmap"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "emis_k10",
+      "workload": "emis",
+      "k": 10,
+      "target": 0.95,
+      "config": {
+        "dataset": {
+          "name": "batch1-emis-k10-shard0",
+          "base_file": "/data/retrieve_data/arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap/arxiv-large/emis/throughput_10000/shard_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap/arxiv-large/emis/throughput_10000/shard_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap/arxiv-large/emis/throughput_10000/shard_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "/data/cuvs-upstream-validation/indices/arxiv_cagra.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 54,
+                "search_width": 2,
+                "max_iterations": 0,
+                "require_identity_source_indices": true,
+                "bitmap_method": "navix_reference",
+                "navix_mode": "adaptive_kuzu",
+                "navix_scheduler": "tiled",
+                "navix_bitmap_seeds": true,
+                "navix_kernel_variant": "reference",
+                "navix_seed_cap": 128,
+                "validation_case_id": "emis__k10__navix_reference",
+                "rand_xor_mask": 1213332,
+                "hashmap_max_fill_rate": 0.5,
+                "passing_result_accumulator": false,
+                "filter_representation": "bitmap"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "r_k10",
+      "workload": "r",
+      "k": 10,
+      "target": 0.95,
+      "config": {
+        "dataset": {
+          "name": "batch1-r-k10-shard0",
+          "base_file": "/data/retrieve_data/arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap/arxiv-large/r/throughput_10000/shard_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap/arxiv-large/r/throughput_10000/shard_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap/arxiv-large/r/throughput_10000/shard_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 10
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "/data/cuvs-upstream-validation/indices/arxiv_cagra.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 29,
+                "search_width": 1,
+                "max_iterations": 0,
+                "require_identity_source_indices": true,
+                "bitmap_method": "navix_reference",
+                "navix_mode": "adaptive_kuzu",
+                "navix_scheduler": "tiled",
+                "navix_bitmap_seeds": true,
+                "navix_kernel_variant": "reference",
+                "navix_seed_cap": 64,
+                "validation_case_id": "r__k10__navix_reference",
+                "rand_xor_mask": 1213332,
+                "hashmap_max_fill_rate": 0.5,
+                "passing_result_accumulator": false,
+                "filter_representation": "bitmap"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "yfcc_k100",
+      "workload": "yfcc",
+      "k": 100,
+      "target": 0.8,
+      "config": {
+        "dataset": {
+          "name": "batch1-yfcc-k100-shard0",
+          "base_file": "/data/retrieve_data/yfcc-10M/base.10M.u8bin",
+          "query_file": "/data/retrieve_data/navix_bitmap_k100/yfcc/throughput_10000/shard_00_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap_k100/yfcc/throughput_10000/shard_00_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "uint8",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap_k100/yfcc/throughput_10000/shard_00_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 100
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "/data/cuvs-upstream-validation/indices/yfcc_cagra.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 100,
+                "search_width": 2,
+                "max_iterations": 25,
+                "require_identity_source_indices": true,
+                "bitmap_method": "navix_reference",
+                "k": 100,
+                "navix_mode": "adaptive_kuzu",
+                "navix_scheduler": "tiled",
+                "navix_bitmap_seeds": true,
+                "navix_kernel_variant": "reference",
+                "navix_seed_cap": 128,
+                "validation_case_id": "yfcc__k100__navix_reference",
+                "rand_xor_mask": 1213332,
+                "hashmap_max_fill_rate": 0.5,
+                "passing_result_accumulator": false,
+                "filter_representation": "bitmap"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "em_k100",
+      "workload": "em",
+      "k": 100,
+      "target": 0.95,
+      "config": {
+        "dataset": {
+          "name": "batch1-em-k100-shard0",
+          "base_file": "/data/retrieve_data/arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/em/throughput_10000/shard_00_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/em/throughput_10000/shard_00_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/em/throughput_10000/shard_00_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 100
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "/data/cuvs-upstream-validation/indices/arxiv_cagra.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 100,
+                "search_width": 1,
+                "max_iterations": 73,
+                "require_identity_source_indices": true,
+                "bitmap_method": "navix_reference",
+                "k": 100,
+                "navix_mode": "adaptive_kuzu",
+                "navix_scheduler": "tiled",
+                "navix_bitmap_seeds": true,
+                "navix_kernel_variant": "reference",
+                "navix_seed_cap": 64,
+                "validation_case_id": "em__k100__navix_reference",
+                "rand_xor_mask": 1213332,
+                "hashmap_max_fill_rate": 0.5,
+                "passing_result_accumulator": false,
+                "filter_representation": "bitmap"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "emis_k100",
+      "workload": "emis",
+      "k": 100,
+      "target": 0.95,
+      "config": {
+        "dataset": {
+          "name": "batch1-emis-k100-shard0",
+          "base_file": "/data/retrieve_data/arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/emis/throughput_10000/shard_00_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/emis/throughput_10000/shard_00_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/emis/throughput_10000/shard_00_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 100
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "/data/cuvs-upstream-validation/indices/arxiv_cagra.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 100,
+                "search_width": 1,
+                "max_iterations": 0,
+                "require_identity_source_indices": true,
+                "bitmap_method": "navix_reference",
+                "k": 100,
+                "navix_mode": "adaptive_kuzu",
+                "navix_scheduler": "tiled",
+                "navix_bitmap_seeds": true,
+                "navix_kernel_variant": "reference",
+                "navix_seed_cap": 64,
+                "validation_case_id": "emis__k100__navix_reference",
+                "rand_xor_mask": 1213332,
+                "hashmap_max_fill_rate": 0.5,
+                "passing_result_accumulator": false,
+                "filter_representation": "bitmap"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "r_k100",
+      "workload": "r",
+      "k": 100,
+      "target": 0.95,
+      "config": {
+        "dataset": {
+          "name": "batch1-r-k100-shard0",
+          "base_file": "/data/retrieve_data/arxiv-for-fanns-large/base.fbin",
+          "query_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/r/throughput_10000/shard_00_00000_02048/query.bin",
+          "groundtruth_neighbors_file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/r/throughput_10000/shard_00_00000_02048/groundtruth.ibin",
+          "distance": "euclidean",
+          "dtype": "float",
+          "filter": {
+            "kind": "bitmap",
+            "file": "/data/retrieve_data/navix_bitmap_k100/arxiv-large/r/throughput_10000/shard_00_00000_02048/filter.bitmap"
+          }
+        },
+        "search_basic_param": {
+          "batch_size": 2048,
+          "k": 100
+        },
+        "index": [
+          {
+            "name": "cagra-g64-ig128",
+            "algo": "cuvs_cagra",
+            "file": "/data/cuvs-upstream-validation/indices/arxiv_cagra.index",
+            "build_param": {
+              "graph_build_algo": "NN_DESCENT",
+              "graph_degree": 64,
+              "intermediate_graph_degree": 128
+            },
+            "search_params": [
+              {
+                "algo": "single_cta",
+                "filter_mode": "default",
+                "max_queries": 2048,
+                "itopk": 100,
+                "search_width": 1,
+                "max_iterations": 75,
+                "require_identity_source_indices": true,
+                "bitmap_method": "navix_reference",
+                "k": 100,
+                "navix_mode": "adaptive_kuzu",
+                "navix_scheduler": "tiled",
+                "navix_bitmap_seeds": true,
+                "navix_kernel_variant": "reference",
+                "navix_seed_cap": 64,
+                "validation_case_id": "r__k100__navix_reference",
+                "rand_xor_mask": 1213332,
+                "hashmap_max_fill_rate": 0.5,
+                "passing_result_accumulator": false,
+                "filter_representation": "bitmap"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "source_manifest_sha256": "97f057a7222ea3bd67f8b670717ded53951ebd3792d95613e6001b28aa849882",
+  "runner_sha256": "f1abfd402dc51e35b1b9f7573dac38f7b62f2961b557ea847dc6047587db3242",
+  "inputs": {
+    "/data/retrieve_data/yfcc-10M/base.10M.u8bin": {
+      "bytes": 1920000008,
+      "mtime_ns": 1787481271180690214,
+      "sha256": "589030afcbcc44a50ff798cec935f0980815a02eb7075b224d4f7c12febe96bf"
+    },
+    "/data/retrieve_data/navix_bitmap/yfcc/throughput_10000/shard_00000_02048/query.bin": {
+      "bytes": 393224,
+      "mtime_ns": 1787487603836570548,
+      "sha256": "5676e2cb6ee2913f67900ead6f03dcf1891cc9b3a2f862f12dd638acee1d4531"
+    },
+    "/data/retrieve_data/navix_bitmap/yfcc/throughput_10000/shard_00000_02048/groundtruth.ibin": {
+      "bytes": 81928,
+      "mtime_ns": 1787487603836570548,
+      "sha256": "7df955ee66df1418b2705fb960fcb17bd872f4da8cb818604d160328da6065ac"
+    },
+    "/data/retrieve_data/navix_bitmap/yfcc/throughput_10000/shard_00000_02048/filter.bitmap": {
+      "bytes": 2560000040,
+      "mtime_ns": 1787487587428466777,
+      "sha256": "cc9ed621876febe5e7581100e01e73a5ae34678d99e2372b30b289e4a947bc53"
+    },
+    "/data/cuvs-upstream-validation/indices/yfcc_cagra.index": {
+      "bytes": 2560001056,
+      "mtime_ns": 1792217735363916576,
+      "sha256": "2363ec8cff56640b58fd4224bd42b1cbd8c014a620f706a37690ac5afa192fa7"
+    },
+    "/data/retrieve_data/arxiv-for-fanns-large/base.fbin": {
+      "bytes": 44814565384,
+      "mtime_ns": 1787487941666825320,
+      "sha256": "9decf25df3136945aa9992fb26dbb6891c9899bf9061c66b0051aa90d11c3e73"
+    },
+    "/data/retrieve_data/navix_bitmap/arxiv-large/em/throughput_10000/shard_00000_02048/query.bin": {
+      "bytes": 33554440,
+      "mtime_ns": 1787487973947049952,
+      "sha256": "a48746478f051d2e0e1975c959bd2f5191ab62f38383a7c445ad2ba13e352f91"
+    },
+    "/data/retrieve_data/navix_bitmap/arxiv-large/em/throughput_10000/shard_00000_02048/groundtruth.ibin": {
+      "bytes": 81928,
+      "mtime_ns": 1787487973963050063,
+      "sha256": "881bbbde28c5764a83645a200aac5414d8a70e0bcdbc4581f410d27c26dbcb0d"
+    },
+    "/data/retrieve_data/navix_bitmap/arxiv-large/em/throughput_10000/shard_00000_02048/filter.bitmap": {
+      "bytes": 700227624,
+      "mtime_ns": 1787487972223037920,
+      "sha256": "a06ddf85a245a4d36c532d6d1416132fc36a4f3d4affe71d163121dc61448cf7"
+    },
+    "/data/cuvs-upstream-validation/indices/arxiv_cagra.index": {
+      "bytes": 700228640,
+      "mtime_ns": 1792217708663786120,
+      "sha256": "ce4b6b809ccbc41313505acd636766e3a3fc2749fa5c2116c9ab07ed8e26073f"
+    },
+    "/data/retrieve_data/navix_bitmap/arxiv-large/emis/throughput_10000/shard_00000_02048/query.bin": {
+      "bytes": 33554440,
+      "mtime_ns": 1787487985919133566,
+      "sha256": "a48746478f051d2e0e1975c959bd2f5191ab62f38383a7c445ad2ba13e352f91"
+    },
+    "/data/retrieve_data/navix_bitmap/arxiv-large/emis/throughput_10000/shard_00000_02048/groundtruth.ibin": {
+      "bytes": 81928,
+      "mtime_ns": 1787487985935133678,
+      "sha256": "6f9299521a1a14b8ffca1a919e6ea0ef3501ee03231a72afaa8c1faba8e1542b"
+    },
+    "/data/retrieve_data/navix_bitmap/arxiv-large/emis/throughput_10000/shard_00000_02048/filter.bitmap": {
+      "bytes": 700227624,
+      "mtime_ns": 1787487983031113387,
+      "sha256": "16f120854d17487d5ea2ea4a2e8e95394e451ec260f9b91e22e5f6aa230ea215"
+    },
+    "/data/retrieve_data/navix_bitmap/arxiv-large/r/throughput_10000/shard_00000_02048/query.bin": {
+      "bytes": 33554440,
+      "mtime_ns": 1787487999219226644,
+      "sha256": "a48746478f051d2e0e1975c959bd2f5191ab62f38383a7c445ad2ba13e352f91"
+    },
+    "/data/retrieve_data/navix_bitmap/arxiv-large/r/throughput_10000/shard_00000_02048/groundtruth.ibin": {
+      "bytes": 81928,
+      "mtime_ns": 1787487999235226756,
+      "sha256": "be240be02b4c99ee20c520a483df332a5d170995301130ddbfc68601cd5bed93"
+    },
+    "/data/retrieve_data/navix_bitmap/arxiv-large/r/throughput_10000/shard_00000_02048/filter.bitmap": {
+      "bytes": 700227624,
+      "mtime_ns": 1787487994635194540,
+      "sha256": "1b2140152ccc3690fc1e37edba86bffb263d2233a91846da2fa7150d691342c7"
+    },
+    "/data/retrieve_data/navix_bitmap_k100/yfcc/throughput_10000/shard_00_00000_02048/query.bin": {
+      "bytes": 393224,
+      "mtime_ns": 1787487603836570548,
+      "sha256": "5676e2cb6ee2913f67900ead6f03dcf1891cc9b3a2f862f12dd638acee1d4531"
+    },
+    "/data/retrieve_data/navix_bitmap_k100/yfcc/throughput_10000/shard_00_00000_02048/groundtruth.ibin": {
+      "bytes": 819208,
+      "mtime_ns": 1787694965160743458,
+      "sha256": "64162109f02d5112fc20011fe6935e682ab2772c42a4ee2f6fed3321ddf3e8b0"
+    },
+    "/data/retrieve_data/navix_bitmap_k100/yfcc/throughput_10000/shard_00_00000_02048/filter.bitmap": {
+      "bytes": 2560000040,
+      "mtime_ns": 1787487587428466777,
+      "sha256": "cc9ed621876febe5e7581100e01e73a5ae34678d99e2372b30b289e4a947bc53"
+    },
+    "/data/retrieve_data/navix_bitmap_k100/arxiv-large/em/throughput_10000/shard_00_00000_02048/query.bin": {
+      "bytes": 33554440,
+      "mtime_ns": 1787487973947049952,
+      "sha256": "a48746478f051d2e0e1975c959bd2f5191ab62f38383a7c445ad2ba13e352f91"
+    },
+    "/data/retrieve_data/navix_bitmap_k100/arxiv-large/em/throughput_10000/shard_00_00000_02048/groundtruth.ibin": {
+      "bytes": 819208,
+      "mtime_ns": 1787694966336796219,
+      "sha256": "b6f4c671cdce9ee33c2de3bb7db04048a55945b58357001ce54af2b21f81fb22"
+    },
+    "/data/retrieve_data/navix_bitmap_k100/arxiv-large/em/throughput_10000/shard_00_00000_02048/filter.bitmap": {
+      "bytes": 700227624,
+      "mtime_ns": 1787487972223037920,
+      "sha256": "a06ddf85a245a4d36c532d6d1416132fc36a4f3d4affe71d163121dc61448cf7"
+    },
+    "/data/retrieve_data/navix_bitmap_k100/arxiv-large/emis/throughput_10000/shard_00_00000_02048/query.bin": {
+      "bytes": 33554440,
+      "mtime_ns": 1787487985919133566,
+      "sha256": "a48746478f051d2e0e1975c959bd2f5191ab62f38383a7c445ad2ba13e352f91"
+    },
+    "/data/retrieve_data/navix_bitmap_k100/arxiv-large/emis/throughput_10000/shard_00_00000_02048/groundtruth.ibin": {
+      "bytes": 819208,
+      "mtime_ns": 1787694967260837696,
+      "sha256": "43742de0744bcac962f0b25d843fd9a7af4bc5dc7073aa4c47971c8df9e8bda1"
+    },
+    "/data/retrieve_data/navix_bitmap_k100/arxiv-large/emis/throughput_10000/shard_00_00000_02048/filter.bitmap": {
+      "bytes": 700227624,
+      "mtime_ns": 1787487983031113387,
+      "sha256": "16f120854d17487d5ea2ea4a2e8e95394e451ec260f9b91e22e5f6aa230ea215"
+    },
+    "/data/retrieve_data/navix_bitmap_k100/arxiv-large/r/throughput_10000/shard_00_00000_02048/query.bin": {
+      "bytes": 33554440,
+      "mtime_ns": 1787487999219226644,
+      "sha256": "a48746478f051d2e0e1975c959bd2f5191ab62f38383a7c445ad2ba13e352f91"
+    },
+    "/data/retrieve_data/navix_bitmap_k100/arxiv-large/r/throughput_10000/shard_00_00000_02048/groundtruth.ibin": {
+      "bytes": 819208,
+      "mtime_ns": 1787694968164878296,
+      "sha256": "b62f11c5d884adc4623644de5bcd2ce48b8ee5e0373ece4e0f540a3cd9820e8a"
+    },
+    "/data/retrieve_data/navix_bitmap_k100/arxiv-large/r/throughput_10000/shard_00_00000_02048/filter.bitmap": {
+      "bytes": 700227624,
+      "mtime_ns": 1787487994635194540,
+      "sha256": "1b2140152ccc3690fc1e37edba86bffb263d2233a91846da2fa7150d691342c7"
+    }
+  },
+  "runtime": {
+    "libcuvs.so": "78f2cb4985fccf0618cc6d99c8c4c179acc41721a6fab6f46b9e7f04fc83e249",
+    "CUVS_CAGRA_ANN_BENCH": "eaf2d5bcb5e9cf2a70f6eb39ae279f0647572e69752c17d176f3003012983d54"
+  },
+  "source_head": "f3afe535cbb85ad4ea4557a97144dedab7426878",
+  "created": 1793226897.5408254
+}

@@ -1,0 +1,19 @@
+{
+  "yfcc_k100_calibration.csv": "8d0c17107d9873488a0ddeebe705f7669c639b902904486681e73ed8186b7487",
+  "yfcc_k10_calibration.csv": "c916544cbedee44003049d3e5036b3a2623c7e5eda4dc3cd00e65b7ed5854bb2",
+  "manifest.json": "d3a663af71d80b72b32b904bca70fabc61ad2cfa634dfaf642290591e296ed10",
+  "em_k10_calibration.csv": "ed77ddda76d9175c1c0bfea2478ca6e46ad91c9850ef340f2d85b8d36e2bec29",
+  "emis_k10_calibration.csv": "1a1e8696751ce529483a131e5c8538f6d0f1315fbeaee92a93a0bbbf6436860f",
+  "REPORT.md": "12a9e63497961615eb4e62c2c16774eb650f23395c2473b5be86f33706457ca5",
+  "diagnostics.csv": "94208d8c120c2174849fdf7f3403479c97284a64bc39c6282cb95787224c4673",
+  "r_k100_calibration.csv": "683639175caec260e1d7764c8dd93a27c7b6a577269b1b232510f9efb3ba77a0",
+  "emis_k100_calibration.csv": "d869e411d5c340efc24796a1dadf51b221d730ee63c0e630a72ff2c4fa071bb4",
+  "comparison.csv": "768aacab1762db0d2bae84959428641d0e401af26892ddd528103a9e1e40d170",
+  "r_k10_calibration.csv": "7803c3b407bdef10f06151229371e7ae88fa7feda6a6434ed62d35343f4c3aa8",
+  "recall_qps.png": "6950473900f5e0542dddffb11aa6b830746878b564fae55168d2f1fec162bc15",
+  "NEIGHBORS_ANN_CAGRA_FILTER_BITMAP_TEST.json": "b8c6ba19ebf55b89e861ca36302a965777d838e4c793a5558a0f0a766e71b13d",
+  "em_k100_calibration.csv": "d916ec2f269568c12543445e2b8b0efa4a1350402e99bff697b0371acb0398de",
+  "results.json": "ea8d2998261b4bb938c1e8c66bc3395f49996e5e7af28a0db9c87d9b3279cd55",
+  "recall_qps.pdf": "74d75f3491c1fd45e440d51227e638c2fa4a4c12f86b83345aa6056d0906b712",
+  "NEIGHBORS_ANN_CAGRA_FILTER_UDF_TEST.json": "ab901afc12e85ac87128402d5aaebff2c48a221ec055f04c853a6d7b7b148ee8"
+}
