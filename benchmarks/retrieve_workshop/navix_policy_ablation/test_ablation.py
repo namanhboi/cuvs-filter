@@ -1,5 +1,8 @@
 import copy
 import unittest
+import tempfile
+from pathlib import Path
+from unittest.mock import patch
 import ablation as a
 
 
@@ -86,6 +89,64 @@ class AblationTest(unittest.TestCase):
                 a.validate(dict(benchmarks=[bad]), [sp], 1)
         with self.assertRaises(ValueError):
             a.validate(dict(benchmarks=[]), [sp], 1)
+
+    def test_completed_job_rejects_changed_raw_and_configuration(self):
+        sp, row = self.fixture()
+        case = dict(id="test", config=dict(search_basic_param={}, index=[{}]))
+
+        def fake_run(command, **kwargs):
+            raw = next(
+                c.split("=", 1)[1]
+                for c in command
+                if c.startswith("--benchmark_out=")
+            )
+            a.save(raw, dict(benchmarks=[row]))
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch.object(
+                a.subprocess, "run", side_effect=fake_run
+            ) as run:
+                a.job(root, case, "fixed", [copy.deepcopy(sp)])
+                a.job(root, case, "fixed", [copy.deepcopy(sp)])
+                self.assertEqual(run.call_count, 1)
+                changed = copy.deepcopy(sp)
+                changed["itopk"] = 11
+                with self.assertRaises(ValueError):
+                    a.job(root, case, "fixed", [changed])
+                (root / "jobs/test/fixed/raw.json").write_text("{}")
+                with self.assertRaises(ValueError):
+                    a.job(root, case, "fixed", [copy.deepcopy(sp)])
+
+    def test_tuner_completes_both_modes_with_strict_matches(self):
+        def fake_job(root, case, stage, points, reps=1, diagnostic=False):
+            result = []
+            for sp in points:
+                budget = sp["max_iterations"] or a.b0(
+                    sp["itopk"], sp["search_width"]
+                )
+                recall = min(0.999, 0.5 + budget * 0.01)
+                result.append(
+                    dict(
+                        search=sp,
+                        recall=recall,
+                        recalls=[recall] * reps,
+                        qps=1000 / budget,
+                        qps_min=1000 / budget,
+                        qps_max=1000 / budget,
+                    )
+                )
+            return result
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(a, "job", side_effect=fake_job):
+                result = a.tune(
+                    Path(directory),
+                    dict(id="test", k=10, target=0.8),
+                    dict(navix_seed_cap=64),
+                )
+            self.assertEqual({r["mode"] for r in result}, set(a.MODES))
+            self.assertTrue(all(r["matched"] for r in result))
 
 
 if __name__ == "__main__":
