@@ -27,3 +27,13 @@ correctness reports into this directory's results subtree. It commits/pushes
 only if main remains at the expected clean HEAD; otherwise it leaves an explicit
 export-only state. All raw calibration/diagnostic evidence remains in the root.
 Only the user's repository is a push destination.
+
+## GPU availability recovery
+
+The 439-step build completed. The first correctness invocation aborted at RMM
+initialization because MIG was enabled with no configured GPU instances; CUDA
+reported zero devices. With no GPU workloads or instances present, MIG was
+disabled and the temporarily stopped DCGM/persistence services were restarted.
+CUDA now detects one full A100 and persistence is enabled. The detached
+coordinator was restarted; archived failed logs remain in the result root.
+This failure occurred before any correctness test or benchmark measurement.
