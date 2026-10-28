@@ -1,0 +1,8 @@
+{
+  "source_points": 32,
+  "processes": 352,
+  "search_instances_checked": 704,
+  "index_copies_checked": 5,
+  "index_full_hashes_match_conversion_proofs": true,
+  "only_batch_capacity_and_benchmark_metadata_changed": true
+}

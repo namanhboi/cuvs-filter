@@ -1,0 +1,261 @@
+{
+  "rows": [
+    {
+      "id": "yfcc__k10__default_cagra",
+      "batch_recall": 0.6555,
+      "serial_recall": 0.6555,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 1.0,
+      "passed": true
+    },
+    {
+      "id": "yfcc__k10__default_cagra_accumulator",
+      "batch_recall": 0.8006,
+      "serial_recall": 0.8006,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 0.999,
+      "passed": true
+    },
+    {
+      "id": "em__k10__default_cagra",
+      "batch_recall": 0.9608,
+      "serial_recall": 0.9608,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 1.0,
+      "passed": true
+    },
+    {
+      "id": "em__k10__default_cagra_accumulator",
+      "batch_recall": 0.9542,
+      "serial_recall": 0.9542,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 1.0,
+      "passed": true
+    },
+    {
+      "id": "emis__k10__default_cagra",
+      "batch_recall": 0.7198,
+      "serial_recall": 0.7198,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 1.0,
+      "passed": true
+    },
+    {
+      "id": "emis__k10__default_cagra_accumulator",
+      "batch_recall": 0.939,
+      "serial_recall": 0.939,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 1.0,
+      "passed": true
+    },
+    {
+      "id": "r__k10__default_cagra",
+      "batch_recall": 0.9347,
+      "serial_recall": 0.9347,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 1.0,
+      "passed": true
+    },
+    {
+      "id": "r__k10__default_cagra_accumulator",
+      "batch_recall": 0.9427,
+      "serial_recall": 0.9427,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 1.0,
+      "passed": true
+    },
+    {
+      "id": "yfcc__k10__navix_reference",
+      "batch_recall": 0.8018,
+      "serial_recall": 0.8018,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 1.0,
+      "passed": true
+    },
+    {
+      "id": "em__k10__navix_reference",
+      "batch_recall": 0.9579,
+      "serial_recall": 0.9579,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 1.0,
+      "passed": true
+    },
+    {
+      "id": "emis__k10__navix_reference",
+      "batch_recall": 0.9476,
+      "serial_recall": 0.9476,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 1.0,
+      "passed": true
+    },
+    {
+      "id": "r__k10__navix_reference",
+      "batch_recall": 0.9583,
+      "serial_recall": 0.9583,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 1.0,
+      "passed": true
+    },
+    {
+      "id": "yfcc__k100__default_cagra",
+      "batch_recall": 0.33578161586647187,
+      "serial_recall": 0.33578161586647187,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 1.0,
+      "passed": true
+    },
+    {
+      "id": "yfcc__k100__default_cagra_accumulator",
+      "batch_recall": 0.7819460844157143,
+      "serial_recall": 0.7819460844157143,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 1.0,
+      "passed": true
+    },
+    {
+      "id": "yfcc__k100__navix_reference",
+      "batch_recall": 0.7928933095843257,
+      "serial_recall": 0.7929133227930434,
+      "recall_delta": 2.0013208717695186e-05,
+      "identical_output_set_fraction": 0.988,
+      "passed": true
+    },
+    {
+      "id": "em__k100__default_cagra",
+      "batch_recall": 0.96372,
+      "serial_recall": 0.96372,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 1.0,
+      "passed": true
+    },
+    {
+      "id": "em__k100__default_cagra_accumulator",
+      "batch_recall": 0.95588,
+      "serial_recall": 0.95588,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 1.0,
+      "passed": true
+    },
+    {
+      "id": "em__k100__navix_reference",
+      "batch_recall": 0.95628,
+      "serial_recall": 0.95628,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 1.0,
+      "passed": true
+    },
+    {
+      "id": "emis__k100__default_cagra",
+      "batch_recall": 0.48309,
+      "serial_recall": 0.48309,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 1.0,
+      "passed": true
+    },
+    {
+      "id": "emis__k100__default_cagra_accumulator",
+      "batch_recall": 0.90239,
+      "serial_recall": 0.90239,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 1.0,
+      "passed": true
+    },
+    {
+      "id": "emis__k100__navix_reference",
+      "batch_recall": 0.94664,
+      "serial_recall": 0.94664,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 1.0,
+      "passed": true
+    },
+    {
+      "id": "r__k100__default_cagra",
+      "batch_recall": 0.91924,
+      "serial_recall": 0.91924,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 1.0,
+      "passed": true
+    },
+    {
+      "id": "r__k100__default_cagra_accumulator",
+      "batch_recall": 0.93933,
+      "serial_recall": 0.93933,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 1.0,
+      "passed": true
+    },
+    {
+      "id": "r__k100__navix_reference",
+      "batch_recall": 0.95291,
+      "serial_recall": 0.95291,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 1.0,
+      "passed": true
+    },
+    {
+      "id": "yfcc__k10__ivf_flat",
+      "batch_recall": 0.8039,
+      "serial_recall": 0.8039,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 0.983,
+      "passed": true
+    },
+    {
+      "id": "yfcc__k100__ivf_flat",
+      "batch_recall": 0.80220945824244,
+      "serial_recall": 0.8022795044729522,
+      "recall_delta": 7.004623051209968e-05,
+      "identical_output_set_fraction": 0.978,
+      "passed": true
+    },
+    {
+      "id": "em__k10__ivf_flat",
+      "batch_recall": 0.9509,
+      "serial_recall": 0.9509,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 1.0,
+      "passed": true
+    },
+    {
+      "id": "em__k100__ivf_flat",
+      "batch_recall": 0.94301,
+      "serial_recall": 0.94301,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 1.0,
+      "passed": true
+    },
+    {
+      "id": "emis__k10__ivf_flat",
+      "batch_recall": 0.9253,
+      "serial_recall": 0.9253,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 1.0,
+      "passed": true
+    },
+    {
+      "id": "emis__k100__ivf_flat",
+      "batch_recall": 0.93638,
+      "serial_recall": 0.93638,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 1.0,
+      "passed": true
+    },
+    {
+      "id": "r__k10__ivf_flat",
+      "batch_recall": 0.9479,
+      "serial_recall": 0.9479,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 1.0,
+      "passed": true
+    },
+    {
+      "id": "r__k100__ivf_flat",
+      "batch_recall": 0.93847,
+      "serial_recall": 0.93847,
+      "recall_delta": 0.0,
+      "identical_output_set_fraction": 1.0,
+      "passed": true
+    }
+  ],
+  "passed": true
+}

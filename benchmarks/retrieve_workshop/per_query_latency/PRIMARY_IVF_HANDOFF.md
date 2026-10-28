@@ -1,17 +1,25 @@
 # Batch-1 primary CAGRA/IVF-Flat progress — 2026-10-28
 
-**Latest checkpoint:** all 32 paired checks passed, with maximum recall drift
-0.000070046. Full 10,000-query batched references are in progress; the main
-960,000 measured calls follow. Gate timings estimate approximately nine hours for
-the main run, excluding references. CPU tests now total 23 passed, including report
-aggregation, publication rejection, and concurrent-work protection.
+**PAUSED BY USER:** the user requested stopping the full 10,000-query runs and
+reporting the completed results. Both the measurement and automatic publication
+process groups are stopped; the GPU has no remaining benchmark process. Do not
+restart either worker until requested.
 
-A separate detached finalizer waits for successful measurement completion,
-verifies all output signatures, and produces `review_bundle/`. If main still has
-the expected clean source revision, it commits/pushes the compact results to the
-user's repository and records completion in this handoff. Otherwise it preserves
-the completed bundle and marks repository publication pending. Its independent
-state/log are `finalize.state.json` and `finalize.log` under the result root.
+All 32 paired checks passed (maximum recall drift 0.000070046). All 80 batched
+reference jobs completed, covering 10,000 queries for all 32 configurations; their
+maximum recall difference from saved source results is 0.000040. The completed
+1,000-query serialized measurements supply preliminary latency results for every
+configuration, one pass each. Subset achieved recall varies; this is not a new
+matched-recall comparison on the smaller subset.
+
+The main three-pass experiment completed just its first YFCC k=10 shard: 2,048
+queries each for Base/Retain/NaviX, 6,144 verified calls of 960,000. The interrupted
+next shard is preserved. Common-subset results and the completed main shard are
+reported separately in [the paused report](results/a100_batch1_primary_ivf_20261028_paused/REPORT.md).
+Full evidence is in the result root's `paused_results/`. CPU tests total 23 passed.
+
+The optional finalizer is also paused. Its state/log remain `finalize.state.json`
+and `finalize.log`. It must not publish this incomplete run as a completed result.
 
 This is the active task following the completed upstream integration. Implement
 and run the plan in `PRIMARY_IVF_README.md`; do not restart matched-recall tuning.
