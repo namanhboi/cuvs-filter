@@ -49,7 +49,7 @@ and run the plan in `PRIMARY_IVF_README.md`; do not restart matched-recall tunin
 - Original integration frontends were preserved before rebuilding under
   `/data/cuvs-upstream-validation/pre_batch1_runtime`; libcuvs is unchanged.
 
-## Active run
+## Saved, paused run
 
 Result root:
 `/data/retrieve_workshop_runs/a100_batch1_primary_ivf_20261028T073000Z`
@@ -66,8 +66,9 @@ Continue monitoring the saved state for current progress rather than treating
 this paragraph as a live count. All input setup and the detached worker run on
 the server and do not depend on the user's laptop staying connected.
 
-The worker owns the shared GPU lock. Do not run another GPU experiment alongside
-it. A gated estimate is saved in `analysis/eta.json` after all paired checks pass.
+The workers are stopped and the shared GPU lock is released. If resumed, do not
+overlap the worker with another GPU experiment. The gated runtime estimate is
+saved in `analysis/eta.json`.
 Fresh and resumed raw outputs are validated before acceptance. The exact source
 SHA and runner hash are in `manifest.json`; changing the runner after preparation
 requires an explicit recorded revision or a fresh run, not a silent restart.
@@ -89,15 +90,17 @@ remain diagnostics under distinct-ID recall; other methods require zero duplicat
 
 ## Work still required
 
-1. Finish the paired 1,000-query gates for all 32 cases; investigate recall drift
-   above 0.0001 without changing source settings.
-2. Finish merged-runtime batched references over all 10,000 queries and all
-   960,000 main serialized calls, including the 1,808-query final shards.
+1. Wait for an explicit request to resume the full experiment. Paired gates and
+   full batched references are complete and must not be rerun unnecessarily.
+2. When requested, restart the original supervisor specification with `run_job.py`.
+   It retains the 113 completed process records and resumes the interrupted next
+   trace job. Finish the remaining calls of 960,000, including the 1,808-query tails.
 3. Review achieved recall/status, filter/sentinel/duplicate diagnostics, timing
    floors, full coverage, and source/serialized recall differences. Do not report
    an out-of-window or source-maximum cell as target matched.
-4. Check all CSV/JSON summaries and PDF/PNG CDFs. Commit compact results and update
-   this handoff with the completed outcome; keep large traces and runtimes external.
+4. Restart the optional finalizer only when requested, with the then-current main
+   HEAD. Check all complete CSV/JSON summaries and PDF/PNG CDFs before publishing
+   a final result; the current paused report remains explicitly preliminary.
 5. Push code/docs/results only to the user's `namanhboi/cuvs-filter` repository.
    Do not modify the original paper or throughput evidence.
 
