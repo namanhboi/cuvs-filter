@@ -93,3 +93,15 @@ source recall, merged batched recall, drift, and duplicate rate accompany latenc
 Large raw traces and runtime snapshots stay outside Git. Preserve the original
 paper, archived integration validation, and historical binaries. Publish compact
 results and code only to the user's repository.
+
+`collect_primary_ivf.py --root RUN --output SNAPSHOT` verifies completion and every
+saved output signature before exporting compact tables, figures, configurations,
+scalar benchmark JSON, and external-output checksums. It refuses incomplete runs
+or recall-drift failures and does not duplicate raw traces or runtime binaries.
+
+The optional `finalize_primary_ivf.py` waits for the detached supervisor, runs the
+collector, and can publish the snapshot after successful validation. Publication
+requires the exact expected repository HEAD, a clean tracked working tree, and
+the user's origin URL. Concurrent repository changes leave a complete bundle in
+the run directory with an explicit pending-commit status; no changes are forced.
+Its separate `finalize.state.json` records progress and any publication failure.

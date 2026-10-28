@@ -1,5 +1,18 @@
 # Batch-1 primary CAGRA/IVF-Flat progress — 2026-10-28
 
+**Latest checkpoint:** all 32 paired checks passed, with maximum recall drift
+0.000070046. Full 10,000-query batched references are in progress; the main
+960,000 measured calls follow. Gate timings estimate approximately nine hours for
+the main run, excluding references. CPU tests now total 23 passed, including report
+aggregation, publication rejection, and concurrent-work protection.
+
+A separate detached finalizer waits for successful measurement completion,
+verifies all output signatures, and produces `review_bundle/`. If main still has
+the expected clean source revision, it commits/pushes the compact results to the
+user's repository and records completion in this handoff. Otherwise it preserves
+the completed bundle and marks repository publication pending. Its independent
+state/log are `finalize.state.json` and `finalize.log` under the result root.
+
 This is the active task following the completed upstream integration. Implement
 and run the plan in `PRIMARY_IVF_README.md`; do not restart matched-recall tuning.
 
@@ -21,7 +34,7 @@ and run the plan in `PRIMARY_IVF_README.md`; do not restart matched-recall tunin
   snapshot runtime/libraries, run paired gates and full workloads, validate/resume
   records, and generate CSV/Markdown/CDF reports. See the README for details.
 - Both frontends rebuilt successfully in the isolated integration build.
-- CPU pipeline tests: 18 passed (new and existing); Ruff and shell syntax checks pass.
+- CPU pipeline tests: 23 passed (new and existing); Ruff and shell syntax checks pass.
 - Preparation completed: 32 selections, 352 benchmark processes, 185 frozen input
   identities. Original-source hashes were cross-checked against the prepared
   records, including those inherited from the source experiments.
