@@ -47,6 +47,7 @@ struct latency_trace_record {
   std::int64_t query_global_id;
   std::uint64_t call_order;
   std::uint64_t host_latency_ns;
+  std::uint64_t gpu_latency_ns{0};
 };
 
 inline auto csv_escape(std::string value) -> std::string
@@ -70,11 +71,15 @@ inline void write_latency_trace(const std::string& path,
 {
   make_sure_parent_dir_exists(path);
   const auto temporary = path + ".tmp." + std::to_string(::getpid());
+  const auto schema    = params.value("benchmark_latency_trace_schema", 1);
+  if (schema != 1 && schema != 2) { throw std::runtime_error("unsupported latency trace schema"); }
   std::ofstream output{temporary, std::ios::trunc};
   if (!output) { throw std::runtime_error("failed to open latency trace: " + temporary); }
   output << "schema_version,record_kind,workload,method,repetition,shard_index,"
             "query_local_id,query_global_id,call_order,host_latency_ns,itopk,search_width,"
-            "max_iterations,max_queries,k\n";
+            "max_iterations,max_queries,k";
+  if (schema == 2) { output << ",gpu_latency_ns"; }
+  output << '\n';
   const auto workload     = csv_escape(params.at("benchmark_latency_workload").get<std::string>());
   const auto method       = csv_escape(params.at("benchmark_latency_method").get<std::string>());
   const auto repetition   = params.at("benchmark_latency_repetition").get<std::uint32_t>();
@@ -84,10 +89,12 @@ inline void write_latency_trace(const std::string& path,
   const auto max_iterations = params.value("max_iterations", 0);
   const auto max_queries    = params.value("max_queries", 0);
   for (const auto& record : records) {
-    output << "1," << record.kind << ',' << workload << ',' << method << ',' << repetition << ','
-           << shard << ',' << record.query_local_id << ',' << record.query_global_id << ','
+    output << schema << ',' << record.kind << ',' << workload << ',' << method << ',' << repetition
+           << ',' << shard << ',' << record.query_local_id << ',' << record.query_global_id << ','
            << record.call_order << ',' << record.host_latency_ns << ',' << itopk << ','
-           << search_width << ',' << max_iterations << ',' << max_queries << ',' << k << '\n';
+           << search_width << ',' << max_iterations << ',' << max_queries << ',' << k;
+    if (schema == 2) { output << ',' << record.gpu_latency_ns; }
+    output << '\n';
   }
   output.close();
   if (!output) {
@@ -104,6 +111,7 @@ inline void erase_latency_trace_labels(nlohmann::json& params)
 {
   static constexpr const char* keys[] = {
     "benchmark_latency_trace_file",
+    "benchmark_latency_trace_schema",
     "benchmark_latency_workload",
     "benchmark_latency_method",
     "benchmark_latency_repetition",
@@ -439,14 +447,20 @@ void bench_search(::benchmark::State& state,
         return;
       }
       for (std::uint32_t sample = 0; sample < timer_floor_samples; ++sample) {
-        auto gpu_lap          = floor_timer.lap(true);
-        const auto host_start = std::chrono::steady_clock::now();
+        const auto device_before = floor_timer.total_time();
+        auto gpu_lap             = floor_timer.lap(true);
+        const auto host_start    = std::chrono::steady_clock::now();
         gpu_lap.reset();
         const auto host_end = std::chrono::steady_clock::now();
         const auto elapsed =
           std::chrono::duration_cast<std::chrono::nanoseconds>(host_end - host_start).count();
-        trace_records.push_back(
-          {"timer_floor", -1, -1, sample, static_cast<std::uint64_t>(elapsed)});
+        trace_records.push_back({"timer_floor",
+                                 -1,
+                                 -1,
+                                 sample,
+                                 static_cast<std::uint64_t>(elapsed),
+                                 static_cast<std::uint64_t>(std::llround(
+                                   (floor_timer.total_time() - device_before) * 1e9))});
       }
 
       // Warm up the selected configuration and one-query bitmap path without entering Google
@@ -471,6 +485,7 @@ void bench_search(::benchmark::State& state,
       for (auto _ : state) {
         [[maybe_unused]] auto ntx_lap = nvtx.lap();
         const auto query_id           = static_cast<std::size_t>(batch_offset);
+        const auto device_before      = gpu_timer.total_time();
         auto gpu_lap                  = gpu_timer.lap(true);
         const auto host_start         = std::chrono::steady_clock::now();
         try {
@@ -493,7 +508,9 @@ void bench_search(::benchmark::State& state,
                                  static_cast<std::int64_t>(query_id),
                                  static_cast<std::int64_t>(global_query_offset + query_id),
                                  queries_processed,
-                                 elapsed_ns});
+                                 elapsed_ns,
+                                 static_cast<std::uint64_t>(
+                                   std::llround((gpu_timer.total_time() - device_before) * 1e9))});
 
         batch_offset = (batch_offset + 1) % query_set_size;
         out_offset   = (out_offset + 1) % query_set_size;
