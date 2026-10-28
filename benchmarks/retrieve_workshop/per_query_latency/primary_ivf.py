@@ -81,6 +81,8 @@ def identity(path, known=None):
         )
     else:
         item.update(sha256=sha(p), hash_origin="read_current_bytes")
+    if previous.get("sha256") and item["sha256"] != previous["sha256"]:
+        raise ValueError(f"Input bytes differ from the frozen experiment: {p}")
     if (p.stat().st_size, p.stat().st_mtime_ns) != (
         st.st_size,
         st.st_mtime_ns,
@@ -700,6 +702,33 @@ def gate_report(root, manifest):
         root / "analysis/gate.json",
         dict(rows=result, passed=all(r["passed"] for r in result)),
     )
+    serial_jobs = [j for j in manifest["jobs"] if j["stage"] == "gate_serial"]
+    measured_search_seconds = 0.0
+    overhead_seconds = 0.0
+    for j in serial_jobs:
+        search_seconds = sum(
+            sum(int(q["host_latency_ns"]) for q in trace_rows(j, c)[0]) / 1e9
+            for c in j["cases"]
+        )
+        measured_search_seconds += search_seconds
+        elapsed = read(j["raw"] + ".complete.json")["seconds"]
+        overhead_seconds += max(0, elapsed - search_seconds)
+    save(
+        root / "analysis/eta.json",
+        dict(
+            estimated_main_trace_seconds=measured_search_seconds
+            * QUERIES
+            * REPS
+            / GATE
+            + overhead_seconds * 15,
+            estimated_search_only_seconds=measured_search_seconds
+            * QUERIES
+            * REPS
+            / GATE,
+            basis="All 32 paired-gate points; extrapolate search samples and observed per-process setup. Approximate; excludes baselines.",
+            recorded_at=now(),
+        ),
+    )
     write_csv(root / "analysis/gate.csv", result)
     if not all(r["passed"] for r in result):
         raise ValueError(
@@ -1132,6 +1161,15 @@ def main():
     except Exception as e:
         if args.action in ("prepare", "run"):
             save(args.root / "failure.json", dict(error=repr(e), at=now()))
+            state = (
+                read(args.root / "progress.json")
+                if (args.root / "progress.json").exists()
+                else {}
+            )
+            save(
+                args.root / "progress.json",
+                state | dict(status="failed", error=repr(e), failed_at=now()),
+            )
         raise
 
 

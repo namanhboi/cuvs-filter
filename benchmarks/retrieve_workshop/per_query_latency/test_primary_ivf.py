@@ -9,6 +9,17 @@ import primary_ivf as p
 
 
 class FrozenBatchOneTest(unittest.TestCase):
+    def test_frozen_content_mismatch_is_rejected_even_after_timestamp_change(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as d:
+            file = Path(d) / "input"
+            file.write_bytes(b"original")
+            previous = p.identity(file)
+            file.write_bytes(b"different")
+            with self.assertRaisesRegex(ValueError, "frozen experiment"):
+                p.identity(file, {str(file): previous})
+
     def test_single_cta_and_original_scalar_selection_are_required(self):
         cfg = {
             "index": [
