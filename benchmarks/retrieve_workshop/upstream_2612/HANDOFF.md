@@ -1,5 +1,10 @@
 # Handoff — 2026-10-28
 
+**Subsequent task:** the user authorized a new batch-1 primary CAGRA/IVF-Flat
+latency experiment. Its active progress and remaining work are in
+[the latency handoff](../per_query_latency/PRIMARY_IVF_HANDOFF.md). The tuning
+pause below still applies; latency replays frozen settings without retuning.
+
 The user is switching to a new task. Save this state and do not resume tuning or
 launch benchmarks unless the user asks. No tuning or benchmark jobs were running
 at the last process check on 2026-10-28.
