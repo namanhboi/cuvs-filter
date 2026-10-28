@@ -1,4 +1,5 @@
 import copy
+import json
 import struct
 import tempfile
 import unittest
@@ -9,6 +10,76 @@ import primary_ivf as p
 
 
 class FrozenBatchOneTest(unittest.TestCase):
+    def test_report_aggregates_per_query_medians_for_both_metrics(self):
+        import argparse
+
+        with (
+            tempfile.TemporaryDirectory() as d,
+            patch.object(p, "QUERIES", 5),
+            patch.object(p, "FLOOR", 1),
+        ):
+            root = Path(d)
+            point = dict(
+                id="em__k100__ivf_flat",
+                workload="em",
+                k=100,
+                method="ivf_flat",
+                target=0.95,
+                source_recall=0.95,
+                source_matched=True,
+            )
+            jobs = []
+            for stage in ("baseline", "trace"):
+                for rep in range(3 if stage == "trace" else 1):
+                    for shard in range(5):
+                        raw = root / f"{stage}_{rep}_{shard}.json"
+                        Path(str(raw) + ".complete.json").touch()
+                        jobs.append(
+                            dict(
+                                stage=stage,
+                                repetition=rep,
+                                first=shard,
+                                raw=str(raw),
+                                cases=[dict(id=point["id"])],
+                            )
+                        )
+            p.save(root / "manifest.json", dict(points=[point], jobs=jobs))
+            observation = dict(
+                matching=95, valid_gt=100, duplicate_query_rate=0
+            )
+
+            def trace(job, case):
+                rep, q = job["repetition"], job["first"]
+                return (
+                    [
+                        dict(
+                            query_global_id=q,
+                            host_latency_ns=1000 + q * 100 + rep * 50,
+                            gpu_latency_ns=500 + q * 10 + rep * 5,
+                        )
+                    ],
+                    [dict(host_latency_ns=100, gpu_latency_ns=50)],
+                )
+
+            with (
+                patch.object(
+                    p, "observations", return_value={point["id"]: observation}
+                ),
+                patch.object(p, "trace_rows", side_effect=trace),
+            ):
+                p.analyze(argparse.Namespace(root=root))
+            report = json.loads(
+                (root / "analysis/latency_summary.json").read_text()
+            )["rows"][0]
+            self.assertEqual(report["host_mean_us"], 1.25)
+            self.assertEqual(report["gpu_mean_us"], 0.525)
+            self.assertEqual(report["status"], "target_matched")
+            self.assertEqual(report["recall_median"], 0.95)
+            self.assertEqual(
+                len(p.csv_rows(root / "analysis/per_query_samples.csv")), 5
+            )
+            self.assertTrue((root / "analysis/gpu_cdf_k100.pdf").exists())
+
     def test_frozen_content_mismatch_is_rejected_even_after_timestamp_change(
         self,
     ):
