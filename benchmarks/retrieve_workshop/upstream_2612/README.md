@@ -1,5 +1,8 @@
 # Upstream 26.12 integration
 
+For saved progress, paused tuning, build locations, and remaining work, read the
+[2026-10-28 handoff](HANDOFF.md).
+
 This branch integrates NVIDIA cuVS commit
 `3721d31fb98ba927417f42fbe3f93ab9ff15ed8e` with the filtering implementation at
 `0b3a56692631a186b875a1542930d7e773a75e69`. The upstream commit is pinned;
