@@ -310,7 +310,7 @@ TEST_P(CagraBitmapFilterTest, LegacyNavixBitmapMatchesEquivalentUdfExactly)
   search_params.algo           = cagra::search_algo::SINGLE_CTA;
   search_params.filtering_rate = 0.0f;
 
-  auto run = [&](auto const& filter, bool bitmap_path) {
+  auto run = [&](auto const& filter, bool bitmap_path, std::uint32_t policy) {
     auto neighbors = raft::make_device_matrix<std::int64_t, std::int64_t>(res, kQueries, k);
     auto distances = raft::make_device_matrix<float, std::int64_t>(res, kQueries, k);
     if (bitmap_path) {
@@ -322,7 +322,7 @@ TEST_P(CagraBitmapFilterTest, LegacyNavixBitmapMatchesEquivalentUdfExactly)
                                                    distances.view(),
                                                    filter,
                                                    0,
-                                                   0);
+                                                   policy);
     } else {
       detail::benchmark_search_navix_udf<float>(res,
                                                 search_params,
@@ -331,7 +331,7 @@ TEST_P(CagraBitmapFilterTest, LegacyNavixBitmapMatchesEquivalentUdfExactly)
                                                 neighbors.view(),
                                                 distances.view(),
                                                 filter,
-                                                0);
+                                                policy);
     }
     bitmap_search_result<std::int64_t> result{std::vector<std::int64_t>(neighbors.size()),
                                               std::vector<float>(distances.size())};
@@ -342,7 +342,9 @@ TEST_P(CagraBitmapFilterTest, LegacyNavixBitmapMatchesEquivalentUdfExactly)
     return result;
   };
 
-  expect_same(run(udf_filter, false), run(bitmap_filter, true));
+  for (const auto policy : {0u, 5u}) {
+    expect_same(run(udf_filter, false, policy), run(bitmap_filter, true, policy));
+  }
 }
 
 TEST_P(CagraBitmapFilterTest, DefaultAccumulatorBitmapMatchesEquivalentUdfExactly)

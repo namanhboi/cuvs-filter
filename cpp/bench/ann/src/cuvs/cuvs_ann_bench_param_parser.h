@@ -568,6 +568,8 @@ void parse_search_param(const nlohmann::json& conf,
       param.navix_policy = 3;
     } else if (mode == "adaptive_paper") {
       param.navix_policy = 4;
+    } else if (mode == "adaptive_blind") {
+      param.navix_policy = 5;
     } else {
       THROW("Invalid NaviX mode: %s", mode.c_str());
     }

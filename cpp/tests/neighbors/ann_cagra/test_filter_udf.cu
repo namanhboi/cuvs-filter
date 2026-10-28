@@ -44,6 +44,7 @@ constexpr std::uint32_t navix_one_hop_policy         = 1;
 constexpr std::uint32_t navix_directed_capped_policy = 2;
 constexpr std::uint32_t navix_blind_capped_policy    = 3;
 constexpr std::uint32_t navix_adaptive_paper_policy  = 4;
+constexpr std::uint32_t navix_adaptive_blind_policy  = 5;
 constexpr std::uint32_t navix_serial_scheduler_mask  = std::uint32_t{1} << 8;
 
 struct tenant_filter_context {
@@ -659,7 +660,8 @@ TEST_P(CagraUdfFilterTest, NavixPoliciesReturnOnlyPassingUniqueSortedRows)
                             navix_one_hop_policy,
                             navix_directed_capped_policy,
                             navix_blind_capped_policy,
-                            navix_adaptive_paper_policy}) {
+                            navix_adaptive_paper_policy,
+                            navix_adaptive_blind_policy}) {
     const auto result = search_navix(udf_filter, policy);
     for (int64_t query = 0; query < n_queries; ++query) {
       std::vector<std::uint32_t> seen;
@@ -734,7 +736,8 @@ TEST_P(CagraUdfFilterDegree64Test, NavixPoliciesReturnOnlyPassingUniqueSortedRow
                             navix_one_hop_policy,
                             navix_directed_capped_policy,
                             navix_blind_capped_policy,
-                            navix_adaptive_paper_policy}) {
+                            navix_adaptive_paper_policy,
+                            navix_adaptive_blind_policy}) {
     const auto result = search_navix(udf_filter, policy);
     for (int64_t query = 0; query < n_queries; ++query) {
       std::vector<std::uint32_t> seen;

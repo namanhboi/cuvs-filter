@@ -26,6 +26,7 @@ enum class navix_policy : std::uint32_t {
   directed_capped = 2,
   blind_capped    = 3,
   adaptive_paper  = 4,
+  adaptive_blind  = 5,
 };
 
 constexpr std::uint32_t navix_serial_scheduler_mask = std::uint32_t{1} << 8;
@@ -52,6 +53,8 @@ _RAFT_HOST_DEVICE constexpr auto resolve_navix_policy(std::uint32_t requested,
   // The released Kuzu implementation uses local selectivity P/D >= 0.4 for one hop. Below that
   // threshold it compares 0.4*P*(D+1) full-two-hop work against 2D-P directed work.
   if (5u * passing_first_hop >= 2u * GRAPH_DEGREE) { return navix_policy::one_hop; }
+  // Ablation: retain Kuzu's one-hop boundary, but avoid distance-ordered bridges.
+  if (mode == navix_policy::adaptive_blind) { return navix_policy::blind_capped; }
   return 2u * passing_first_hop * (GRAPH_DEGREE + 1u) <=
              5u * (2u * GRAPH_DEGREE - passing_first_hop)
            ? navix_policy::blind_capped
@@ -66,6 +69,20 @@ static_assert(resolve_navix_policy<64>(0, 4) == navix_policy::blind_capped);
 static_assert(resolve_navix_policy<64>(0, 5) == navix_policy::directed_capped);
 static_assert(resolve_navix_policy<64>(0, 25) == navix_policy::directed_capped);
 static_assert(resolve_navix_policy<64>(0, 26) == navix_policy::one_hop);
+
+template <std::uint32_t D>
+constexpr bool adaptive_blind_boundaries()
+{
+  for (std::uint32_t p = 0; p <= D; ++p) {
+    const auto expected = 5u * p >= 2u * D ? navix_policy::one_hop : navix_policy::blind_capped;
+    for (auto scheduler : {0u, navix_serial_scheduler_mask}) {
+      if (resolve_navix_policy<D>(5u | scheduler, p) != expected) { return false; }
+    }
+  }
+  return true;
+}
+static_assert(adaptive_blind_boundaries<32>());
+static_assert(adaptive_blind_boundaries<64>());
 
 /**
  * Retain only passing nodes in a candidate batch and publish their count CTA-wide.
